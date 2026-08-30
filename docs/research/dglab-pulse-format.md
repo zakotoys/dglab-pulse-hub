@@ -1,6 +1,8 @@
 # DGLab Pulse 波形文件格式研究
 
-> 资料范围：官方事实优先依据 DG-LAB 帮助页、官方协议仓库和官方 `dglab-kit`；未公开的 `.pulse` 字段含义再参考公开逆向资料和社区实现。本文另列出仓库 `.example` 的语料观察，但不据此声称来源 App 版本或官方上限。
+> 资料范围：本文只依据 D-LAB/Dungeonlab 公开协议仓库、相关开源项目和公开实现整理，不引用本项目内的资料。由于官方协议仓库目前没有发布完整的 `.pulse` 文件规范，部分字段含义来自对官方 App 导出数据的逆向解析和多个社区实现的交叉验证。
+
+工作区 `.example` 的独立观察结果见 [本地 `.pulse` 语料分析](pulse-corpus.md)；该文档与本文的外部资料证据分开维护。
 
 ## 结论摘要
 
@@ -9,9 +11,9 @@
 | `.pulse` | DGLab/Dungeonlab App 导出或分享文本 | `Dungeonlab+pulse:` 开头的明文曲线描述 | 官方 App 格式；完整文件规范未在协议仓库正式发布 |
 | `.json` / `.json5` / `.pulses` | Coyote-Game-Hub 等游戏/工具生态 | 已编译的 V3 HEX 帧列表，外加 ID、名称等元数据 | 社区数据格式，帧编码与官方 V3 协议一致 |
 | V4 Socket JSON | DG-LAB 4 App 的 V4 中继协议 | `device.op`/`AppendPulseData` RPC 外壳，波形在 `v` 字段 | `dglab-kit` 公开了协议和类型；不是独立波形文件扩展名 |
-| QR 内容 | DGLab Pulse 分享二维码 | 完整 URL 的 `#DGLAB-PULSE#<hex>` fragment；已知样例解压后是 legacy 元数据/点串 | 社区逆向已复现；不是 current `.pulse` 明文的透明封装，官方未发布完整规范 |
+| QR 内容 | DGLab Pulse 分享二维码 | `.pulse` 明文经 Base64、gzip、十六进制封装后的字符串 | 社区实现已稳定复现，官方协议仓库未单独给出文件规范 |
 
-简单说，current `.pulse`、QR legacy payload 和 JSON 运行时帧是三种不同序列化。它们描述相关波形语义，但不能仅解压或改扩展名互换。还要把 **3.0/4.0 App 的版本差异** 与 **V2/V3 主机波形帧差异** 分开：App 4.0 主要引入 V4 Socket/设备管理能力，默认下发的 Coyote V3 波形字节并没有被替换。
+简单说，`.pulse` 是“编辑器/分享层”的曲线描述，JSON 是“运行时层”的 100 ms 帧数组。两者描述的是同一类刺激波形，但不是同一种序列化格式。还要把 **3.0/4.0 App 的版本差异** 与 **V2/V3 主机波形帧差异** 分开：App 4.0 主要引入了 V4 Socket/设备管理能力，默认下发的 Coyote V3 波形字节并没有被替换。
 
 ## 一、`.pulse` 明文格式
 
@@ -29,11 +31,11 @@ Dungeonlab+pulse:<全局设置>=<第1小节>[+section+<第2小节>...]
 Dungeonlab+pulse:18,1,8=27,7,32,3,1/0-1,50-0,100-1
 ```
 
-等号左侧是逗号分隔的全局设置，等号右侧是一个或多个小节（section）。多个小节之间使用 `+section+` 连接。仓库语料观察到最多 10 个 section；官方当前帮助页只承诺每段自定义波形由 1–3 个连续 section 构成。是否存在“文件语法上限 10”仍需目标 App 实测，不能只凭语料把差异定性为 UI 限制。
+等号左侧是逗号分隔的全局设置，等号右侧是一个或多个小节（section）。多个小节之间使用 `+section+` 连接。公开社区对文件上限的实测/整理通常按最多 10 个小节处理；官方当前 App 帮助页的 UI 只展示最多 3 个连续小节，这属于 UI 限制与文件语法上限的差别。
 
 ### 2. 全局设置
 
-社区对 current `.pulse` 的主流逆向实现将等号前的三个数字解释为：
+官方 App 导出数据的主流逆向实现将等号前的三个数字解释为：
 
 ```text
 sectionRestTime,playbackSpeed,frequencyBalance
@@ -47,7 +49,7 @@ sectionRestTime,playbackSpeed,frequencyBalance
 | 1 | `playbackSpeed` | 播放速度设置 |
 | 2 | `frequencyBalance` / 未知字段 | 多个解析器将其当作频率平衡；也有资料只记录为未知值，默认常见为 `16` |
 
-官方帮助页确认存在休息时间、播放速度和高低频平衡 UI，但没有公开它们与这三个字段的精确位置/索引表。这些值不是 V3 蓝牙帧中的字节；实现应保留原始索引，并把物理映射标成具名派生规则。
+这些值不是 V3 蓝牙帧中的字节，而是编辑器/播放器层的参数。其精确 UI 单位和取值表依赖 App 版本；公开协议仓库没有给出完整的官方枚举表。
 
 ### 3. 小节头
 
@@ -74,7 +76,7 @@ sectionRestTime,playbackSpeed,frequencyBalance
 | `enabled` | 小节是否启用 |
 | `shapePoints` | 斜杠后的强度曲线点序列 |
 
-`freqMode` 的 `1..4` 与官方帮助页的固定、节内渐变、元内渐变、元间渐变四种模式相符，社区实现也给出相同编号映射。处理器仍应保留原始模式值，显示名称不能替代数值契约。
+`freqMode` 在现有实现中通常使用 `1..4` 表示不同的频率变化模式。不同 App/实现可能对模式名称的映射不同，因此处理器应保留原始模式值，不要只按名称硬编码。
 
 ### 4. 强度曲线点
 
@@ -92,7 +94,7 @@ sectionRestTime,playbackSpeed,frequencyBalance
 
 其中：
 
-- `strength`：强度；仓库 current `.pulse` 语料观察为 `0.00..100.00` 并使用两位小数。
+- `strength`：强度，通常为 `0..100`。
 - 第二个值在公开解析中通常称为 `type`/`anchor`：`0` 表示普通点（由相邻锚点自动插值），`1` 表示锚点（用户固定编辑的点）。
 - 一个形状点通常对应 100 ms 的编辑时间单位；转换为 V3 运行时帧时，会展开为 4 个各 25 ms 的采样。
 
@@ -109,53 +111,38 @@ sectionRestTime,playbackSpeed,frequencyBalance
 - 频率模式：通常为 `1..4`。
 - 强度：`0..100`。
 
-频率索引和时长索引是 App 的索引，不是最终毫秒或赫兹值；具体索引到物理值的映射应以对应 App 版本的实验为准。
+频率索引和时长索引是 App 的索引，不是最终毫秒或赫兹值；具体索引到物理值的映射应以对应 App 版本的实现为准。
 
-### 6. 仓库 `.example` 语料观察
+## 二、二维码封装格式
 
-截至 2026-08-30，仓库包含 16 个样例，共 15,364 bytes。只读统计如下：
-
-| 特征 | 观察值 |
-| --- | --- |
-| 文件大小 | 170–2,768 bytes |
-| section | 1–10 个/文件，共 69 个 |
-| 频率索引 | `0..83` |
-| 时长索引 | `0..73` |
-| 模式 | `1`、`2`、`3`；未覆盖 `4` |
-| enabled | `0/1`，其中 2 个禁用 section |
-| 点数 | 2–106 个/section |
-| 点类型 | 977 个锚点、709 个自动点 |
-| 强度 | `0.00..100.00` |
-
-语料验证了 current numeric-triple 方言的词法与结构多样性，但没有 provenance manifest，不能证明其 App 版本、官方性或再分发许可。详细验证任务见 [格式基线计划](../plan/format-baseline.md)。
-
-## 二、二维码 legacy 分享格式
-
-公开逆向样例中，官方 App 生成的二维码内容是一个完整 URL：
+DGLab Pulse 分享二维码中常见的内容不是直接的 `.pulse` 文本，而是带有标记和压缩数据：
 
 ```text
-https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#<hex-data>
+#DGLAB-PULSE#<hex-data>
 ```
 
-已复现的解码流程为：
+公开实现复现的编码流程为：
 
 ```text
-解析 URL fragment（或严格匹配裸 fragment）
-    -> 提取 #DGLAB-PULSE# 后的十六进制
+Dungeonlab+pulse 明文
+    -> UTF-8
+    -> Base64
+    -> gzip 压缩
+    -> 十六进制编码
+    -> 添加 #DGLAB-PULSE# 前缀
+```
+
+还原流程相反：
+
+```text
+去掉 #DGLAB-PULSE#
+    -> 十六进制解码
     -> gzip 解压
     -> Base64 解码
-    -> UTF-8 legacy payload
+    -> UTF-8 Dungeonlab+pulse 文本
 ```
 
-关键纠正：已公开的解码结果不是 `Dungeonlab+pulse:` 明文，而是类似下面的 legacy 结构：
-
-```text
-<已知样例的 20 个逗号分隔元数据字段>+<section1 points>+<section2 points>+<section3 points>
-```
-
-点使用 `<type>-<strength>`，公开样例的强度为 `0..20` 且允许两位小数；current `.pulse` 则使用 `<strength>-<anchor>`，仓库语料强度为 `0..100`。legacy 元数据还一次性容纳最多三个 section 的频率、时长、模式、开关、休息和速度字段。
-
-因此 QR 不是 current `.pulse` 的透明压缩层。实现必须使用独立 legacy model，并在有目标 App 版本夹具、逐字段转换表和双向互操作测试后，才能声称可转换为等价 Pulse 或生成可导入 QR。安全实现还必须限制 hex 长度、gzip 解压大小、Base64 和 payload 字段数。
+需要注意：前缀、大小写和压缩顺序应严格按实现处理；把十六进制字符串直接当作 `.pulse` 文本会失败。
 
 ## 三、JSON / JSON5 / `.pulses` 波形格式
 
@@ -282,12 +269,13 @@ Dungeonlab+pulse:<名称>=...
 
 ### 3. 实际校验建议
 
-读取未知内容时建议按以下顺序识别：
+读取未知文件时建议按以下顺序识别：
 
 1. 以 `Dungeonlab+pulse:` 开头：按 `.pulse` 明文解析。
-2. URL fragment 或裸 fragment 严格匹配 `#DGLAB-PULSE#<hex>`：标识为 QR legacy candidate；只有已验证 adapter 才继续解码/转换。
-3. 顶层为数组、对象含 `pulseData`：识别为社区运行时帧格式，但按本项目当前边界明确拒绝，而不是当作 `.pulse`。
-4. 对 `.pulse` 中的数字词法、字段数、范围、section 分隔符和形状点做严格校验；遇到名称方言时明确拒绝，不从前缀猜版本。
+2. 以 `#DGLAB-PULSE#` 开头：按二维码封装流程解压后再解析明文。
+3. 顶层为数组、对象含 `pulseData`：按 JSON/JSON5 已编译帧处理。
+4. 对每个 `pulseData` 项校验 16 个十六进制字符、8 字节和频率/强度范围。
+5. 对 `.pulse` 中的数字范围、section 分隔符和形状点格式做严格校验，遇到名称方言时显式标记版本/方言。
 
 ## 六、3.0 App 与 4.0 App 的波形差异
 
@@ -353,7 +341,7 @@ V4: sendPulse(clientId, slotId, channel, duration, frames)
 
 - 只面向 Coyote 3.0：继续生成 V3 8 字节 HEX 帧；3.0/4.0 App 选择由 Socket 接入层决定。
 - 面向 4.0 App：实现 V4 `device.op`/`AppendPulseData`，默认 `ver=3`；只有明确连接 V2 主机并确认 App 要求时才使用 `ver=2`。
-- 解析 `.pulse` 时不要根据 App 名称擅自改变字段；按 numeric-triple ruleset 保留三个全局索引、精确小数和 source token。规范导出格式需经目标 App 往返实验确认。
+- 解析 `.pulse` 时不要根据 App 名称擅自改变字段；优先按官方 App 导出语法，保留第三个全局字段和小数格式，避免 4.0 导入器因格式化差异拒绝文件。
 
 ## 七、外部参考资料
 
@@ -379,8 +367,7 @@ V4: sendPulse(clientId, slotId, channel, duration, frames)
 18. [Coyote Claw：8 字节/100 ms 波形单元与 V3 WebSocket 消息](https://qiekn.github.io/coyote-claw/json/)
 19. [官方协议仓库 Issue #48：通过官方 4.0 App 更新 Coyote V3 固件后仍使用原 GATT 服务](https://github.com/dungeonlab-open/dglab-bluetooth-protocol/issues/48)
 20. [波形坩埚（社区工具，页面记录 `.pulse` 在 4.0 App 的导入兼容问题）](https://www.lushgarden.cn/alchemy.html)
-21. [DG-LAB APP 波形导出二维码解析（第三方逆向，展示完整 URL 与 legacy 解码结果）](https://fang.blog.miri.site/archives/990/)
 
 ## 最终判断
 
-如果目标是导入/导出 current `.pulse`，应实现 numeric-triple `Dungeonlab+pulse:` 明文并以原始索引为权威值。QR legacy payload 需要独立解析和经过验证的语义转换，不能称为压缩 `.pulse`。JSON/JSON5 `pulseData` 与 V3/V4 Socket 则属于运行时/传输层，不在当前用户文件范围。对于 3.0 App 与 4.0 App，当前官方证据支持的判断是：Coyote V3 的 8-byte 帧和 100 ms/25 ms 时间粒度保持不变，4.0 主要改变 Socket 外层并增加 V2 帧显式选项。任何格式之间的转换都必须经过明确规则和互操作测试，不能直接改扩展名或只做压缩解压。
+如果目标是导入/导出 DGLab App 分享波形，应实现 `Dungeonlab+pulse:` 明文和 `#DGLAB-PULSE#` 封装；如果目标是向 Coyote/Game Hub 或蓝牙 V3 播放器提供运行时数据，应生成 JSON/JSON5 中的 `pulseData` HEX 数组。对于 3.0 App 与 4.0 App，当前外部证据支持的判断是：Coyote V3 的波形帧编码和 100 ms/25 ms 时间粒度保持不变，4.0 主要改变 Socket 外层（V4 RPC）并增加 V2 帧显式兼容选项。两条链路之间需要经过采样、频率压缩和 25 ms 时间粒度展开，不能把一种文件的字符串直接改扩展名当作另一种格式。

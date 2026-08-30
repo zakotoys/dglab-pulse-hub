@@ -15,7 +15,7 @@
 
 1. **以波形领域模型为中心**
    - 统一描述频率、时长、强度、section、脉冲元、曲线点、播放参数和来源信息。
-   - 将解析、校验、采样、经验证的规则变换、渲染和序列化拆成清晰的能力边界。
+   - 将解析、校验、采样、插值、版本升级、渲染和序列化拆成清晰的能力边界。
    - 在格式之间转换时保留足够的原始信息，避免因展示或导出造成不可逆的数据丢失。
 
 2. **内核独立于交互和部署**
@@ -24,9 +24,9 @@
    - Electron 和 Web 端应共享同一套领域逻辑、校验规则和导出结果。
 
 3. **优先保证可验证的波形正确性**
-   - 导入后先识别格式方言与适用 ruleset，再执行结构校验、范围校验和语义校验；来源 App 版本只接受外部明确 metadata。
+   - 导入后先识别格式与版本，再执行结构校验、范围校验和语义校验。
    - 对 `.pulse` 和二维码封装提供明确的诊断信息，而不是静默修正未知数据。
-   - 对任何显式规则变换和插值补点保留可追踪的变更结果；没有真实源/目标夹具时不猜测“旧版本”。
+   - 对旧版本升级和插值补点保留可追踪的变更结果，用户能够知道哪些数据被补充或调整。
 
 4. **从小到大分层交付**
    - 先完成“导入一条波形 -> 校验 -> 预览 -> 导出”的闭环，再扩展批处理、编辑、可视化和部署能力。
@@ -35,7 +35,7 @@
 ### 技术与架构约束
 
 - 语言与运行时：TypeScript、Node.js、npm。
-- 核心领域层：纯 TypeScript，负责模型、解析器、校验器、采样/插值、规则变换和序列化。
+- 核心领域层：纯 TypeScript，负责模型、解析器、校验器、采样/插值、版本升级和序列化。
 - 应用层：负责单文件与批量任务、任务结果、错误聚合、取消和进度报告。
 - 适配器层：负责本地文件、HTTP 上传下载、二维码、图片/SVG 导出、Electron IPC 及未来的 DG-LAB 设备/Socket 接入。
 - 展示层：Electron renderer 与 Web 前端共享可复用的视图模型和波形渲染能力，但不把 UI 状态写入领域模型。
@@ -46,11 +46,11 @@
 当前项目支持的格式边界如下：
 
 - `.pulse`：本项目唯一的规范用户波形输入和输出格式，使用 `Dungeonlab+pulse:` 语法。
-- QR 分享候选：URL fragment 中带 `#DGLAB-PULSE#` 的 legacy 分享载荷；现有证据表明它与当前 `.pulse` 明文结构不同，必须由独立 adapter 验证和转换。
+- QR：以 `#DGLAB-PULSE#` 前缀承载的 `.pulse` 分享封装，还原后得到 `.pulse` 明文，不作为独立波形格式。
 - `WaveformStream`：由 `.pulse` 展开的内部波形序列，用于预览、播放模拟、编辑和预览图导出，不作为独立文件格式。
 - dglab-kit 的 JSON/JSON5/`.pulses` 数据包、BLE/V3/V4 传输帧和其他社区方言不属于当前核心文件格式支持范围。
 
-详细的协议依据和兼容性风险见 [`docs/research/dglab-pulse-format.md`](docs/research/dglab-pulse-format.md)。
+详细的协议依据和兼容性风险见 [`docs/research/dglab-pulse-format.md`](docs/research/dglab-pulse-format.md)，本地样例覆盖见 [`docs/research/pulse-corpus.md`](docs/research/pulse-corpus.md)。
 
 ## Project Brief Overview
 
@@ -75,9 +75,9 @@
 
 #### 简易工具
 
-- `.pulse` 格式方言、ruleset 和字段范围检查。
+- `.pulse` 格式、版本和字段范围检查。
 - 波形合法性检查，包括 section、脉冲元、曲线点、频率和强度范围。
-- 对有真实源/目标夹具的方言执行显式规则变换；需要补点且规则已验证时使用 `f(x) = 1 - (1 - x) ** 2`，并明确标记结果。
+- 旧版本 `.pulse` 文件升级；需要补点时使用二次函数递减算法 `f(x) = 1 - (1 - x) ** 2`，并明确标记升级结果。
 
 #### 波形预览
 
@@ -99,10 +99,10 @@
 
 ```text
 导入文件/批量目录
-    -> 自动识别格式方言与 ruleset
+    -> 自动识别格式与版本
     -> 生成诊断报告和 metadata
     -> 预览 waveform stream / 播放
-    -> 手动修改或执行已验证的显式规则变换
+    -> 手动修改或执行版本升级
     -> 再次校验
     -> 导出 .pulse、二维码或预览图片
 ```
@@ -115,9 +115,9 @@
 - Web 应用与 Node.js API，可由 Docker Compose 和 Nginx 部署。
 - 自动化测试、格式样例、协议研究和面向贡献者的开发文档。
 
-### 当前阶段建议
+### 当前实施阶段
 
-实施从核心库与 CLI 的单文件闭环开始，再交付共享契约下的 Web/Electron 工作台。批处理、图片、QR、编辑和规则变换逐项加入；QR 与规则变换必须先通过真实 App 夹具门禁。完整顺序见 [`docs/plan/`](docs/plan/README.md)。
+项目当前处于 M0“格式证据与仓库基线”。完整顺序、质量门禁和需求覆盖见 [`docs/plan/`](docs/plan/README.md)。旧版本升级只有在具备真实旧/新夹具、可识别画像、变更规则和 App 互操作证据后才进入实现，不为未知版本建立猜测性兼容路径。
 
 ### 非目标与边界
 
@@ -129,10 +129,11 @@
 
 ## Repository Notes
 
-- [`docs/plan/`](docs/plan/README.md)：实施路线图、质量门禁、需求追踪与未知项。
-- [`docs/pdr/`](docs/pdr/README.md)：产品范围、格式支持和 Web 数据政策。
-- [`docs/adr/`](docs/adr/README.md)：工作区、领域模型、契约和交付架构。
+- [`docs/README.md`](docs/README.md)：文档职责与完整索引。
+- [`docs/plan/README.md`](docs/plan/README.md)：M0-M5 交付计划、关键路径和决策门槛。
+- [`docs/pdr/README.md`](docs/pdr/README.md)：产品范围与数据承诺决策。
+- [`docs/adr/README.md`](docs/adr/README.md)：长期架构决策。
 - [`docs/research/dglab-pulse-format.md`](docs/research/dglab-pulse-format.md)：波形文件、二维码、V3/V4 和兼容性研究。
-- [`docs/research/dglab-brief.md`](docs/research/dglab-brief.md)：DG-LAB 设备、传输协议与 SDK 边界。
+- [`docs/research/dglab-brief.md`](docs/research/dglab-brief.md)：DG-LAB 设备、传输协议与 SDK 研究。
 
 项目仍处于设计与早期实现阶段；README 描述的是目标边界和开发基线，不代表所有功能已经完成。

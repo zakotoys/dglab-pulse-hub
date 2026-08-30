@@ -10,14 +10,13 @@ DG-LAB Coyote 是双通道经皮电刺激设备，输出通道为 A、B。设备
 
 ## 2. `dglab-kit` SDK 能力
 
-[`dglab-kit`](https://github.com/dungeonlab-open/dglab-kit) 是面向 DG-LAB 4 App 的 TypeScript SDK。当前公开能力集中在 V3/V4 WebSocket 中继和可直接下发的内置波形，不是 BLE GATT SDK。其能力可按职责归纳为：
+[`dglab-kit`](https://github.com/dungeonlab-open/dglab-kit) 为 TypeScript SDK，提供统一的事件驱动 API，屏蔽 BLE GATT 特征、Socket 连接和原始帧拼装等传输细节。其能力可按职责归纳为：
 
-1. **Socket 连接与 App 配对**：连接 V3/V4 WebSocket 中继、生成 App 配对信息并管理一个或多个受控 App。
-2. **设备操作**：通过 App 暴露的设备槽位和通道下发 V2/V3 波形帧、调整或重置强度、清理任务。
-3. **状态与事件**：报告 Socket、App、设备列表、设备属性和自定义反馈事件。
-4. **Waveform SDK**：提供郊狼与负鼠的内置 raw 波形帧，可供 V3/V4 `sendPulse` 使用。
+1. **连接与设备管理**：发现、配对、连接/断开、设备槽位和通道选择；支持 Web Bluetooth、Node BLE 及 WebSocket 中继。
+2. **波形与强度控制**：发送 V2/V3 波形帧，按通道追加数据，逐步调整强度，并设置上限（limit）等运行约束。
+3. **状态与遥测**：以事件方式报告连接状态、电量和设备反馈，便于 UI 或任务服务更新状态。
 
-SDK 的 `sendPulse`/`AppendPulseData` 等方法属于 Socket/设备传输适配器接口，不应成为本项目 `.pulse` 领域模型的一部分。`.pulse` 解析、校验、采样和序列化应在独立的纯 TypeScript 核心层完成。若未来明确启用设备播放，再由独立 adapter 把经验证的 `WaveformStream` 编译为目标帧；直接 BLE 仍需要另行选型和评审。
+SDK 的 `sendPulse`/`AppendPulseData` 等方法属于传输适配器接口，不应成为本项目 `.pulse` 领域模型的一部分。`.pulse` 解析、校验、采样和序列化应在独立的纯 TypeScript 核心层完成，只有在明确启用设备播放时，才由适配器将 `WaveformStream` 编译为目标帧。
 
 ## 3. 参考资料
 
