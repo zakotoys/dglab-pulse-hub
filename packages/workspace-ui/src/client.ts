@@ -1,0 +1,141 @@
+import type {
+  BatchDataDto,
+  DiffDataDto,
+  EditDataDto,
+  InspectDataDto,
+  OperationEnvelope,
+  RenderDataDto
+} from '@dglab-pulse-hub/contracts';
+
+export type EditPayload = {
+  readonly kind: 'strength' | 'anchor' | 'frequency' | 'duration' | 'add-point' | 'remove-point';
+  readonly sectionIndex: number;
+  readonly pointIndex?: number;
+  readonly value?: number;
+  readonly startIndex?: number;
+  readonly endIndex?: number;
+  readonly atIndex?: number;
+  readonly anchor?: 0 | 1;
+};
+
+export interface WorkspaceFile {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+  readonly type?: string;
+}
+
+export interface WorkspaceDocument {
+  readonly displayName: string;
+  readonly digest: string;
+  /** Browser adapters retain text locally; the native adapter intentionally does not. */
+  readonly text?: string;
+}
+
+export interface WorkspaceArtifact {
+  readonly bytes: Uint8Array;
+  readonly displayName: string;
+  readonly contentType?: string;
+}
+
+export interface WorkspaceOperation {
+  readonly envelope: OperationEnvelope;
+  readonly document?: WorkspaceDocument;
+  /** Plain text produced by QR decoding, before inspection. */
+  readonly decodedText?: string;
+  readonly editData?: EditDataDto;
+  readonly artifact?: WorkspaceArtifact;
+}
+
+export interface WorkspaceClient {
+  /** Determines whether the source control uses browser file inputs or native dialogs. */
+  readonly fileMode: 'browser' | 'native';
+  readonly open: (signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly importFile: (file: WorkspaceFile, signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly inspect: (text: string, displayName: string, signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly decodeQr: (text: string, signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly export: (
+    document: WorkspaceDocument,
+    format: 'pulse-text' | 'qr-envelope',
+    mode: 'source' | 'canonical',
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly renderPreview: (
+    document: WorkspaceDocument,
+    format: 'svg' | 'png' | 'jpg',
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly edit: (
+    document: WorkspaceDocument,
+    command: EditPayload,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly assist: (
+    document: WorkspaceDocument,
+    input: {
+      readonly sectionIndex: number;
+      readonly startPointIndex: number;
+      readonly endPointIndex: number;
+      readonly startStrength: number;
+      readonly endStrength: number;
+      readonly reviewed: true;
+    },
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly diff: (
+    document: WorkspaceDocument,
+    comparison?: WorkspaceFile,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly batchInspect: (files?: readonly WorkspaceFile[], signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly batchExport: (
+    files?: readonly WorkspaceFile[],
+    mode?: 'source' | 'canonical',
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly undo: (
+    document: WorkspaceDocument,
+    target?: WorkspaceDocument,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly redo: (
+    document: WorkspaceDocument,
+    target?: WorkspaceDocument,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
+  readonly downloadArtifact: (id: string, signal?: AbortSignal) => Promise<WorkspaceArtifact | null>;
+  readonly saveArtifact: (
+    artifact: WorkspaceArtifact,
+    suggestedName: string,
+    signal?: AbortSignal
+  ) => Promise<OperationEnvelope>;
+  /** Native adapters may reset their private history after replacing a source. */
+  readonly onHistoryReset?: (listener: (operation: WorkspaceOperation) => void) => () => void;
+  readonly dispose?: () => void;
+}
+
+export type WorkspaceInspectData = InspectDataDto;
+export type WorkspaceBatchData = BatchDataDto;
+export type WorkspaceDiffData = DiffDataDto;
+export type WorkspaceRenderData = RenderDataDto;
+
+export function documentFromInspect(
+  envelope: OperationEnvelope,
+  displayName: string,
+  text?: string
+): WorkspaceDocument | null {
+  if (envelope.status !== 'success') return null;
+  const result = envelope.result;
+  if (typeof result !== 'object' || result === null || !('sourceDigest' in result)) return null;
+  const digest = (result as { readonly sourceDigest?: unknown }).sourceDigest;
+  if (typeof digest !== 'string' || !/^[0-9a-f]{16}$/i.test(digest)) return null;
+  return Object.freeze({ displayName, digest, ...(text === undefined ? {} : { text }) });
+}
+
+export function operationWithDocument(
+  envelope: OperationEnvelope,
+  displayName: string,
+  text?: string
+): WorkspaceOperation {
+  const document = documentFromInspect(envelope, displayName, text);
+  return Object.freeze({ envelope, ...(document === null ? {} : { document }) });
+}

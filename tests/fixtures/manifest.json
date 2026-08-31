@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "pulse-corpus-manifest-v1",
+  "provenance": {
+    "source": "synthetic",
+    "redistribution": "permitted",
+    "note": "Synthetic fixtures cover documented grammar and resource boundaries; local .example data remains optional and ignored."
+  },
+  "fixtures": [
+    {
+      "name": "valid-minimal",
+      "path": "valid-minimal.pulse",
+      "expectation": "accepted",
+      "description": "Smallest legal enabled section with two anchored points."
+    },
+    {
+      "name": "valid-mode-4",
+      "path": "valid-mode-4.pulse",
+      "expectation": "accepted",
+      "description": "Reverse frequency mode and decimal control points."
+    },
+    {
+      "name": "valid-disabled-mixed",
+      "path": "valid-disabled-mixed.pulse",
+      "expectation": "accepted",
+      "description": "Mixed enabled and disabled sections with an inter-section rest."
+    },
+    {
+      "name": "valid-ten-sections",
+      "path": "valid-ten-sections.pulse",
+      "expectation": "accepted",
+      "description": "Parse-supported ten-section boundary."
+    },
+    {
+      "name": "invalid-syntax",
+      "path": "invalid-syntax.pulse",
+      "expectation": "rejected",
+      "description": "Malformed separator and missing control-point slash."
+    },
+    {
+      "name": "invalid-range",
+      "path": "invalid-range.pulse",
+      "expectation": "rejected",
+      "description": "Out-of-range frequency, duration, mode, strength, and anchor."
+    },
+    {
+      "name": "invalid-resource",
+      "path": "invalid-resource.pulse",
+      "expectation": "rejected",
+      "description": "More than the supported section ceiling."
+    },
+    {
+      "name": "invalid-encoding",
+      "path": "invalid-encoding.hex",
+      "encoding": "hex",
+      "expectation": "rejected",
+      "description": "Invalid UTF-8 bytes represented as hexadecimal for clean clones."
+    }
+  ]
+}

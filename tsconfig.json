@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/contracts" },
+    { "path": "./packages/application" },
+    { "path": "./packages/workspace-ui" },
+    { "path": "./apps/cli" },
+    { "path": "./apps/api" },
+    { "path": "./apps/web" },
+    { "path": "./apps/desktop" }
+  ]
+}

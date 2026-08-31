@@ -6,7 +6,7 @@
 | --- | --- |
 | 状态 | Active / 实施基线 |
 | 规划单位 | 可工作的端到端增量，而不是组件完成度 |
-| 当前阶段 | M0：格式证据与仓库基线 |
+| 当前阶段 | M4：首个完整版本实现验证中；M5 发布门禁进行中 |
 | 产品范围 | PRD 的 P0、P1；P2 只保留决策入口 |
 | 关联文档 | [PRD](../prd.md)、[TRD](../trd.md)、[阶段计划](phases.md)、[质量门禁](quality-gates.md)、[需求追踪](traceability.md) |
 
@@ -25,13 +25,15 @@
 
 | 事实 | 规划影响 |
 | --- | --- |
-| 仓库当前只有文档，没有运行时代码或包清单 | M0 同时负责仓库骨架、工具链和首批契约测试 |
+| 工作区已有 core/application/contracts、CLI、HTTP API、Web 和 Electron 运行时代码 | M1-M4 的单文件、批量、编辑、预览和跨端契约可以独立运行；发布打包与生产门禁仍需单独验收 |
 | `.example` 有 16 个文件、69 个 section、1,686 个曲线点，且当前被 git 忽略 | 这些数字是当前工作区证据，不是假定干净 clone 也能得到的 fixture；M0 必须记录来源/再分发权，并决定是否提交只含统计和校验信息的 metadata manifest。CI 使用最小合成夹具 |
 | 样例包含 1 至 10 个 section，启用 section 也可超过 3 个 | 明确区分 `parse-supported`（解析器可接受 1..10）和 `app-verified`（目标 App 已验证）；官方 UI 的“三小节”描述不自动成为文件拒绝条件，4..10 不得未经验证就承诺 App 互操作 |
 | 强度包含两位小数，自动点和锚点并存 | 解析阶段不得先取整；未编辑内容必须保留原始数值表达能力 |
 | 文件本身没有显式版本字段 | `version` 不能伪造；识别结果使用 `formatProfile`、`ruleVersion` 和证据等级 |
 | 官方确认每个曲线竖条为 100 ms，脉冲元完整重复并向上取整 | WaveformStream 的逻辑时间轴可以据此建立；物理频率映射仍需互操作夹具验证 |
 | 设备传输不属于当前核心范围 | M0-M4 不生成或发送 BLE/V3/V4 帧，不让设备能力阻塞文件工作台 |
+
+当前 Electron 发布入口使用 Electron Forge；主进程和 sandbox preload 在构建时分别 bundle，已在本机 macOS arm64 完成 package/make/启动检查。Windows 安装、签名和跨平台发布仍属于 M5 发布门禁，不能由本机结果代替。
 
 样例统计和证据边界见 [本地语料分析](../research/pulse-corpus.md)。
 

@@ -1,0 +1,292 @@
+import {
+  SCHEMA_VERSION,
+  RULE_VERSION,
+  batchDataSchema,
+  diffDataSchema,
+  editDataSchema,
+  inspectDataSchema,
+  renderDataSchema,
+  safeParseOperationEnvelope,
+  type OperationEnvelope
+} from '@dglab-pulse-hub/contracts';
+import {
+  documentFromInspect,
+  type EditPayload,
+  type WorkspaceArtifact,
+  type WorkspaceClient,
+  type WorkspaceDocument,
+  type WorkspaceFile,
+  type WorkspaceOperation
+} from '@dglab-pulse-hub/workspace-ui';
+
+interface DesktopApi {
+  readonly open: () => Promise<unknown>;
+  readonly inspectCurrent: () => Promise<unknown>;
+  readonly decodeQr: (payload: { readonly text: string }) => Promise<unknown>;
+  readonly edit: (payload: { readonly sourceDigest: string; readonly command: EditPayload }) => Promise<unknown>;
+  readonly assist: (payload: {
+    readonly sourceDigest: string;
+    readonly sectionIndex: number;
+    readonly startPointIndex: number;
+    readonly endPointIndex: number;
+    readonly startStrength: number;
+    readonly endStrength: number;
+    readonly reviewed: true;
+  }) => Promise<unknown>;
+  readonly diff: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
+  readonly undo: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
+  readonly redo: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
+  readonly onHistoryReset: (listener: (value: unknown) => void) => () => void;
+  readonly batchInspect: () => Promise<unknown>;
+  readonly batchExport: (payload?: { readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
+  readonly renderPreview: (payload: { readonly sourceDigest: string; readonly displayName?: string; readonly format: 'svg' | 'png' | 'jpg' }) => Promise<unknown>;
+  readonly export: (payload: { readonly sourceDigest: string; readonly displayName?: string; readonly format?: 'pulse-text' | 'qr-envelope'; readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
+}
+
+declare global {
+  interface Window {
+    readonly pulseDesktop?: DesktopApi;
+  }
+}
+
+function failureEnvelope(
+  operation: string,
+  message: string,
+  code = 'PULSE_ADAPTER_READ_FAILED',
+  status: 'rejected' | 'failed' | 'cancelled' = 'failed'
+): OperationEnvelope {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    ruleVersion: RULE_VERSION,
+    operation: /^[a-z][a-z0-9-]{0,79}$/.test(operation) ? operation : 'request',
+    status,
+    result: null,
+    diagnostics: [{
+      code,
+      severity: status === 'cancelled' ? 'info' : 'error',
+      stage: status === 'cancelled' ? 'task' : 'adapter',
+      message,
+      location: { path: '$' }
+    }]
+  };
+}
+
+function parseEnvelope(value: unknown, operation: string): OperationEnvelope {
+  const parsed = safeParseOperationEnvelope(value);
+  return parsed.ok
+    ? parsed.value
+    : failureEnvelope(operation, 'The desktop operation returned an invalid response.', 'PULSE_TASK_INVALID_TRANSITION');
+}
+
+function cancelled(operation: string, label = operation): OperationEnvelope {
+  return failureEnvelope(operation, label + ' was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled');
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+}
+
+function inspectOperation(envelope: OperationEnvelope): WorkspaceOperation {
+  if (envelope.status !== 'success') return { envelope };
+  const parsed = inspectDataSchema.safeParse(envelope.result);
+  if (!parsed.success) return { envelope: failureEnvelope('inspect', 'The desktop inspection result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+  const document = documentFromInspect(envelope, parsed.data.metadata.file.displayName);
+  return document === null ? { envelope } : { envelope, document };
+}
+
+function mergeDiagnostics(operation: WorkspaceOperation, preceding: OperationEnvelope): WorkspaceOperation {
+  if (preceding.diagnostics.length === 0) return operation;
+  return {
+    ...operation,
+    envelope: { ...operation.envelope, diagnostics: [...preceding.diagnostics, ...operation.envelope.diagnostics] }
+  };
+}
+
+function apiOrThrow(): DesktopApi {
+  const api = window.pulseDesktop;
+  if (api === undefined) throw new Error('Desktop preload API is unavailable.');
+  return api;
+}
+
+export function createElectronWorkspaceClient(): WorkspaceClient {
+  const api = apiOrThrow();
+  const client: WorkspaceClient = {
+    fileMode: 'native',
+
+    async open(signal) {
+      try {
+        throwIfAborted(signal);
+        const operation = inspectOperation(parseEnvelope(await api.open(), 'inspect'));
+        throwIfAborted(signal);
+        return operation;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('inspect', 'Open') };
+        return { envelope: failureEnvelope('inspect', 'The selected file could not be opened.') };
+      }
+    },
+
+    async importFile(_file: WorkspaceFile, signal) {
+      throwIfAborted(signal);
+      return { envelope: failureEnvelope('inspect', 'File import is provided by the native file dialog.', 'PULSE_ADAPTER_READ_FAILED', 'rejected') };
+    },
+
+    async inspect(_text: string, _displayName: string, signal) {
+      throwIfAborted(signal);
+      return { envelope: failureEnvelope('inspect', 'Native inspection does not accept renderer source text.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+    },
+
+    async decodeQr(text, signal) {
+      try {
+        throwIfAborted(signal);
+        const operation = inspectOperation(parseEnvelope(await api.decodeQr({ text }), 'inspect'));
+        throwIfAborted(signal);
+        return operation;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('qr-decode', 'QR decoding') };
+        return { envelope: failureEnvelope('qr-decode', 'QR content could not be decoded.') };
+      }
+    },
+
+    async export(document, format, mode, signal) {
+      try {
+        throwIfAborted(signal);
+        const envelope = parseEnvelope(await api.export({ sourceDigest: document.digest, displayName: document.displayName, format, mode }), 'export');
+        throwIfAborted(signal);
+        return { envelope, document };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('export', 'Export') };
+        return { envelope: failureEnvelope('export', 'The selected pulse could not be exported.') };
+      }
+    },
+
+    async renderPreview(document, format, signal) {
+      try {
+        throwIfAborted(signal);
+        const envelope = parseEnvelope(await api.renderPreview({ sourceDigest: document.digest, displayName: document.displayName, format }), 'render');
+        throwIfAborted(signal);
+        return { envelope, document };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('render', 'Preview rendering') };
+        return { envelope: failureEnvelope('render', 'The preview could not be saved.') };
+      }
+    },
+
+    async edit(document, command, signal) {
+      try {
+        throwIfAborted(signal);
+        const editEnvelope = parseEnvelope(await api.edit({ sourceDigest: document.digest, command }), 'edit');
+        if (editEnvelope.status !== 'success') return { envelope: editEnvelope };
+        const editParsed = editDataSchema.safeParse(editEnvelope.result);
+        const inspected = inspectOperation(parseEnvelope(await api.inspectCurrent(), 'inspect'));
+        if (inspected.envelope.status !== 'success' || inspected.document === undefined) return { envelope: inspected.envelope };
+        throwIfAborted(signal);
+        return { ...mergeDiagnostics(inspected, editEnvelope), ...(editParsed.success ? { editData: editParsed.data } : {}) };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('edit', 'Edit') };
+        return { envelope: failureEnvelope('edit', 'The pulse edit could not be completed.') };
+      }
+    },
+
+    async assist(document, input, signal) {
+      try {
+        throwIfAborted(signal);
+        const editEnvelope = parseEnvelope(await api.assist({ sourceDigest: document.digest, ...input }), 'edit');
+        if (editEnvelope.status !== 'success') return { envelope: editEnvelope };
+        const editParsed = editDataSchema.safeParse(editEnvelope.result);
+        const inspected = inspectOperation(parseEnvelope(await api.inspectCurrent(), 'inspect'));
+        if (inspected.envelope.status !== 'success' || inspected.document === undefined) return { envelope: inspected.envelope };
+        throwIfAborted(signal);
+        return { ...mergeDiagnostics(inspected, editEnvelope), ...(editParsed.success ? { editData: editParsed.data } : {}) };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('edit', 'Curve application') };
+        return { envelope: failureEnvelope('edit', 'The assisted edit could not be completed.') };
+      }
+    },
+
+    async diff(document, _comparison, signal) {
+      try {
+        throwIfAborted(signal);
+        const envelope = parseEnvelope(await api.diff({ sourceDigest: document.digest }), 'diff');
+        if (envelope.status === 'success' && !diffDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('diff', 'The diff result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        throwIfAborted(signal);
+        return { envelope };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('diff', 'Diff') };
+        return { envelope: failureEnvelope('diff', 'The documents could not be compared.') };
+      }
+    },
+
+    async batchInspect(_files, signal) {
+      try {
+        throwIfAborted(signal);
+        const envelope = parseEnvelope(await api.batchInspect(), 'batch');
+        if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('batch', 'The batch result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        return { envelope };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('batch', 'Batch task') };
+        return { envelope: failureEnvelope('batch', 'The batch task could not be completed.') };
+      }
+    },
+
+    async batchExport(_files, mode, signal) {
+      try {
+        throwIfAborted(signal);
+        const envelope = parseEnvelope(await api.batchExport(mode === undefined ? {} : { mode }), 'batch');
+        if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('batch', 'The batch result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        return { envelope };
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('batch', 'Batch export') };
+        return { envelope: failureEnvelope('batch', 'The batch export could not be completed.') };
+      }
+    },
+
+    async undo(document, _target, signal) {
+      try {
+        throwIfAborted(signal);
+        const operation = inspectOperation(parseEnvelope(await api.undo({ sourceDigest: document.digest }), 'undo'));
+        throwIfAborted(signal);
+        return operation;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('undo', 'Undo') };
+        return { envelope: failureEnvelope('undo', 'The earlier pulse snapshot could not be restored.') };
+      }
+    },
+
+    async redo(document, _target, signal) {
+      try {
+        throwIfAborted(signal);
+        const operation = inspectOperation(parseEnvelope(await api.redo({ sourceDigest: document.digest }), 'redo'));
+        throwIfAborted(signal);
+        return operation;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('redo', 'Redo') };
+        return { envelope: failureEnvelope('redo', 'The later pulse snapshot could not be restored.') };
+      }
+    },
+
+    async downloadArtifact(_id, signal) {
+      throwIfAborted(signal);
+      return null;
+    },
+
+    async saveArtifact(artifact: WorkspaceArtifact, suggestedName: string, signal) {
+      throwIfAborted(signal);
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        ruleVersion: RULE_VERSION,
+        operation: 'export',
+        status: 'success',
+        result: { displayName: suggestedName || artifact.displayName, byteSize: artifact.bytes.byteLength },
+        diagnostics: []
+      };
+    },
+
+    onHistoryReset(listener) {
+      return api.onHistoryReset((value) => {
+        const operation = inspectOperation(parseEnvelope(value, 'inspect'));
+        listener(operation);
+      });
+    }
+  };
+  return client;
+}

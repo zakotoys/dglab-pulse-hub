@@ -1,1 +1,37 @@
 .example/
+
+# Dependencies and package-manager caches
+node_modules/
+.npm/
+.pnpm-store/
+
+# Local environment and tooling state
+.env
+.env.*
+!.env.example
+.playwright-mcp/
+.cache/
+.eslintcache
+.rollup.cache/
+.parcel-cache/
+
+# OS and debug output
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript/build output
+**/dist/
+*.tsbuildinfo
+.turbo/
+.vite/
+
+# Test and coverage output
+coverage/
+*.lcov
+
+# Local desktop packaging output
+**/out/
