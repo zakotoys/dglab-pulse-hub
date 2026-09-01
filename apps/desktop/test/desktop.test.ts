@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
 
-const VALID_TEXT =
-  'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
+const VALID_TEXT = 'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
 const TRUSTED_URL = new URL('../src/index.html', import.meta.url).toString();
 
 const mocks = vi.hoisted(() => {
@@ -17,9 +16,11 @@ const mocks = vi.hoisted(() => {
   };
   const historyReset = vi.fn();
   const ipcMain = {
-    handle: vi.fn((channel: string, handler: (event: unknown, payload?: unknown) => Promise<unknown>) => {
-      handlers.set(channel, handler);
-    })
+    handle: vi.fn(
+      (channel: string, handler: (event: unknown, payload?: unknown) => Promise<unknown>) => {
+        handlers.set(channel, handler);
+      }
+    )
   };
   class MockBrowserWindow {
     public readonly webContents = {
@@ -151,9 +152,9 @@ describe('Electron IPC boundary', () => {
 
   it('does not trust file-like remote IPC senders', async () => {
     const handler = mocks.handlers.get('pulse:open');
-    await expect(handler?.({ senderFrame: { url: 'file://remote-host/app/index.html' } })).rejects.toThrow(
-      'Untrusted IPC sender.'
-    );
+    await expect(
+      handler?.({ senderFrame: { url: 'file://remote-host/app/index.html' } })
+    ).rejects.toThrow('Untrusted IPC sender.');
   });
 
   it('keeps edit and assist bytes private while refreshing the current snapshot', async () => {
@@ -169,7 +170,10 @@ describe('Electron IPC boundary', () => {
     const edit = mocks.handlers.get('pulse:edit');
     const edited = await edit?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: digest, command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 60 } }
+      {
+        sourceDigest: digest,
+        command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 60 }
+      }
     );
     expect(operationEnvelopeSchema.safeParse(edited).success).toBe(true);
     expect(edited).toMatchObject({ operation: 'edit', status: 'success' });
@@ -184,14 +188,27 @@ describe('Electron IPC boundary', () => {
     const assist = mocks.handlers.get('pulse:assist');
     const unreviewed = await assist?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: nextDigest, sectionIndex: 0, startPointIndex: 0, endPointIndex: 2, startStrength: 10, endStrength: 90, reviewed: false }
+      {
+        sourceDigest: nextDigest,
+        sectionIndex: 0,
+        startPointIndex: 0,
+        endPointIndex: 2,
+        startStrength: 10,
+        endStrength: 90,
+        reviewed: false
+      }
     );
     expect(unreviewed).toMatchObject({ operation: 'edit', status: 'rejected', result: null });
 
     const exportHandler = mocks.handlers.get('pulse:export');
     const sourceExport = await exportHandler?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: nextDigest, displayName: 'edited-source.pulse', format: 'pulse-text', mode: 'source' }
+      {
+        sourceDigest: nextDigest,
+        displayName: 'edited-source.pulse',
+        format: 'pulse-text',
+        mode: 'source'
+      }
     );
     expect(sourceExport).toMatchObject({ operation: 'export', status: 'rejected', result: null });
   });
@@ -211,58 +228,109 @@ describe('Electron IPC boundary', () => {
     const edit = mocks.handlers.get('pulse:edit');
     const firstEdit = await edit?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: digest0, command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 60 } }
+      {
+        sourceDigest: digest0,
+        command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 60 }
+      }
     );
     expect(firstEdit).toMatchObject({ operation: 'edit', status: 'success' });
-    const inspected1 = await mocks.handlers.get('pulse:inspect-current')?.({ senderFrame: { url: TRUSTED_URL } });
+    const inspected1 = await mocks.handlers.get('pulse:inspect-current')?.({
+      senderFrame: { url: TRUSTED_URL }
+    });
     const digest1 = (inspected1 as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
-    const point1 = (inspected1 as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } }).result?.stream?.points?.[1]?.intensityDecimal;
+    const point1 = (
+      inspected1 as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } }
+    ).result?.stream?.points?.[1]?.intensityDecimal;
     expect(point1).toBe('60');
 
     const secondEdit = await edit?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: digest1, command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 70 } }
+      {
+        sourceDigest: digest1,
+        command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 70 }
+      }
     );
     expect(secondEdit).toMatchObject({ operation: 'edit', status: 'success' });
-    const inspected2 = await mocks.handlers.get('pulse:inspect-current')?.({ senderFrame: { url: TRUSTED_URL } });
+    const inspected2 = await mocks.handlers.get('pulse:inspect-current')?.({
+      senderFrame: { url: TRUSTED_URL }
+    });
     const digest2 = (inspected2 as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
-    expect((inspected2 as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } }).result?.stream?.points?.[1]?.intensityDecimal).toBe('70');
+    expect(
+      (inspected2 as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } })
+        .result?.stream?.points?.[1]?.intensityDecimal
+    ).toBe('70');
 
     const undo = mocks.handlers.get('pulse:undo');
     const undone = await undo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: digest2 });
     expect(operationEnvelopeSchema.safeParse(undone).success).toBe(true);
     expect(undone).toMatchObject({ operation: 'undo', status: 'success' });
     expect(JSON.stringify(undone)).not.toContain('Dungeonlab+pulse:');
-    expect((undone as { result?: { sourceDigest?: unknown; stream?: { points?: Array<{ intensityDecimal?: string }> } } }).result?.sourceDigest).toBe(digest1);
-    expect((undone as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } }).result?.stream?.points?.[1]?.intensityDecimal).toBe('60');
+    expect(
+      (
+        undone as {
+          result?: {
+            sourceDigest?: unknown;
+            stream?: { points?: Array<{ intensityDecimal?: string }> };
+          };
+        }
+      ).result?.sourceDigest
+    ).toBe(digest1);
+    expect(
+      (undone as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } }).result
+        ?.stream?.points?.[1]?.intensityDecimal
+    ).toBe('60');
 
     const redo = mocks.handlers.get('pulse:redo');
     const redone = await redo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: digest1 });
     expect(redone).toMatchObject({ operation: 'redo', status: 'success' });
     expect((redone as { result?: { sourceDigest?: unknown } }).result?.sourceDigest).toBe(digest2);
 
-    const backAgain = await undo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: digest2 });
+    const backAgain = await undo?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: digest2 }
+    );
     expect(backAgain).toMatchObject({ operation: 'undo', status: 'success' });
     const branchBase = (backAgain as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     const branchEdit = await edit?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: branchBase, command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 80 } }
+      {
+        sourceDigest: branchBase,
+        command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 80 }
+      }
     );
     expect(branchEdit).toMatchObject({ operation: 'edit', status: 'success' });
-    const branched = await mocks.handlers.get('pulse:inspect-current')?.({ senderFrame: { url: TRUSTED_URL } });
+    const branched = await mocks.handlers.get('pulse:inspect-current')?.({
+      senderFrame: { url: TRUSTED_URL }
+    });
     const branchDigest = (branched as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
-    expect((branched as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } }).result?.stream?.points?.[1]?.intensityDecimal).toBe('80');
+    expect(
+      (branched as { result?: { stream?: { points?: Array<{ intensityDecimal?: string }> } } })
+        .result?.stream?.points?.[1]?.intensityDecimal
+    ).toBe('80');
 
-    const staleRedo = await redo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: branchDigest });
+    const staleRedo = await redo?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: branchDigest }
+    );
     expect(staleRedo).toMatchObject({ operation: 'redo', status: 'rejected', result: null });
-    const staleUndo = await undo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: digest2 });
+    const staleUndo = await undo?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: digest2 }
+    );
     expect(staleUndo).toMatchObject({ operation: 'undo', status: 'rejected', result: null });
 
-    const toOriginal = await undo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: branchDigest });
+    const toOriginal = await undo?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: branchDigest }
+    );
     expect(toOriginal).toMatchObject({ operation: 'undo', status: 'success' });
-    const originalAgain = (toOriginal as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
+    const originalAgain = (toOriginal as { result?: { sourceDigest?: unknown } }).result
+      ?.sourceDigest;
     expect(originalAgain).toBe(digest1);
-    const toInitial = await undo?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: originalAgain });
+    const toInitial = await undo?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: originalAgain }
+    );
     expect(toInitial).toMatchObject({ operation: 'undo', status: 'success' });
     const noEarlier = await undo?.(
       { senderFrame: { url: TRUSTED_URL } },
@@ -285,7 +353,10 @@ describe('Electron IPC boundary', () => {
     const edit = mocks.handlers.get('pulse:edit');
     const edited = await edit?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: digest, command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 61 } }
+      {
+        sourceDigest: digest,
+        command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 61 }
+      }
     );
     expect(edited).toMatchObject({ operation: 'edit', status: 'success' });
 
@@ -294,7 +365,11 @@ describe('Electron IPC boundary', () => {
     mocks.dialog.showMessageBoxSync.mockReturnValueOnce(0);
     mocks.dialog.showOpenDialog.mockClear();
     const attemptedOpen = await open?.({ senderFrame: { url: TRUSTED_URL } });
-    expect(attemptedOpen).toMatchObject({ operation: 'inspect', status: 'cancelled', result: null });
+    expect(attemptedOpen).toMatchObject({
+      operation: 'inspect',
+      status: 'cancelled',
+      result: null
+    });
     expect(mocks.dialog.showOpenDialog).not.toHaveBeenCalled();
   });
 
@@ -345,9 +420,14 @@ describe('Electron IPC boundary', () => {
     };
     expect(operationEnvelopeSchema.safeParse(response.envelope).success).toBe(true);
     expect(response.envelope).toMatchObject({ operation: 'export', status: 'success' });
-    expect(response.artifact).toMatchObject({ displayName: 'source.qr.jpg', contentType: 'image/jpeg' });
+    expect(response.artifact).toMatchObject({
+      displayName: 'source.qr.jpg',
+      contentType: 'image/jpeg'
+    });
     expect(response.artifact?.bytes).toBeInstanceOf(Uint8Array);
-    expect(Array.from((response.artifact?.bytes as Uint8Array).subarray(0, 2))).toEqual([0xff, 0xd8]);
+    expect(Array.from((response.artifact?.bytes as Uint8Array).subarray(0, 2))).toEqual([
+      0xff, 0xd8
+    ]);
     expect(mocks.dialog.showSaveDialog).not.toHaveBeenCalled();
     await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
@@ -392,11 +472,17 @@ describe('Electron IPC boundary', () => {
     const edit = mocks.handlers.get('pulse:edit');
     const edited = await edit?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: digest, command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 62 } }
+      {
+        sourceDigest: digest,
+        command: { kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 62 }
+      }
     );
     expect(edited).toMatchObject({ operation: 'edit', status: 'success' });
-    const editedSnapshot = await mocks.handlers.get('pulse:inspect-current')?.({ senderFrame: { url: TRUSTED_URL } });
-    const editedDigest = (editedSnapshot as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
+    const editedSnapshot = await mocks.handlers.get('pulse:inspect-current')?.({
+      senderFrame: { url: TRUSTED_URL }
+    });
+    const editedDigest = (editedSnapshot as { result?: { sourceDigest?: unknown } }).result
+      ?.sourceDigest;
     expect(typeof editedDigest).toBe('string');
 
     mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: input });
@@ -404,14 +490,22 @@ describe('Electron IPC boundary', () => {
     const exportHandler = mocks.handlers.get('pulse:export');
     const exported = await exportHandler?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: editedDigest, format: 'pulse-text', mode: 'canonical', displayName: 'source.pulse' }
+      {
+        sourceDigest: editedDigest,
+        format: 'pulse-text',
+        mode: 'canonical',
+        displayName: 'source.pulse'
+      }
     );
     expect(exported).toMatchObject({ operation: 'export', status: 'success' });
     expect(mocks.historyReset).not.toHaveBeenCalled();
     expect(await readFile(input, 'utf8')).toContain('62');
-    const inspected = await mocks.handlers.get('pulse:inspect-current')?.({ senderFrame: { url: TRUSTED_URL } });
+    const inspected = await mocks.handlers.get('pulse:inspect-current')?.({
+      senderFrame: { url: TRUSTED_URL }
+    });
     expect(inspected).toMatchObject({ operation: 'inspect', status: 'success' });
-    const refreshedDigest = (inspected as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
+    const refreshedDigest = (inspected as { result?: { sourceDigest?: unknown } }).result
+      ?.sourceDigest;
     expect(typeof refreshedDigest).toBe('string');
     const undoAfterSave = await mocks.handlers.get('pulse:undo')?.(
       { senderFrame: { url: TRUSTED_URL } },
@@ -421,8 +515,13 @@ describe('Electron IPC boundary', () => {
   });
 
   it('allows blob URLs for generated QR previews', () => {
-    const registration = mocks.session.defaultSession.webRequest.onHeadersReceived.mock.calls[0]?.[0] as
-      ((details: { responseHeaders: Record<string, string[]> }, callback: (value: { responseHeaders: Record<string, string[]> }) => void) => void) | undefined;
+    const registration = mocks.session.defaultSession.webRequest.onHeadersReceived.mock
+      .calls[0]?.[0] as
+      | ((
+          details: { responseHeaders: Record<string, string[]> },
+          callback: (value: { responseHeaders: Record<string, string[]> }) => void
+        ) => void)
+      | undefined;
     expect(registration).toBeDefined();
     let policy = '';
     registration?.({ responseHeaders: {} }, (value) => {
@@ -431,47 +530,52 @@ describe('Electron IPC boundary', () => {
     expect(policy).toContain("img-src 'self' data: blob:");
   });
 
-  it('renders SVG, PNG, and JPG previews from the current snapshot without exposing bytes or paths', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-preview-'));
-    directories.push(directory);
-    const input = join(directory, 'source.pulse');
-    await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
-    const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
-    expect(typeof digest).toBe('string');
-    const streamDigest = (opened as { result?: { stream?: { digest?: unknown } } }).result?.stream?.digest;
-    expect(typeof streamDigest).toBe('string');
-    const render = mocks.handlers.get('pulse:render-preview');
-    expect(render).toBeDefined();
-    for (const format of ['svg', 'png', 'jpg'] as const) {
-      const output = join(directory, 'preview.' + format);
-      mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
-      const result = await render?.(
-        { senderFrame: { url: TRUSTED_URL } },
-        { sourceDigest: digest, displayName: 'source.pulse', format }
-      );
-      expect(operationEnvelopeSchema.safeParse(result).success).toBe(true);
-      expect(result).toMatchObject({ operation: 'render', status: 'success' });
-      const metadata = (result as { result?: Record<string, unknown> }).result;
-      expect(metadata).toMatchObject({ format, streamDigest });
-      expect(metadata).not.toHaveProperty('bytes');
-      expect(metadata).not.toHaveProperty('path');
-      expect(JSON.stringify(result)).not.toContain(VALID_TEXT);
-      const bytes = await readFile(output);
-      expect(bytes.byteLength).toBeGreaterThan(16);
-      if (format === 'svg') {
-        expect(bytes.toString('utf8')).toContain('<svg');
-      } else if (format === 'png') {
-        expect([...bytes.subarray(0, 4)]).toEqual([137, 80, 78, 71]);
-      } else {
-        expect([...bytes.subarray(0, 2)]).toEqual([255, 216]);
+  it(
+    'renders SVG, PNG, and JPG previews from the current snapshot ' +
+      'without exposing bytes or paths',
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-preview-'));
+      directories.push(directory);
+      const input = join(directory, 'source.pulse');
+      await writeFile(input, VALID_TEXT, 'utf8');
+      mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
+      const open = mocks.handlers.get('pulse:open');
+      const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+      const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
+      expect(typeof digest).toBe('string');
+      const streamDigest = (opened as { result?: { stream?: { digest?: unknown } } }).result?.stream
+        ?.digest;
+      expect(typeof streamDigest).toBe('string');
+      const render = mocks.handlers.get('pulse:render-preview');
+      expect(render).toBeDefined();
+      for (const format of ['svg', 'png', 'jpg'] as const) {
+        const output = join(directory, 'preview.' + format);
+        mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
+        const result = await render?.(
+          { senderFrame: { url: TRUSTED_URL } },
+          { sourceDigest: digest, displayName: 'source.pulse', format }
+        );
+        expect(operationEnvelopeSchema.safeParse(result).success).toBe(true);
+        expect(result).toMatchObject({ operation: 'render', status: 'success' });
+        const metadata = (result as { result?: Record<string, unknown> }).result;
+        expect(metadata).toMatchObject({ format, streamDigest });
+        expect(metadata).not.toHaveProperty('bytes');
+        expect(metadata).not.toHaveProperty('path');
+        expect(JSON.stringify(result)).not.toContain(VALID_TEXT);
+        const bytes = await readFile(output);
+        expect(bytes.byteLength).toBeGreaterThan(16);
+        if (format === 'svg') {
+          expect(bytes.toString('utf8')).toContain('<svg');
+        } else if (format === 'png') {
+          expect([...bytes.subarray(0, 4)]).toEqual([137, 80, 78, 71]);
+        } else {
+          expect([...bytes.subarray(0, 2)]).toEqual([255, 216]);
+        }
       }
     }
-  });
+  );
 
-  it('fails closed for unsupported and cancelled previews and confirms overwrite conflicts', async () => {
+  it('fails closed for invalid previews and confirms overwrite conflicts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-preview-failure-'));
     directories.push(directory);
     const input = join(directory, 'source.pulse');
@@ -530,7 +634,10 @@ describe('Electron IPC boundary', () => {
     expect(JSON.stringify(compared)).not.toContain(VALID_TEXT);
 
     const batchInspect = mocks.handlers.get('pulse:batch-inspect');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [first, second] });
+    mocks.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [first, second]
+    });
     const batch = await batchInspect?.({ senderFrame: { url: TRUSTED_URL } });
     expect(operationEnvelopeSchema.safeParse(batch).success).toBe(true);
     expect(batch).toMatchObject({ operation: 'batch', status: 'success' });
@@ -539,7 +646,10 @@ describe('Electron IPC boundary', () => {
     const batchExport = mocks.handlers.get('pulse:batch-export');
     mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [first] });
     mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [directory] });
-    const exported = await batchExport?.({ senderFrame: { url: TRUSTED_URL } }, { mode: 'canonical', overwrite: true });
+    const exported = await batchExport?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { mode: 'canonical', overwrite: true }
+    );
     expect(operationEnvelopeSchema.safeParse(exported).success).toBe(true);
     expect(exported).toMatchObject({ operation: 'batch', status: 'success' });
   });

@@ -5,7 +5,13 @@ import {
   sortDiagnostics,
   type Diagnostic
 } from '@dglab-pulse-hub/core';
-import { inspectPulse, exportPulse, type ExportData, type InputDescriptor, type InspectData } from './single.js';
+import {
+  inspectPulse,
+  exportPulse,
+  type ExportData,
+  type InputDescriptor,
+  type InspectData
+} from './single.js';
 import { operationResult, type OperationResult, type OperationStatus } from './result.js';
 import { sanitizeDisplayName } from './filesystem.js';
 
@@ -106,11 +112,21 @@ function validateBatchInputs(inputs: unknown): readonly Diagnostic[] {
       diagnostics.push(batchLimitDiagnostic('Batch item ' + index + ' must have a displayName.'));
     }
     if (typeof item.content !== 'string' && !(item.content instanceof Uint8Array)) {
-      diagnostics.push(batchLimitDiagnostic('Batch item ' + index + ' content must be text or bytes.'));
+      diagnostics.push(
+        batchLimitDiagnostic('Batch item ' + index + ' content must be text or bytes.')
+      );
     }
     const id = item.id ?? 'item-' + String(index + 1).padStart(4, '0');
-    if (typeof id !== 'string' || id.length === 0 || id.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(id) || ids.has(id)) {
-      diagnostics.push(batchLimitDiagnostic('Batch item IDs must use safe characters and be unique.'));
+    if (
+      typeof id !== 'string' ||
+      id.length === 0 ||
+      id.length > 128 ||
+      !/^[A-Za-z0-9._~-]+$/.test(id) ||
+      ids.has(id)
+    ) {
+      diagnostics.push(
+        batchLimitDiagnostic('Batch item IDs must use safe characters and be unique.')
+      );
     } else {
       ids.add(id);
     }
@@ -131,28 +147,25 @@ async function runBatch<T>(
   const optionDiagnostics = validateBatchOptions(safeOptions);
   const inputDiagnostics = validateBatchInputs(inputs);
   if (optionDiagnostics.length > 0 || inputDiagnostics.length > 0) {
-    return operationResult(
-      'batch',
-      'rejected',
-      null,
-      [...optionDiagnostics, ...inputDiagnostics]
-    );
+    return operationResult('batch', 'rejected', null, [...optionDiagnostics, ...inputDiagnostics]);
   }
   const limits = { ...DEFAULT_BATCH_LIMITS, ...safeOptions };
   let totalBytes = 0;
   try {
     for (const item of inputs) {
-      const itemBytes = typeof item.content === 'string'
-        ? new TextEncoder().encode(item.content).byteLength
-        : item.content.byteLength;
+      const itemBytes =
+        typeof item.content === 'string'
+          ? new TextEncoder().encode(item.content).byteLength
+          : item.content.byteLength;
       if (itemBytes > limits.maxBytes) {
         return operationResult('batch', 'rejected', null, [
           batchLimitDiagnostic('A batch item exceeds the configured byte limit.')
         ]);
       }
-      totalBytes = totalBytes > Number.MAX_SAFE_INTEGER - itemBytes
-        ? Number.MAX_SAFE_INTEGER
-        : totalBytes + itemBytes;
+      totalBytes =
+        totalBytes > Number.MAX_SAFE_INTEGER - itemBytes
+          ? Number.MAX_SAFE_INTEGER
+          : totalBytes + itemBytes;
     }
   } catch {
     return operationResult('batch', 'rejected', null, [
@@ -209,13 +222,16 @@ async function runBatch<T>(
       if (input === undefined) continue;
       let result: OperationResult<T>;
       try {
-        result = input.diagnostics !== undefined && input.diagnostics.length > 0
-          ? operationResult('batch-item', 'failed', null, input.diagnostics)
-          : operation(input, safeOptions.signal);
+        result =
+          input.diagnostics !== undefined && input.diagnostics.length > 0
+            ? operationResult('batch-item', 'failed', null, input.diagnostics)
+            : operation(input, safeOptions.signal);
         if (result.status !== 'success' && result.diagnostics.length === 0) {
           result = operationResult('batch-item', result.status, null, [
             makeDiagnostic(
-              result.status === 'cancelled' ? DIAGNOSTIC_CODES.TASK_CANCELLED : DIAGNOSTIC_CODES.ADAPTER_READ,
+              result.status === 'cancelled'
+                ? DIAGNOSTIC_CODES.TASK_CANCELLED
+                : DIAGNOSTIC_CODES.ADAPTER_READ,
               result.status === 'cancelled' ? 'info' : 'error',
               result.status === 'cancelled' ? 'task' : 'adapter',
               result.status === 'cancelled'
@@ -348,13 +364,14 @@ export function inspectBatch(
   const safeOptions: BatchOptions = options !== null && typeof options === 'object' ? options : {};
   return runBatch(
     inputs,
-    (input, signal) => inspectPulse(input.content, {
-      input: { displayName: input.displayName },
-      maxExpandedPoints: safeOptions.maxExpandedPoints,
-      maxExpandedDurationMs: safeOptions.maxExpandedDurationMs,
-      maxBytes: safeOptions.maxBytes,
-      signal
-    }),
+    (input, signal) =>
+      inspectPulse(input.content, {
+        input: { displayName: input.displayName },
+        maxExpandedPoints: safeOptions.maxExpandedPoints,
+        maxExpandedDurationMs: safeOptions.maxExpandedDurationMs,
+        maxBytes: safeOptions.maxBytes,
+        signal
+      }),
     safeOptions
   );
 }
@@ -372,15 +389,19 @@ export function exportBatch(
   options: BatchExportOptions = {}
 ): Promise<OperationResult<BatchData<ExportData>>> {
   if (!Array.isArray(inputs)) {
-    return Promise.resolve(operationResult('batch', 'rejected', null, [
-      batchLimitDiagnostic('Batch inputs must be an array.')
-    ]));
+    return Promise.resolve(
+      operationResult('batch', 'rejected', null, [
+        batchLimitDiagnostic('Batch inputs must be an array.')
+      ])
+    );
   }
   const seen = new Set<string>();
   const duplicateDiagnostics: Diagnostic[] = [];
   inputs.forEach((input, index) => {
-    if (input === null || typeof input !== 'object' || typeof input.displayName !== 'string') return;
-    const requestedOutput = input.outputDisplayName ?? input.displayName.replace(/\.[^.]+$/, '') + '.pulse';
+    if (input === null || typeof input !== 'object' || typeof input.displayName !== 'string')
+      return;
+    const requestedOutput =
+      input.outputDisplayName ?? input.displayName.replace(/\.[^.]+$/, '') + '.pulse';
     const output = sanitizeDisplayName(requestedOutput);
     if (seen.has(output)) {
       duplicateDiagnostics.push(
@@ -398,18 +419,20 @@ export function exportBatch(
   if (duplicateDiagnostics.length > 0) {
     return Promise.resolve(operationResult('batch', 'rejected', null, duplicateDiagnostics));
   }
-  const safeOptions: BatchExportOptions = options !== null && typeof options === 'object' ? options : {};
+  const safeOptions: BatchExportOptions =
+    options !== null && typeof options === 'object' ? options : {};
   return runBatch(
     inputs,
-    (input, signal) => exportPulse(input.content, {
-      displayName: sanitizeDisplayName(
-        (input as BatchExportInput).outputDisplayName ??
-          input.displayName.replace(/\.[^.]+$/, '') + '.pulse'
-      ),
-      mode: safeOptions.mode,
-      maxBytes: safeOptions.maxBytes,
-      signal
-    }),
+    (input, signal) =>
+      exportPulse(input.content, {
+        displayName: sanitizeDisplayName(
+          (input as BatchExportInput).outputDisplayName ??
+            input.displayName.replace(/\.[^.]+$/, '') + '.pulse'
+        ),
+        mode: safeOptions.mode,
+        maxBytes: safeOptions.maxBytes,
+        signal
+      }),
     safeOptions
   );
 }

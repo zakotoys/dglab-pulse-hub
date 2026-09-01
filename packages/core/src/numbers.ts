@@ -96,8 +96,7 @@ export function normalizeDecimal(lexeme: string): string {
   } else if (decimalPosition >= digits.length) {
     result = digits + '0'.repeat(decimalPosition - digits.length);
   } else {
-    result =
-      digits.slice(0, decimalPosition) + '.' + digits.slice(decimalPosition);
+    result = digits.slice(0, decimalPosition) + '.' + digits.slice(decimalPosition);
   }
   if (result.includes('.')) {
     result = result.replace(/0+$/, '').replace(/\.$/, '');
@@ -107,10 +106,7 @@ export function normalizeDecimal(lexeme: string): string {
   return sign === '-' && result !== '0' ? '-' + result : result;
 }
 
-export function tokenFromLexeme(
-  lexeme: string,
-  span: SourceSpan
-): NumericToken | null {
+export function tokenFromLexeme(lexeme: string, span: SourceSpan): NumericToken | null {
   const parsed = parseNumericLexeme(lexeme);
   if (parsed === null) return null;
   return Object.freeze({
@@ -139,10 +135,7 @@ export function stableDigest(bytes: Uint8Array): string {
     low ^= byte ^ high;
     low = Math.imul(low, 0x01000193);
   }
-  return (
-    (high >>> 0).toString(16).padStart(8, '0') +
-    (low >>> 0).toString(16).padStart(8, '0')
-  );
+  return (high >>> 0).toString(16).padStart(8, '0') + (low >>> 0).toString(16).padStart(8, '0');
 }
 
 export function cloneBytes(bytes: Uint8Array): Uint8Array {
@@ -188,11 +181,7 @@ function lineStartsFor(text: string): readonly number[] {
   return frozen;
 }
 
-export function sourceSpan(
-  text: string,
-  start: number,
-  end: number
-): SourceSpan {
+export function sourceSpan(text: string, start: number, end: number): SourceSpan {
   if (typeof text !== 'string') text = '';
   const startNumber = Number.isFinite(start) ? Math.trunc(start) : 0;
   const endNumber = Number.isFinite(end) ? Math.trunc(end) : startNumber;

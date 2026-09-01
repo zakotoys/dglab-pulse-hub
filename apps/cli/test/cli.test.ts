@@ -5,8 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { runCli } from '../src/index.js';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
 
-const VALID_TEXT =
-  'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
+const VALID_TEXT = 'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
 const directories: string[] = [];
 
 afterEach(async () => {
@@ -16,7 +15,11 @@ afterEach(async () => {
   }
 });
 
-function io(): { stdout: string[]; stderr: string[]; adapter: { stdout: { write: (text: string) => void }; stderr: { write: (text: string) => void } } } {
+function io(): {
+  stdout: string[];
+  stderr: string[];
+  adapter: { stdout: { write: (text: string) => void }; stderr: { write: (text: string) => void } };
+} {
   const stdout: string[] = [];
   const stderr: string[] = [];
   return {
@@ -64,9 +67,16 @@ describe('CLI adapter', () => {
 
   it('reports QR file read failures as failed operations', async () => {
     const capture = io();
-    const code = await runCli(['qr-decode', '/definitely/missing/pulse.qr', '--json'], capture.adapter);
+    const code = await runCli(
+      ['qr-decode', '/definitely/missing/pulse.qr', '--json'],
+      capture.adapter
+    );
     expect(code).toBe(1);
-    const envelope = JSON.parse(capture.stdout.join('')) as { operation?: unknown; status?: unknown; result?: unknown };
+    const envelope = JSON.parse(capture.stdout.join('')) as {
+      operation?: unknown;
+      status?: unknown;
+      result?: unknown;
+    };
     expect(operationEnvelopeSchema.safeParse(envelope).success).toBe(true);
     expect(envelope).toMatchObject({ operation: 'qr-decode', status: 'failed', result: null });
   });
@@ -110,8 +120,13 @@ describe('CLI adapter', () => {
     // still exercising the complete render operation.
     await mkdir(output);
     const capture = io();
-    const code = await runCli(['render', input, output, '--format', 'png', '--json'], capture.adapter);
+    const code = await runCli(
+      ['render', input, output, '--format', 'png', '--json'],
+      capture.adapter
+    );
     expect(code).toBe(2);
-    expect(operationEnvelopeSchema.safeParse(JSON.parse(capture.stdout.join(''))).success).toBe(true);
+    expect(operationEnvelopeSchema.safeParse(JSON.parse(capture.stdout.join(''))).success).toBe(
+      true
+    );
   });
 });

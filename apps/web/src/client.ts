@@ -32,21 +32,36 @@ function failureEnvelope(
     operation: /^[a-z][a-z0-9-]{0,79}$/.test(operation) ? operation : 'request',
     status,
     result: null,
-    diagnostics: [{
-      code,
-      severity: status === 'cancelled' ? 'info' : 'error',
-      stage: status === 'cancelled' ? 'task' : 'adapter',
-      message,
-      location: { path: '$' }
-    }]
+    diagnostics: [
+      {
+        code,
+        severity: status === 'cancelled' ? 'info' : 'error',
+        stage: status === 'cancelled' ? 'task' : 'adapter',
+        message,
+        location: { path: '$' }
+      }
+    ]
   };
 }
 
-function parseJsonEnvelope(value: unknown, operation: string, responseOk = true): OperationEnvelope {
+function parseJsonEnvelope(
+  value: unknown,
+  operation: string,
+  responseOk = true
+): OperationEnvelope {
   const parsed = safeParseOperationEnvelope(value);
-  if (!parsed.ok) return failureEnvelope(operation, 'The processing service returned an invalid response.', 'PULSE_TASK_INVALID_TRANSITION');
+  if (!parsed.ok)
+    return failureEnvelope(
+      operation,
+      'The processing service returned an invalid response.',
+      'PULSE_TASK_INVALID_TRANSITION'
+    );
   if (!responseOk && parsed.value.status === 'success') {
-    return failureEnvelope(operation, 'The processing service rejected the request.', 'PULSE_TASK_INVALID_TRANSITION');
+    return failureEnvelope(
+      operation,
+      'The processing service rejected the request.',
+      'PULSE_TASK_INVALID_TRANSITION'
+    );
   }
   return parsed.value;
 }
@@ -55,9 +70,12 @@ async function jsonResponse(response: Response, operation: string): Promise<Oper
   try {
     return parseJsonEnvelope(await response.json(), operation, response.ok);
   } catch {
-    return failureEnvelope(operation, response.ok
-      ? 'The processing service returned an empty response.'
-      : 'The processing service returned an unreadable error.');
+    return failureEnvelope(
+      operation,
+      response.ok
+        ? 'The processing service returned an empty response.'
+        : 'The processing service returned an unreadable error.'
+    );
   }
 }
 
@@ -89,19 +107,36 @@ function displayNameFromDisposition(value: string | null, fallback: string): str
   return fallback;
 }
 
-async function artifactResponse(response: Response, fallbackName: string): Promise<WorkspaceArtifact | null> {
+async function artifactResponse(
+  response: Response,
+  fallbackName: string
+): Promise<WorkspaceArtifact | null> {
   if (!response.ok) return null;
   return {
     bytes: new Uint8Array(await response.arrayBuffer()),
-    displayName: displayNameFromDisposition(response.headers.get('content-disposition'), fallbackName),
+    displayName: displayNameFromDisposition(
+      response.headers.get('content-disposition'),
+      fallbackName
+    ),
     contentType: response.headers.get('content-type') ?? undefined
   };
 }
 
-function inspectOperation(envelope: OperationEnvelope, displayName: string, text?: string): WorkspaceOperation {
+function inspectOperation(
+  envelope: OperationEnvelope,
+  displayName: string,
+  text?: string
+): WorkspaceOperation {
   if (envelope.status !== 'success') return { envelope };
   const parsed = inspectDataSchema.safeParse(envelope.result);
-  if (!parsed.success) return { envelope: failureEnvelope('inspect', 'The inspection result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+  if (!parsed.success)
+    return {
+      envelope: failureEnvelope(
+        'inspect',
+        'The inspection result was invalid.',
+        'PULSE_TASK_INVALID_TRANSITION'
+      )
+    };
   const document = documentFromInspect(envelope, displayName, text);
   return document === null ? { envelope } : { envelope, document };
 }
@@ -113,7 +148,10 @@ function withInspectionDiagnostics(
   if (preceding.diagnostics.length === 0) return inspection;
   return {
     ...inspection,
-    envelope: { ...inspection.envelope, diagnostics: [...preceding.diagnostics, ...inspection.envelope.diagnostics] }
+    envelope: {
+      ...inspection.envelope,
+      diagnostics: [...preceding.diagnostics, ...inspection.envelope.diagnostics]
+    }
   };
 }
 
@@ -121,7 +159,11 @@ function sourceText(document: WorkspaceDocument): string | null {
   return document.text === undefined ? null : document.text;
 }
 
-function triggerDownload(bytes: Uint8Array, displayName: string, contentType = 'application/octet-stream'): void {
+function triggerDownload(
+  bytes: Uint8Array,
+  displayName: string,
+  contentType = 'application/octet-stream'
+): void {
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: contentType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -149,12 +191,26 @@ async function requestBinary(
     try {
       result = JSON.parse(response.headers.get('x-pulse-result') ?? 'null');
     } catch {
-      return { envelope: failureEnvelope(operation, 'The processing service returned an invalid binary result.', 'PULSE_TASK_INVALID_TRANSITION') };
+      return {
+        envelope: failureEnvelope(
+          operation,
+          'The processing service returned an invalid binary result.',
+          'PULSE_TASK_INVALID_TRANSITION'
+        )
+      };
     }
     const checked = schema.safeParse(result);
-    if (!checked.success) return { envelope: failureEnvelope(operation, 'The processing service returned an invalid binary result.', 'PULSE_TASK_INVALID_TRANSITION') };
+    if (!checked.success)
+      return {
+        envelope: failureEnvelope(
+          operation,
+          'The processing service returned an invalid binary result.',
+          'PULSE_TASK_INVALID_TRANSITION'
+        )
+      };
     const artifact = await artifactResponse(response, fallbackName);
-    if (artifact === null) return { envelope: failureEnvelope(operation, 'The generated file could not be read.') };
+    if (artifact === null)
+      return { envelope: failureEnvelope(operation, 'The generated file could not be read.') };
     const envelope: OperationEnvelope = {
       schemaVersion: SCHEMA_VERSION,
       ruleVersion: RULE_VERSION,
@@ -170,7 +226,11 @@ async function requestBinary(
   }
 }
 
-async function inspectText(text: string, displayName: string, signal?: AbortSignal): Promise<WorkspaceOperation> {
+async function inspectText(
+  text: string,
+  displayName: string,
+  signal?: AbortSignal
+): Promise<WorkspaceOperation> {
   try {
     const response = await fetch('/api/v1/pulses/inspect', {
       method: 'POST',
@@ -194,16 +254,32 @@ async function decodeQrText(text: string, signal?: AbortSignal): Promise<Workspa
       signal
     });
     const qrEnvelope = await jsonResponse(response, 'qr-decode');
-    if (qrEnvelope.status !== 'success' || typeof qrEnvelope.result !== 'object' || qrEnvelope.result === null) return { envelope: qrEnvelope };
+    if (
+      qrEnvelope.status !== 'success' ||
+      typeof qrEnvelope.result !== 'object' ||
+      qrEnvelope.result === null
+    )
+      return { envelope: qrEnvelope };
     const downloadId = (qrEnvelope.result as { readonly downloadId?: unknown }).downloadId;
-    if (typeof downloadId !== 'string') return { envelope: failureEnvelope('qr-decode', 'Decoded QR content was not staged for download.', 'PULSE_TASK_INVALID_TRANSITION') };
+    if (typeof downloadId !== 'string')
+      return {
+        envelope: failureEnvelope(
+          'qr-decode',
+          'Decoded QR content was not staged for download.',
+          'PULSE_TASK_INVALID_TRANSITION'
+        )
+      };
     const artifact = await artifactResponse(
       await fetch('/api/v1/artifacts/' + encodeURIComponent(downloadId), { signal }),
       'decoded.pulse'
     );
-    if (artifact === null) return { envelope: failureEnvelope('qr-decode', 'Decoded QR content could not be downloaded.') };
+    if (artifact === null)
+      return {
+        envelope: failureEnvelope('qr-decode', 'Decoded QR content could not be downloaded.')
+      };
     const decoded = decodeUtf8(artifact.bytes);
-    if (decoded === null) return { envelope: failureEnvelope('qr-decode', 'Decoded QR content is not valid UTF-8.') };
+    if (decoded === null)
+      return { envelope: failureEnvelope('qr-decode', 'Decoded QR content is not valid UTF-8.') };
     const inspection = await inspectText(decoded, 'decoded.pulse', signal);
     return { ...withInspectionDiagnostics(inspection, qrEnvelope), decodedText: decoded };
   } catch (error) {
@@ -222,7 +298,14 @@ export function createWebWorkspaceClient(): WorkspaceClient {
 
     async open(signal) {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-      return { envelope: failureEnvelope('inspect', 'Choose a file from the browser file picker.', 'PULSE_ADAPTER_READ_FAILED', 'rejected') };
+      return {
+        envelope: failureEnvelope(
+          'inspect',
+          'Choose a file from the browser file picker.',
+          'PULSE_ADAPTER_READ_FAILED',
+          'rejected'
+        )
+      };
     },
 
     async importFile(file, signal) {
@@ -230,12 +313,20 @@ export function createWebWorkspaceClient(): WorkspaceClient {
       if (decoded === null) {
         try {
           const body = new FormData();
-          body.append('file', new Blob([file.bytes.buffer as ArrayBuffer], { type: file.type ?? 'application/octet-stream' }), file.name);
+          body.append(
+            'file',
+            new Blob([file.bytes.buffer as ArrayBuffer], {
+              type: file.type ?? 'application/octet-stream'
+            }),
+            file.name
+          );
           const response = await fetch('/api/v1/pulses/inspect', { method: 'POST', body, signal });
           return { envelope: await jsonResponse(response, 'inspect') };
         } catch (error) {
           if (error instanceof DOMException && error.name === 'AbortError') throw error;
-          return { envelope: failureEnvelope('inspect', 'The selected file could not be imported.') };
+          return {
+            envelope: failureEnvelope('inspect', 'The selected file could not be imported.')
+          };
         }
       }
       const candidate = /^https?:\/\/[^\s]+#DGLAB-PULSE#/i.test(decoded.trim())
@@ -258,13 +349,26 @@ export function createWebWorkspaceClient(): WorkspaceClient {
 
     async export(document, format, mode, signal) {
       const text = sourceText(document);
-      if (text === null) return { envelope: failureEnvelope('export', 'The browser source text is unavailable.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      if (text === null)
+        return {
+          envelope: failureEnvelope(
+            'export',
+            'The browser source text is unavailable.',
+            'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+            'rejected'
+          )
+        };
       return requestBinary(
         '/api/v1/pulses/export',
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text, displayName: document.displayName, format, ...(format === 'pulse-text' ? { mode } : {}) })
+          body: JSON.stringify({
+            text,
+            displayName: document.displayName,
+            format,
+            ...(format === 'pulse-text' ? { mode } : {})
+          })
         },
         'export',
         exportDataSchema,
@@ -275,7 +379,15 @@ export function createWebWorkspaceClient(): WorkspaceClient {
 
     async renderPreview(document, format, signal) {
       const text = sourceText(document);
-      if (text === null) return { envelope: failureEnvelope('render', 'The browser source text is unavailable.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      if (text === null)
+        return {
+          envelope: failureEnvelope(
+            'render',
+            'The browser source text is unavailable.',
+            'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+            'rejected'
+          )
+        };
       return requestBinary(
         '/api/v1/pulses/preview',
         {
@@ -292,7 +404,15 @@ export function createWebWorkspaceClient(): WorkspaceClient {
 
     async edit(document, command: EditPayload, signal) {
       const text = sourceText(document);
-      if (text === null) return { envelope: failureEnvelope('edit', 'The browser source text is unavailable.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      if (text === null)
+        return {
+          envelope: failureEnvelope(
+            'edit',
+            'The browser source text is unavailable.',
+            'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+            'rejected'
+          )
+        };
       try {
         const response = await fetch('/api/v1/pulses/edit', {
           method: 'POST',
@@ -303,11 +423,27 @@ export function createWebWorkspaceClient(): WorkspaceClient {
         const envelope = await jsonResponse(response, 'edit');
         if (envelope.status !== 'success') return { envelope };
         const parsed = editDataSchema.safeParse(envelope.result);
-        if (!parsed.success || parsed.data.downloadId === undefined) return { envelope: failureEnvelope('edit', 'The edit result did not include a download handle.', 'PULSE_TASK_INVALID_TRANSITION') };
-        const artifact = await artifactResponse(await fetch('/api/v1/artifacts/' + encodeURIComponent(parsed.data.downloadId), { signal }), document.displayName);
-        if (artifact === null) return { envelope: failureEnvelope('edit', 'The edited document could not be downloaded.') };
+        if (!parsed.success || parsed.data.downloadId === undefined)
+          return {
+            envelope: failureEnvelope(
+              'edit',
+              'The edit result did not include a download handle.',
+              'PULSE_TASK_INVALID_TRANSITION'
+            )
+          };
+        const artifact = await artifactResponse(
+          await fetch('/api/v1/artifacts/' + encodeURIComponent(parsed.data.downloadId), {
+            signal
+          }),
+          document.displayName
+        );
+        if (artifact === null)
+          return {
+            envelope: failureEnvelope('edit', 'The edited document could not be downloaded.')
+          };
         const candidate = decodeUtf8(artifact.bytes);
-        if (candidate === null) return { envelope: failureEnvelope('edit', 'The edited document is not valid UTF-8.') };
+        if (candidate === null)
+          return { envelope: failureEnvelope('edit', 'The edited document is not valid UTF-8.') };
         const inspection = await inspectText(candidate, document.displayName, signal);
         return { ...withInspectionDiagnostics(inspection, envelope), editData: parsed.data };
       } catch (error) {
@@ -318,7 +454,15 @@ export function createWebWorkspaceClient(): WorkspaceClient {
 
     async assist(document, input, signal) {
       const text = sourceText(document);
-      if (text === null) return { envelope: failureEnvelope('edit', 'The browser source text is unavailable.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      if (text === null)
+        return {
+          envelope: failureEnvelope(
+            'edit',
+            'The browser source text is unavailable.',
+            'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+            'rejected'
+          )
+        };
       try {
         const response = await fetch('/api/v1/pulses/assist', {
           method: 'POST',
@@ -329,11 +473,27 @@ export function createWebWorkspaceClient(): WorkspaceClient {
         const envelope = await jsonResponse(response, 'edit');
         if (envelope.status !== 'success') return { envelope };
         const parsed = editDataSchema.safeParse(envelope.result);
-        if (!parsed.success || parsed.data.downloadId === undefined) return { envelope: failureEnvelope('edit', 'The assisted edit did not include a download handle.', 'PULSE_TASK_INVALID_TRANSITION') };
-        const artifact = await artifactResponse(await fetch('/api/v1/artifacts/' + encodeURIComponent(parsed.data.downloadId), { signal }), document.displayName);
-        if (artifact === null) return { envelope: failureEnvelope('edit', 'The assisted document could not be downloaded.') };
+        if (!parsed.success || parsed.data.downloadId === undefined)
+          return {
+            envelope: failureEnvelope(
+              'edit',
+              'The assisted edit did not include a download handle.',
+              'PULSE_TASK_INVALID_TRANSITION'
+            )
+          };
+        const artifact = await artifactResponse(
+          await fetch('/api/v1/artifacts/' + encodeURIComponent(parsed.data.downloadId), {
+            signal
+          }),
+          document.displayName
+        );
+        if (artifact === null)
+          return {
+            envelope: failureEnvelope('edit', 'The assisted document could not be downloaded.')
+          };
         const candidate = decodeUtf8(artifact.bytes);
-        if (candidate === null) return { envelope: failureEnvelope('edit', 'The assisted document is not valid UTF-8.') };
+        if (candidate === null)
+          return { envelope: failureEnvelope('edit', 'The assisted document is not valid UTF-8.') };
         const inspection = await inspectText(candidate, document.displayName, signal);
         return { ...withInspectionDiagnostics(inspection, envelope), editData: parsed.data };
       } catch (error) {
@@ -345,7 +505,15 @@ export function createWebWorkspaceClient(): WorkspaceClient {
     async diff(document, comparison, signal) {
       const before = sourceText(document);
       const after = comparison === undefined ? null : await readFile(comparison);
-      if (before === null || after === null) return { envelope: failureEnvelope('diff', 'Both documents must be available as UTF-8 text.', 'PULSE_RECOGNIZE_INVALID_ENCODING', 'rejected') };
+      if (before === null || after === null)
+        return {
+          envelope: failureEnvelope(
+            'diff',
+            'Both documents must be available as UTF-8 text.',
+            'PULSE_RECOGNIZE_INVALID_ENCODING',
+            'rejected'
+          )
+        };
       try {
         const response = await fetch('/api/v1/pulses/diff', {
           method: 'POST',
@@ -354,7 +522,14 @@ export function createWebWorkspaceClient(): WorkspaceClient {
           signal
         });
         const envelope = await jsonResponse(response, 'diff');
-        if (envelope.status === 'success' && !diffDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('diff', 'The diff result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        if (envelope.status === 'success' && !diffDataSchema.safeParse(envelope.result).success)
+          return {
+            envelope: failureEnvelope(
+              'diff',
+              'The diff result was invalid.',
+              'PULSE_TASK_INVALID_TRANSITION'
+            )
+          };
         return { envelope };
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -371,19 +546,38 @@ export function createWebWorkspaceClient(): WorkspaceClient {
     },
 
     async undo(document, target, signal) {
-      if (target === undefined || target.text === undefined) return { envelope: failureEnvelope('undo', 'No earlier browser snapshot is available.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      if (target === undefined || target.text === undefined)
+        return {
+          envelope: failureEnvelope(
+            'undo',
+            'No earlier browser snapshot is available.',
+            'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+            'rejected'
+          )
+        };
       return inspectText(target.text, target.displayName, signal);
     },
 
     async redo(document, target, signal) {
-      if (target === undefined || target.text === undefined) return { envelope: failureEnvelope('redo', 'No later browser snapshot is available.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      if (target === undefined || target.text === undefined)
+        return {
+          envelope: failureEnvelope(
+            'redo',
+            'No later browser snapshot is available.',
+            'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+            'rejected'
+          )
+        };
       return inspectText(target.text, target.displayName, signal);
     },
 
     async downloadArtifact(id, signal) {
       if (!/^[A-Za-z0-9._~-]{1,128}$/.test(id)) return null;
       try {
-        return artifactResponse(await fetch('/api/v1/artifacts/' + encodeURIComponent(id), { signal }), 'pulse-output');
+        return artifactResponse(
+          await fetch('/api/v1/artifacts/' + encodeURIComponent(id), { signal }),
+          'pulse-output'
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') throw error;
         return null;
@@ -391,14 +585,23 @@ export function createWebWorkspaceClient(): WorkspaceClient {
     },
 
     async saveArtifact(artifact, suggestedName, signal) {
-      if (signal?.aborted) return failureEnvelope('export', 'Download was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled');
+      if (signal?.aborted)
+        return failureEnvelope(
+          'export',
+          'Download was cancelled.',
+          'PULSE_TASK_CANCELLED',
+          'cancelled'
+        );
       triggerDownload(artifact.bytes, suggestedName || artifact.displayName, artifact.contentType);
       return {
         schemaVersion: SCHEMA_VERSION,
         ruleVersion: RULE_VERSION,
         operation: 'export',
         status: 'success',
-        result: { displayName: suggestedName || artifact.displayName, byteSize: artifact.bytes.byteLength },
+        result: {
+          displayName: suggestedName || artifact.displayName,
+          byteSize: artifact.bytes.byteLength
+        },
         diagnostics: []
       };
     }
@@ -412,24 +615,50 @@ async function batchRequest(
   mode: 'source' | 'canonical' | undefined,
   signal?: AbortSignal
 ): Promise<WorkspaceOperation> {
-  if (files === undefined || files.length === 0) return { envelope: failureEnvelope('batch', 'Choose at least one file for the batch task.', 'PULSE_TASK_INPUT_LIMIT', 'rejected') };
+  if (files === undefined || files.length === 0)
+    return {
+      envelope: failureEnvelope(
+        'batch',
+        'Choose at least one file for the batch task.',
+        'PULSE_TASK_INPUT_LIMIT',
+        'rejected'
+      )
+    };
   const items: Array<{ id: string; displayName: string; text: string }> = [];
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
     if (file === undefined) continue;
     const text = decodeUtf8(file.bytes);
-    if (text === null) return { envelope: failureEnvelope('batch', 'Batch files must be valid UTF-8 text.', 'PULSE_RECOGNIZE_INVALID_ENCODING', 'rejected') };
+    if (text === null)
+      return {
+        envelope: failureEnvelope(
+          'batch',
+          'Batch files must be valid UTF-8 text.',
+          'PULSE_RECOGNIZE_INVALID_ENCODING',
+          'rejected'
+        )
+      };
     items.push({ id: 'web-' + String(index + 1), displayName: file.name, text });
   }
   try {
     const response = await fetch('/api/v1/pulses/batch/' + operation, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ items, ...(operation === 'export' && mode !== undefined ? { mode } : {}) }),
+      body: JSON.stringify({
+        items,
+        ...(operation === 'export' && mode !== undefined ? { mode } : {})
+      }),
       signal
     });
     const envelope = await jsonResponse(response, 'batch');
-    if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('batch', 'The batch result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+    if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success)
+      return {
+        envelope: failureEnvelope(
+          'batch',
+          'The batch result was invalid.',
+          'PULSE_TASK_INVALID_TRANSITION'
+        )
+      };
     return { envelope };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;

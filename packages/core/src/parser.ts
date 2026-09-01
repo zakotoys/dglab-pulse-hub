@@ -1,9 +1,4 @@
-import {
-  DIAGNOSTIC_CODES,
-  location,
-  makeDiagnostic,
-  sortDiagnostics
-} from './diagnostics.js';
+import { DIAGNOSTIC_CODES, location, makeDiagnostic, sortDiagnostics } from './diagnostics.js';
 import { parseNumericLexeme, sourceSpan } from './numbers.js';
 import {
   PULSE_PREFIX,
@@ -58,7 +53,9 @@ function token(
           : DIAGNOSTIC_CODES.SYNTAX_INVALID_NUMBER,
         'error',
         'syntax',
-        nonFinite ? 'Numeric value must be finite.' : 'Numeric field is not valid ASCII decimal syntax.',
+        nonFinite
+          ? 'Numeric value must be finite.'
+          : 'Numeric field is not valid ASCII decimal syntax.',
         location(path, span),
         { suggestion: 'Use an ASCII decimal number without whitespace.' }
       )
@@ -80,11 +77,7 @@ function parseSection(
   sectionIndex: number,
   diagnostics: ReturnType<typeof makeDiagnostic>[]
 ): SyntacticSection | null {
-  const sectionSpan = sourceSpan(
-    fullText,
-    absoluteStart,
-    absoluteStart + sectionText.length
-  );
+  const sectionSpan = sourceSpan(fullText, absoluteStart, absoluteStart + sectionText.length);
   if (sectionText.length === 0) {
     diagnostics.push(
       makeDiagnostic(
@@ -140,11 +133,11 @@ function parseSection(
         'error',
         'syntax',
         'Section header must contain exactly five fields.',
-        location(basePath + '.header', sourceSpan(
-          fullText,
-          absoluteStart,
-          absoluteStart + headerText.length
-        ), { sectionIndex }),
+        location(
+          basePath + '.header',
+          sourceSpan(fullText, absoluteStart, absoluteStart + headerText.length),
+          { sectionIndex }
+        ),
         {
           parameters: { expected: 5, actual: headerFields.length }
         }
@@ -171,11 +164,7 @@ function parseSection(
   let pointOffset = absoluteStart + slash + 1;
   for (let pointIndex = 0; pointIndex < pointParts.length; pointIndex += 1) {
     const pointText = pointParts[pointIndex] ?? '';
-    const pointSpan = sourceSpan(
-      fullText,
-      pointOffset,
-      pointOffset + pointText.length
-    );
+    const pointSpan = sourceSpan(fullText, pointOffset, pointOffset + pointText.length);
     if (pointText.length === 0) {
       diagnostics.push(
         makeDiagnostic(
@@ -269,9 +258,10 @@ function parseSection(
   });
 }
 
-export function parseSyntax(
-  source: SourceDocument
-): { readonly syntax: SyntacticPulse | null; readonly diagnostics: readonly ReturnType<typeof makeDiagnostic>[] } {
+export function parseSyntax(source: SourceDocument): {
+  readonly syntax: SyntacticPulse | null;
+  readonly diagnostics: readonly ReturnType<typeof makeDiagnostic>[];
+} {
   const diagnostics: ReturnType<typeof makeDiagnostic>[] = [];
   let text = source.text;
   if (source.trailingNewline !== '') {
@@ -346,11 +336,14 @@ export function parseSyntax(
         'error',
         'syntax',
         'Pulse text must contain exactly one "=" separator.',
-        location('document', sourceSpan(
-          text,
-          PULSE_PREFIX.length + (equalsPositions[1] ?? 0),
-          PULSE_PREFIX.length + (equalsPositions[1] ?? 0) + 1
-        ))
+        location(
+          'document',
+          sourceSpan(
+            text,
+            PULSE_PREFIX.length + (equalsPositions[1] ?? 0),
+            PULSE_PREFIX.length + (equalsPositions[1] ?? 0) + 1
+          )
+        )
       )
     );
     return { syntax: null, diagnostics: sortDiagnostics(diagnostics) };
@@ -366,11 +359,10 @@ export function parseSyntax(
         'error',
         'syntax',
         'Global settings must contain exactly three fields.',
-        location('globals', sourceSpan(
-          text,
-          PULSE_PREFIX.length,
-          PULSE_PREFIX.length + globalText.length
-        )),
+        location(
+          'globals',
+          sourceSpan(text, PULSE_PREFIX.length, PULSE_PREFIX.length + globalText.length)
+        ),
         { parameters: { expected: 3, actual: globalFields.length } }
       )
     );
@@ -379,13 +371,7 @@ export function parseSyntax(
   let globalOffset = PULSE_PREFIX.length;
   for (let index = 0; index < globalFields.length; index += 1) {
     const value = globalFields[index] ?? '';
-    const parsed = token(
-      value,
-      globalOffset,
-      text,
-      'globals[' + index + ']',
-      diagnostics
-    );
+    const parsed = token(value, globalOffset, text, 'globals[' + index + ']', diagnostics);
     if (parsed !== null) globals.push(parsed);
     globalOffset += value.length + 1;
   }
@@ -401,8 +387,14 @@ export function parseSyntax(
     // else is outside the section grammar and should be reported as a bad
     // separator rather than silently becoming part of a token.
     const previous = rightText[index - 1] ?? '';
-    if (index === 0 || previous === ',' || previous === '/' ||
-      previous === '-' || previous === 'e' || previous === 'E') {
+    if (
+      index === 0 ||
+      previous === ',' ||
+      previous === '/' ||
+      previous === '-' ||
+      previous === 'e' ||
+      previous === 'E'
+    ) {
       continue;
     }
     separatorPositions.push(index);
@@ -415,11 +407,14 @@ export function parseSyntax(
           'error',
           'syntax',
           'Sections must be separated by the exact +section+ marker.',
-          location('sections', sourceSpan(
-            text,
-            PULSE_PREFIX.length + equals + 1 + position,
-            PULSE_PREFIX.length + equals + 1 + position + 1
-          ))
+          location(
+            'sections',
+            sourceSpan(
+              text,
+              PULSE_PREFIX.length + equals + 1 + position,
+              PULSE_PREFIX.length + equals + 1 + position + 1
+            )
+          )
         )
       );
     }
@@ -432,13 +427,7 @@ export function parseSyntax(
   let sectionOffset = PULSE_PREFIX.length + equals + 1;
   for (let sectionIndex = 0; sectionIndex < sectionTexts.length; sectionIndex += 1) {
     const sectionText = sectionTexts[sectionIndex] ?? '';
-    const parsed = parseSection(
-      sectionText,
-      sectionOffset,
-      text,
-      sectionIndex,
-      diagnostics
-    );
+    const parsed = parseSection(sectionText, sectionOffset, text, sectionIndex, diagnostics);
     if (parsed !== null) sections.push(parsed);
     sectionOffset += sectionText.length + SECTION_SEPARATOR.length;
   }
@@ -482,20 +471,14 @@ export function parsePulseText(
     });
   }
   const parsed = parseSyntax(recognition.source);
-  const syntaxDiagnostics = sortDiagnostics([
-    ...recognition.diagnostics,
-    ...parsed.diagnostics
-  ]);
-  const semanticDiagnostics = parsed.syntax === null
-    ? []
-    : validateSyntax(parsed.syntax, safeOptions.rules).diagnostics;
-  const pulse = parsed.syntax === null
-    ? null
-    : pulseFromSyntax(parsed.syntax, syntaxDiagnostics, safeOptions.rules);
-  const diagnostics = sortDiagnostics([
-    ...syntaxDiagnostics,
-    ...semanticDiagnostics
-  ]);
+  const syntaxDiagnostics = sortDiagnostics([...recognition.diagnostics, ...parsed.diagnostics]);
+  const semanticDiagnostics =
+    parsed.syntax === null ? [] : validateSyntax(parsed.syntax, safeOptions.rules).diagnostics;
+  const pulse =
+    parsed.syntax === null
+      ? null
+      : pulseFromSyntax(parsed.syntax, syntaxDiagnostics, safeOptions.rules);
+  const diagnostics = sortDiagnostics([...syntaxDiagnostics, ...semanticDiagnostics]);
   return Object.freeze({
     accepted: pulse !== null && !diagnostics.some((item) => item.severity === 'error'),
     recognition,

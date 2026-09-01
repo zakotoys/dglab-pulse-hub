@@ -1,18 +1,20 @@
 # ADR-0001：npm workspace 与分层运行架构
 
-| 项目 | 内容 |
-| --- | --- |
-| 状态 | Accepted |
-| 日期 | 2026-08-30 |
+| 项目 | 内容                     |
+| ---- | ------------------------ |
+| 状态 | Accepted                 |
+| 日期 | 2026-08-30               |
 | 关联 | TRD 3、9、11；计划 M0-M5 |
 
 ## 背景
 
-产品需要 Node 命令、HTTP API、Web UI 和 Electron，且必须共享 `.pulse` 领域结果。仓库尚无依赖，当前最重要的是建立最少的稳定边界，而不是引入任务编排平台或大量空包。
+产品需要 Node 命令、HTTP API、Web UI 和 Electron，且必须共享 `.pulse`
+领域结果。仓库尚无依赖，当前最重要的是建立最少的稳定边界，而不是引入任务编排平台或大量空包。
 
 ## 决策
 
-采用单仓库 npm workspaces、TypeScript strict、ES modules 和单一根 lockfile。M0 固定 Node.js 24 LTS；运行时或 Electron 内置 Node 升级通过常规依赖更新完成，不维护旧运行时分支。
+采用单仓库 npm workspaces、TypeScript strict、ES modules 和单一根 lockfile。M0 固定 Node.js 24
+LTS；运行时或 Electron 内置 Node 升级通过常规依赖更新完成，不维护旧运行时分支。
 
 目录随里程碑增长：
 
@@ -40,14 +42,19 @@ contracts -------+---- api/preload/web/renderer
 workspace-ui ---------- web/desktop-renderer
 ```
 
-- `core` 只依赖 JavaScript/TypeScript 运行时无关能力，不依赖 DOM、Node 文件系统、HTTP、Electron 或设备 SDK。
-- `application` 通过小型 ports 接收字节/文本、时钟、取消信号和输出 sink，不知道路径、request 或 BrowserWindow。
+- `core`
+  只依赖 JavaScript/TypeScript 运行时无关能力，不依赖 DOM、Node 文件系统、HTTP、Electron 或设备 SDK。
+- `application`
+  通过小型 ports 接收字节/文本、时钟、取消信号和输出 sink，不知道路径、request 或 BrowserWindow。
 - `contracts` 只定义外部 DTO/schema，不重新声明领域规则。
-- Web 和 Electron renderer 共享 React 工作区与 view model；平台文件操作由注入的 client adapter 提供。
-- API 使用 Fastify；Web 使用 React + Vite；Electron 使用官方文档推荐的 Electron Forge 完成打包。具体版本由 lockfile 固定并在 M0/M2/M3 分别核对官方支持矩阵。
+- Web 和 Electron renderer 共享 React 工作区与 view model；平台文件操作由注入的 client
+  adapter 提供。
+- API 使用 Fastify；Web 使用 React + Vite；Electron 使用官方文档推荐的 Electron
+  Forge 完成打包。具体版本由 lockfile 固定并在 M0/M2/M3 分别核对官方支持矩阵。
 - 测试使用 Vitest；浏览器与 Electron 用户流程使用 Playwright。新增库前先检查已有依赖和官方类型。
 
-不引入 Turborepo/Nx、内部事件总线、依赖注入容器或微服务。npm workspace scripts 和显式函数/对象组合足以覆盖当前规模。
+不引入 Turborepo/Nx、内部事件总线、依赖注入容器或微服务。npm workspace
+scripts 和显式函数/对象组合足以覆盖当前规模。
 
 ## 不采用的方案
 
@@ -71,4 +78,3 @@ workspace-ui ---------- web/desktop-renderer
 - [Electron 应用打包建议](https://www.electronjs.org/docs/latest/tutorial/application-distribution)
 - [Electron 进程模型](https://www.electronjs.org/docs/latest/tutorial/process-model)
 - [Fastify Validation and Serialization](https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/)
-

@@ -73,9 +73,10 @@ describe('edit inspection transaction', () => {
     let current = true;
     const inspectedPromise = inspectThenCommit(
       'candidate.pulse',
-      () => new Promise<{ status: 'success' }>((resolve) => {
-        release = () => resolve({ status: 'success' });
-      }),
+      () =>
+        new Promise<{ status: 'success' }>((resolve) => {
+          release = () => resolve({ status: 'success' });
+        }),
       commit,
       () => current
     );

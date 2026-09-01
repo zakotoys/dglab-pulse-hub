@@ -23,18 +23,26 @@ import {
 } from '../src/index.js';
 import { operationResult } from '../src/result.js';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
-import { QR_PREFIX, QR_SHARE_URL, expandWaveform, parsePulse, sourceSpan } from '@dglab-pulse-hub/core';
+import {
+  QR_PREFIX,
+  QR_SHARE_URL,
+  expandWaveform,
+  parsePulse,
+  sourceSpan
+} from '@dglab-pulse-hub/core';
 
-const VALID_TEXT =
-  'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
+const VALID_TEXT = 'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
 function qrEnvelopeForInternal(text: string): string {
   const base64 = Buffer.from(text, 'utf8').toString('base64');
-  return QR_SHARE_URL + QR_PREFIX + gzipSync(Buffer.from(base64, 'utf8')).toString('hex').toUpperCase();
+  return (
+    QR_SHARE_URL + QR_PREFIX + gzipSync(Buffer.from(base64, 'utf8')).toString('hex').toUpperCase()
+  );
 }
 
 function qrEnvelopeFor(text: string): string {
   const encoded = encodeQr(text);
-  if (encoded.content === null) throw new Error('Test pulse could not be encoded as a QR envelope.');
+  if (encoded.content === null)
+    throw new Error('Test pulse could not be encoded as a QR envelope.');
   return encoded.content;
 }
 
@@ -70,13 +78,15 @@ describe('application boundaries', () => {
   });
   it('encodes a parsed pulse once and produces a contract-safe QR envelope', () => {
     const encoded = encodeQr(VALID_TEXT);
-    expect(encoded.content).toMatch(/^https:\/\/www\.dungeon-lab\.com\/app-download\.php#DGLAB-PULSE#[0-9A-F]+$/);
+    expect(encoded.content).toMatch(
+      /^https:\/\/www\.dungeon-lab\.com\/app-download\.php#DGLAB-PULSE#[0-9A-F]+$/
+    );
     const decoded = decodeQr(encoded.content ?? '');
     expect(decoded.accepted).toBe(true);
     expect(decoded.pulseText).toBeTruthy();
     expect(qrInternalText(encoded.content ?? '')).toBe(
       '27,0,0,7,20,20,3,2,2,32,20,20,3,1,1,0,0,0,8,1+' +
-      '1-0.00,0-10.00,1-20.00+1-0.00,1-20.00+1-0.00,1-20.00'
+        '1-0.00,0-10.00,1-20.00+1-0.00,1-20.00+1-0.00,1-20.00'
     );
   });
 
@@ -85,7 +95,7 @@ describe('application boundaries', () => {
     expect(decoded.accepted).toBe(true);
     expect(decoded.pulseText).toBe(
       'Dungeonlab+pulse:35,1,8=0,20,0,1,1/0-1,20-0,40-0,60-0,80-0,100-1,100-1,100-1+' +
-      'section+0,20,20,1,0/0-1,100-1+section+0,20,20,1,0/0-1,100-1'
+        'section+0,20,20,1,0/0-1,100-1+section+0,20,20,1,0/0-1,100-1'
     );
     const reencoded = encodeQr(decoded.pulseText ?? '');
     expect(reencoded.content).toBe(OFFICIAL_QR_CONTENT);
@@ -108,15 +118,21 @@ describe('application boundaries', () => {
     );
 
     expect(result.status).toBe('rejected');
-    expect(result.diagnostics.filter((item) =>
-      item.code === 'PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT' && item.location.path === 'sections'
-    )).toHaveLength(1);
+    expect(
+      result.diagnostics.filter(
+        (item) =>
+          item.code === 'PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT' &&
+          item.location.path === 'sections'
+      )
+    ).toHaveLength(1);
   });
 
   it('rejects intensity values that cannot be represented by the App QR scale', () => {
     const encoded = encodeQr('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,16.67-1');
     expect(encoded.content).toBeNull();
-    expect(encoded.diagnostics.some((item) => item.code === 'PULSE_QR_UNREPRESENTABLE_INTENSITY')).toBe(true);
+    expect(
+      encoded.diagnostics.some((item) => item.code === 'PULSE_QR_UNREPRESENTABLE_INTENSITY')
+    ).toBe(true);
   });
 
   it('exports QR content as a decodable JPEG image', () => {
@@ -140,11 +156,15 @@ describe('application boundaries', () => {
     const result = exportPulse(VALID_TEXT, { format: 'other' as never });
     expect(result.status).toBe('rejected');
     expect(result.data).toBeNull();
-    expect(result.diagnostics.some((item) => item.code === 'PULSE_EXPORT_UNSUPPORTED_FORMAT')).toBe(true);
+    expect(result.diagnostics.some((item) => item.code === 'PULSE_EXPORT_UNSUPPORTED_FORMAT')).toBe(
+      true
+    );
 
     const mode = exportPulse(VALID_TEXT, { mode: 'future' as never });
     expect(mode.status).toBe('rejected');
-    expect(mode.diagnostics.some((item) => item.code === 'PULSE_EXPORT_UNSUPPORTED_MODE')).toBe(true);
+    expect(mode.diagnostics.some((item) => item.code === 'PULSE_EXPORT_UNSUPPORTED_MODE')).toBe(
+      true
+    );
   });
 
   it('rejects invalid atomic write options before touching the filesystem', async () => {
@@ -206,30 +226,42 @@ describe('application boundaries', () => {
     if (result.status !== 'success') return;
     const parsed = operationEnvelopeSchema.parse(result);
     const data = parsed.result as {
-      metadata: { sections: Array<{ enabled: boolean; sourcePoints: Array<{ strengthDecimal: string }> }> };
+      metadata: {
+        sections: Array<{ enabled: boolean; sourcePoints: Array<{ strengthDecimal: string }> }>;
+      };
       stream: { points: unknown[] };
     };
     expect(data.stream.points).toHaveLength(2);
     expect(data.metadata.sections[1]?.enabled).toBe(false);
-    expect(data.metadata.sections[1]?.sourcePoints.map((point) => point.strengthDecimal)).toEqual(['25', '75']);
+    expect(data.metadata.sections[1]?.sourcePoints.map((point) => point.strengthDecimal)).toEqual([
+      '25',
+      '75'
+    ]);
   });
 
   it('does not publish file bytes through the public read-file projection', () => {
-    const envelope = toOperationDto(operationResult('read-file', 'success', {
-      displayName: 'source.pulse',
-      byteSize: 3,
-      digest: 'abc123',
-      content: new Uint8Array([1, 2, 3])
-    }, []));
+    const envelope = toOperationDto(
+      operationResult(
+        'read-file',
+        'success',
+        {
+          displayName: 'source.pulse',
+          byteSize: 3,
+          digest: 'abc123',
+          content: new Uint8Array([1, 2, 3])
+        },
+        []
+      )
+    );
     expect(envelope.result).toEqual({ displayName: 'source.pulse', byteSize: 3, digest: 'abc123' });
     expect(JSON.stringify(envelope)).not.toContain('content');
   });
 
   it('rejects invalid batch limits without starting work', async () => {
-    const result = await exportBatch(
-      [{ displayName: 'one.pulse', content: VALID_TEXT }],
-      { concurrency: 0, maxFiles: 0 }
-    );
+    const result = await exportBatch([{ displayName: 'one.pulse', content: VALID_TEXT }], {
+      concurrency: 0,
+      maxFiles: 0
+    });
     expect(result.status).toBe('rejected');
     expect(result.data).toBeNull();
     expect(result.diagnostics.some((item) => item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
@@ -246,7 +278,9 @@ describe('application boundaries', () => {
     const result = inspectPulse(VALID_TEXT, { maxExpandedPoints: 1 });
     expect(result.status).toBe('rejected');
     expect(result.data).toBeNull();
-    expect(result.diagnostics.some((item) => item.code === 'PULSE_RESOURCE_EXPANDED_POINTS_LIMIT')).toBe(true);
+    expect(
+      result.diagnostics.some((item) => item.code === 'PULSE_RESOURCE_EXPANDED_POINTS_LIMIT')
+    ).toBe(true);
   });
 
   it('applies the input byte limit to QR-decompressed pulse text', () => {
@@ -261,7 +295,9 @@ describe('application boundaries', () => {
     const result = inspectPulse(envelope, { maxBytes: 500 });
     expect(result.status).toBe('rejected');
     expect(result.data).toBeNull();
-    expect(result.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT')).toBe(true);
+    expect(result.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT')).toBe(
+      true
+    );
   });
 
   it('rejects files that exceed the configured byte limit', async () => {
@@ -286,7 +322,12 @@ describe('application boundaries', () => {
     const exported = exportPulse(parsed.pulse, { maxBytes: 8 });
     expect(exported.status).toBe('rejected');
     expect(exported.data).toBeNull();
-    expect(exported.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_RESOURCE_BYTES_LIMIT')).toBe(true);
+    expect(
+      exported.diagnostics.some(
+        (item) =>
+          item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_RESOURCE_BYTES_LIMIT'
+      )
+    ).toBe(true);
 
     const edited = applyPulseEdit(parsed.pulse, {
       maxBytes: 8,
@@ -294,18 +335,30 @@ describe('application boundaries', () => {
     });
     expect(edited.status).toBe('rejected');
     expect(edited.data).toBeNull();
-    expect(edited.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_RESOURCE_BYTES_LIMIT')).toBe(true);
+    expect(
+      edited.diagnostics.some(
+        (item) =>
+          item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_RESOURCE_BYTES_LIMIT'
+      )
+    ).toBe(true);
 
     const diff = diffPulses(parsed.pulse, parsed.pulse, { maxBytes: 8 });
     expect(diff.status).toBe('rejected');
     expect(diff.data).toBeNull();
-    expect(diff.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_RESOURCE_BYTES_LIMIT')).toBe(true);
+    expect(
+      diff.diagnostics.some(
+        (item) =>
+          item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_RESOURCE_BYTES_LIMIT'
+      )
+    ).toBe(true);
   });
 
   it('rejects QR encoding before parsing text above the decoded byte budget', () => {
     const result = encodeQr(VALID_TEXT, { maxDecodedBytes: 8 });
     expect(result.content).toBeNull();
-    expect(result.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT')).toBe(true);
+    expect(result.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT')).toBe(
+      true
+    );
   });
 
   it('rejects unsafe batch item IDs before projecting results', async () => {
@@ -319,12 +372,15 @@ describe('application boundaries', () => {
 
   it('rejects an oversized batch item before starting nested work', async () => {
     let progressCalls = 0;
-    const result = await inspectBatch([
-      { displayName: 'large.pulse', content: new Uint8Array(32) }
-    ], {
-      maxBytes: 8,
-      onProgress: () => { progressCalls += 1; }
-    });
+    const result = await inspectBatch(
+      [{ displayName: 'large.pulse', content: new Uint8Array(32) }],
+      {
+        maxBytes: 8,
+        onProgress: () => {
+          progressCalls += 1;
+        }
+      }
+    );
     expect(result.status).toBe('rejected');
     expect(result.data).toBeNull();
     expect(progressCalls).toBe(0);
@@ -334,9 +390,9 @@ describe('application boundaries', () => {
   it('uses the terminal cancelled envelope without exposing a partial payload', async () => {
     const controller = new AbortController();
     controller.abort();
-    const result = await inspectBatch([
-      { displayName: 'cancelled.pulse', content: VALID_TEXT }
-    ], { signal: controller.signal });
+    const result = await inspectBatch([{ displayName: 'cancelled.pulse', content: VALID_TEXT }], {
+      signal: controller.signal
+    });
     expect(result.status).toBe('cancelled');
     expect(result.data).toBeNull();
     expect(result.diagnostics.some((item) => item.code === 'PULSE_TASK_CANCELLED')).toBe(true);
@@ -362,31 +418,40 @@ describe('application boundaries', () => {
 
   it('fails closed when a task operation returns an invalid result envelope', async () => {
     const invalidStatus = new SingleFileTask('invalid-status', 'inspect');
-    const invalidStatusResult = await invalidStatus.run(() => ({
-      status: 'future',
-      data: { value: 1 },
-      diagnostics: []
-    } as never));
+    const invalidStatusResult = await invalidStatus.run(
+      () =>
+        ({
+          status: 'future',
+          data: { value: 1 },
+          diagnostics: []
+        }) as never
+    );
     expect(invalidStatusResult.status).toBe('failed');
     expect(invalidStatusResult.data).toBeNull();
     expect(invalidStatusResult.diagnostics[0]?.code).toBe('PULSE_TASK_INVALID_TRANSITION');
 
     const nullSuccess = new SingleFileTask('null-success', 'inspect');
-    const nullSuccessResult = await nullSuccess.run(() => ({
-      status: 'success',
-      data: null,
-      diagnostics: []
-    } as never));
+    const nullSuccessResult = await nullSuccess.run(
+      () =>
+        ({
+          status: 'success',
+          data: null,
+          diagnostics: []
+        }) as never
+    );
     expect(nullSuccessResult.status).toBe('failed');
     expect(nullSuccessResult.data).toBeNull();
     expect(nullSuccessResult.diagnostics[0]?.code).toBe('PULSE_TASK_INVALID_TRANSITION');
 
     const rejectedData = new SingleFileTask('rejected-data', 'inspect');
-    const rejectedDataResult = await rejectedData.run(() => ({
-      status: 'rejected',
-      data: { value: 1 },
-      diagnostics: []
-    } as never));
+    const rejectedDataResult = await rejectedData.run(
+      () =>
+        ({
+          status: 'rejected',
+          data: { value: 1 },
+          diagnostics: []
+        }) as never
+    );
     expect(rejectedDataResult.status).toBe('failed');
     expect(rejectedDataResult.data).toBeNull();
     expect(rejectedDataResult.diagnostics[0]?.code).toBe('PULSE_TASK_INVALID_TRANSITION');
@@ -429,7 +494,9 @@ describe('application boundaries', () => {
   });
 
   it('distinguishes malformed gzip from a valid stream over the output limit', () => {
-    const malformed = decodeQr(QR_SHARE_URL + QR_PREFIX + Buffer.from('not-a-gzip').toString('hex').toUpperCase());
+    const malformed = decodeQr(
+      QR_SHARE_URL + QR_PREFIX + Buffer.from('not-a-gzip').toString('hex').toUpperCase()
+    );
     expect(malformed.accepted).toBe(false);
     expect(malformed.diagnostics.some((item) => item.code === 'PULSE_QR_INVALID_GZIP')).toBe(true);
 
@@ -438,7 +505,9 @@ describe('application boundaries', () => {
       maxDecompressedBytes: 32
     });
     expect(limited.accepted).toBe(false);
-    expect(limited.diagnostics.some((item) => item.code === 'PULSE_QR_DECOMPRESSED_LIMIT')).toBe(true);
+    expect(limited.diagnostics.some((item) => item.code === 'PULSE_QR_DECOMPRESSED_LIMIT')).toBe(
+      true
+    );
     expect(limited.diagnostics.some((item) => item.code === 'PULSE_QR_INVALID_GZIP')).toBe(false);
   });
 
@@ -446,10 +515,15 @@ describe('application boundaries', () => {
     const encoded = encodeQr(VALID_TEXT);
     expect(encoded.content).not.toBeNull();
     const envelope = encoded.content!;
-    const compressed = Buffer.from(envelope.slice(envelope.indexOf(QR_PREFIX) + QR_PREFIX.length), 'hex');
+    const compressed = Buffer.from(
+      envelope.slice(envelope.indexOf(QR_PREFIX) + QR_PREFIX.length),
+      'hex'
+    );
     const withTrailingBytes = Buffer.concat([compressed, Buffer.from([0, 1, 2])]);
 
-    const decoded = decodeQr(QR_SHARE_URL + QR_PREFIX + withTrailingBytes.toString('hex').toUpperCase());
+    const decoded = decodeQr(
+      QR_SHARE_URL + QR_PREFIX + withTrailingBytes.toString('hex').toUpperCase()
+    );
 
     expect(decoded.accepted).toBe(false);
     expect(decoded.pulseText).toBeNull();
@@ -460,16 +534,25 @@ describe('application boundaries', () => {
     const encoded = encodeQr(VALID_TEXT);
     expect(encoded.content).not.toBeNull();
     const content = encoded.content!;
-    const compressed = Buffer.from(content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length), 'hex');
+    const compressed = Buffer.from(
+      content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length),
+      'hex'
+    );
     const decodedText = Buffer.from(compressed);
     // A valid gzip carrying a syntactically invalid Base64 payload exercises
     // the strict padding path without relying on forgiving Buffer decoding.
     const invalidBase64 = gzipSync(Buffer.from('Zh==', 'utf8'));
-    const invalid = decodeQr(QR_SHARE_URL + QR_PREFIX + invalidBase64.toString('hex').toUpperCase());
+    const invalid = decodeQr(
+      QR_SHARE_URL + QR_PREFIX + invalidBase64.toString('hex').toUpperCase()
+    );
     expect(invalid.diagnostics.some((item) => item.code === 'PULSE_QR_INVALID_BASE64')).toBe(true);
     expect(decodedText.byteLength).toBeGreaterThan(0);
 
-    const fromUrl = decodeQr('https://example.test/share' + QR_PREFIX + content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length));
+    const fromUrl = decodeQr(
+      'https://example.test/share' +
+        QR_PREFIX +
+        content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length)
+    );
     expect(fromUrl.accepted).toBe(true);
   });
 
@@ -481,7 +564,10 @@ describe('application boundaries', () => {
       { kind: 'frequency', sectionIndex: 0, startIndex: 11, endIndex: 22 },
       { kind: 'duration', sectionIndex: 0, value: 4 },
       {
-        kind: 'add-point', sectionIndex: 0, atIndex: 1, point: {
+        kind: 'add-point',
+        sectionIndex: 0,
+        atIndex: 1,
+        point: {
           strength: 25,
           strengthDecimal: '25',
           strengthRaw: '25',
@@ -502,9 +588,14 @@ describe('application boundaries', () => {
 
   it('expires and atomically consumes artifacts', async () => {
     const store = new TempArtifactStore(10, 10);
-    const artifact = await store.put('download.txt', new Uint8Array([7, 8]), { contentType: 'text/plain' });
+    const artifact = await store.put('download.txt', new Uint8Array([7, 8]), {
+      contentType: 'text/plain'
+    });
     expect(store.descriptor(artifact.id)?.displayName).toBe('download.txt');
-    const [first, second] = await Promise.all([store.consume(artifact.id), store.consume(artifact.id)]);
+    const [first, second] = await Promise.all([
+      store.consume(artifact.id),
+      store.consume(artifact.id)
+    ]);
     expect([first, second].filter((value) => value !== null)).toHaveLength(1);
     expect(await store.consume(artifact.id)).toBeNull();
     const expired = await store.put('expired.txt', new Uint8Array([1]));
@@ -515,11 +606,17 @@ describe('application boundaries', () => {
     await expect(store.put('after-close.txt', new Uint8Array([1]))).rejects.toThrow(/disposed/i);
   });
 
-  it('copies artifact bytes, waits for disposal, and removes dead-process directories', async () => {
+  it('copies bytes and cleans up disposed or dead artifact stores', async () => {
     const orphan = await mkdtemp(join(tmpdir(), 'dglab-pulse-'));
-    await writeFile(join(orphan, '.owner'), JSON.stringify({ version: 1, pid: process.pid, token: 'stale-process-token' }));
+    await writeFile(
+      join(orphan, '.owner'),
+      JSON.stringify({ version: 1, pid: process.pid, token: 'stale-process-token' })
+    );
     const deadOrphan = await mkdtemp(join(tmpdir(), 'dglab-pulse-'));
-    await writeFile(join(deadOrphan, '.owner'), JSON.stringify({ version: 1, pid: Number.MAX_SAFE_INTEGER, token: 'dead' }));
+    await writeFile(
+      join(deadOrphan, '.owner'),
+      JSON.stringify({ version: 1, pid: Number.MAX_SAFE_INTEGER, token: 'dead' })
+    );
     const store = new TempArtifactStore(10_000, 10_000);
     await store.init();
     try {
@@ -548,16 +645,23 @@ describe('application boundaries', () => {
       "import { TempArtifactStore } from './packages/application/src/filesystem.ts';",
       'const store = new TempArtifactStore(60_000, 60_000);',
       "await store.put('crash.txt', new Uint8Array([1, 2, 3]));",
-      "console.log(store.directory);",
+      'console.log(store.directory);',
       'setInterval(() => undefined, 1_000);'
     ].join('\n');
-    const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', childScript], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', childScript],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe']
+      }
+    );
     let output = '';
     const directory = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('artifact child did not initialize')), 5_000);
+      const timeout = setTimeout(
+        () => reject(new Error('artifact child did not initialize')),
+        5_000
+      );
       child.stdout.on('data', (chunk: Buffer) => {
         output += chunk.toString('utf8');
         const line = output.split(/\r?\n/)[0]?.trim();
@@ -594,11 +698,16 @@ describe('application boundaries', () => {
   });
 
   it('redacts private source payloads and absolute paths in public projections', () => {
-    const privateResult = operationResult('unknown', 'success', {
-      sourceText: VALID_TEXT,
-      bytes: new Uint8Array([1, 2, 3]),
-      path: '/private/source.pulse'
-    }, []);
+    const privateResult = operationResult(
+      'unknown',
+      'success',
+      {
+        sourceText: VALID_TEXT,
+        bytes: new Uint8Array([1, 2, 3]),
+        path: '/private/source.pulse'
+      },
+      []
+    );
     const envelope = toOperationDto(privateResult);
     expect(operationEnvelopeSchema.safeParse(envelope).success).toBe(true);
     expect(JSON.stringify(envelope)).not.toContain(VALID_TEXT);
@@ -607,33 +716,51 @@ describe('application boundaries', () => {
   });
 
   it('fails closed for malformed public payloads and source-bearing change values', () => {
-    const malformedBatch = toOperationDto(operationResult('batch', 'success', { items: 'not-an-array' }, []));
+    const malformedBatch = toOperationDto(
+      operationResult('batch', 'success', { items: 'not-an-array' }, [])
+    );
     expect(malformedBatch.status).toBe('failed');
     expect(malformedBatch.result).toBeNull();
 
-    const encoded = toOperationDto(operationResult('qr-encode', 'success', {
-      content: QR_SHARE_URL + QR_PREFIX + VALID_TEXT
-    }, []));
+    const encoded = toOperationDto(
+      operationResult(
+        'qr-encode',
+        'success',
+        {
+          content: QR_SHARE_URL + QR_PREFIX + VALID_TEXT
+        },
+        []
+      )
+    );
     expect(encoded.status).toBe('failed');
     expect(encoded.result).toBeNull();
 
-    const edited = toOperationDto(operationResult('edit', 'success', {
-      format: 'pulse-text',
-      mode: 'canonical',
-      text: VALID_TEXT,
-      bytes: new TextEncoder().encode(VALID_TEXT),
-      byteSize: new TextEncoder().encode(VALID_TEXT).byteLength,
-      sourceDigest: '0123456789abcdef',
-      roundTripVerified: true,
-      changeRecords: [{
-        id: 'change-1',
-        kind: 'edit',
-        description: 'changed',
-        path: 'sections[0].points[0].strength',
-        before: VALID_TEXT,
-        after: VALID_TEXT
-      }]
-    }, []));
+    const edited = toOperationDto(
+      operationResult(
+        'edit',
+        'success',
+        {
+          format: 'pulse-text',
+          mode: 'canonical',
+          text: VALID_TEXT,
+          bytes: new TextEncoder().encode(VALID_TEXT),
+          byteSize: new TextEncoder().encode(VALID_TEXT).byteLength,
+          sourceDigest: '0123456789abcdef',
+          roundTripVerified: true,
+          changeRecords: [
+            {
+              id: 'change-1',
+              kind: 'edit',
+              description: 'changed',
+              path: 'sections[0].points[0].strength',
+              before: VALID_TEXT,
+              after: VALID_TEXT
+            }
+          ]
+        },
+        []
+      )
+    );
     expect(edited.status).toBe('success');
     expect(JSON.stringify(edited)).not.toContain(VALID_TEXT);
   });

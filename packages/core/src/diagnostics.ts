@@ -97,13 +97,17 @@ export const DIAGNOSTIC_CODES = Object.freeze({
   ADAPTER_CONFLICT: 'PULSE_ADAPTER_OUTPUT_CONFLICT'
 } as const);
 
-export type DiagnosticCode =
-  (typeof DIAGNOSTIC_CODES)[keyof typeof DIAGNOSTIC_CODES];
+export type DiagnosticCode = (typeof DIAGNOSTIC_CODES)[keyof typeof DIAGNOSTIC_CODES];
 
-export const DIAGNOSTIC_CATALOG: Readonly<Record<DiagnosticCode, {
-  readonly stage: DiagnosticStage;
-  readonly defaultSeverity: DiagnosticSeverity;
-}>> = Object.freeze({
+export const DIAGNOSTIC_CATALOG: Readonly<
+  Record<
+    DiagnosticCode,
+    {
+      readonly stage: DiagnosticStage;
+      readonly defaultSeverity: DiagnosticSeverity;
+    }
+  >
+> = Object.freeze({
   [DIAGNOSTIC_CODES.RECOGNIZE_EMPTY_INPUT]: { stage: 'recognize', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.RECOGNIZE_INVALID_ENCODING]: { stage: 'recognize', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.RECOGNIZE_BOM]: { stage: 'recognize', defaultSeverity: 'warning' },
@@ -116,7 +120,10 @@ export const DIAGNOSTIC_CATALOG: Readonly<Record<DiagnosticCode, {
   [DIAGNOSTIC_CODES.SYNTAX_GLOBAL_FIELD_COUNT]: { stage: 'syntax', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SYNTAX_INVALID_NUMBER]: { stage: 'syntax', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SYNTAX_NON_FINITE_NUMBER]: { stage: 'syntax', defaultSeverity: 'error' },
-  [DIAGNOSTIC_CODES.SYNTAX_INVALID_SECTION_SEPARATOR]: { stage: 'syntax', defaultSeverity: 'error' },
+  [DIAGNOSTIC_CODES.SYNTAX_INVALID_SECTION_SEPARATOR]: {
+    stage: 'syntax',
+    defaultSeverity: 'error'
+  },
   [DIAGNOSTIC_CODES.SYNTAX_EMPTY_SECTION]: { stage: 'syntax', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SYNTAX_SECTION_HEADER_COUNT]: { stage: 'syntax', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SYNTAX_MISSING_SLASH]: { stage: 'syntax', defaultSeverity: 'error' },
@@ -138,19 +145,37 @@ export const DIAGNOSTIC_CATALOG: Readonly<Record<DiagnosticCode, {
   [DIAGNOSTIC_CODES.RANGE_ANCHOR_FLAG]: { stage: 'range', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.RANGE_INTEGER_REQUIRED]: { stage: 'range', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SEMANTIC_TOO_FEW_POINTS]: { stage: 'semantic', defaultSeverity: 'error' },
-  [DIAGNOSTIC_CODES.SEMANTIC_INVALID_FREQUENCY_RANGE]: { stage: 'semantic', defaultSeverity: 'error' },
+  [DIAGNOSTIC_CODES.SEMANTIC_INVALID_FREQUENCY_RANGE]: {
+    stage: 'semantic',
+    defaultSeverity: 'error'
+  },
   [DIAGNOSTIC_CODES.SEMANTIC_NO_ENABLED_SECTION]: { stage: 'semantic', defaultSeverity: 'warning' },
   [DIAGNOSTIC_CODES.SEMANTIC_EXPANSION_LIMIT]: { stage: 'semantic', defaultSeverity: 'error' },
-  [DIAGNOSTIC_CODES.SEMANTIC_UNVERIFIED_SECTION_COUNT]: { stage: 'semantic', defaultSeverity: 'warning' },
-  [DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_UNVERIFIED]: { stage: 'semantic', defaultSeverity: 'warning' },
+  [DIAGNOSTIC_CODES.SEMANTIC_UNVERIFIED_SECTION_COUNT]: {
+    stage: 'semantic',
+    defaultSeverity: 'warning'
+  },
+  [DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_UNVERIFIED]: {
+    stage: 'semantic',
+    defaultSeverity: 'warning'
+  },
   [DIAGNOSTIC_CODES.SEMANTIC_INVALID_MODEL]: { stage: 'semantic', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SEMANTIC_DURATION_MISMATCH]: { stage: 'semantic', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.SEMANTIC_INVALID_SOURCE]: { stage: 'semantic', defaultSeverity: 'error' },
-  [DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED]: { stage: 'semantic', defaultSeverity: 'warning' },
-  [DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_CLIPPED]: { stage: 'semantic', defaultSeverity: 'warning' },
+  [DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED]: {
+    stage: 'semantic',
+    defaultSeverity: 'warning'
+  },
+  [DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_CLIPPED]: {
+    stage: 'semantic',
+    defaultSeverity: 'warning'
+  },
   [DIAGNOSTIC_CODES.RESOURCE_BYTES_LIMIT]: { stage: 'resource', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.RESOURCE_POINTS_LIMIT]: { stage: 'resource', defaultSeverity: 'error' },
-  [DIAGNOSTIC_CODES.RESOURCE_EXPANDED_POINTS_LIMIT]: { stage: 'resource', defaultSeverity: 'error' },
+  [DIAGNOSTIC_CODES.RESOURCE_EXPANDED_POINTS_LIMIT]: {
+    stage: 'resource',
+    defaultSeverity: 'error'
+  },
   [DIAGNOSTIC_CODES.RESOURCE_DURATION_LIMIT]: { stage: 'resource', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.EXPORT_BLOCKED]: { stage: 'export', defaultSeverity: 'error' },
   [DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_FORMAT]: { stage: 'export', defaultSeverity: 'error' },
@@ -217,9 +242,7 @@ export function location(
   span?: SourceSpan,
   extra: Omit<DiagnosticLocation, 'path' | 'span'> = {}
 ): DiagnosticLocation {
-  return span === undefined
-    ? { path, ...extra }
-    : { path, span, ...extra };
+  return span === undefined ? { path, ...extra } : { path, span, ...extra };
 }
 
 export function hasBlockingErrors(diagnostics: readonly Diagnostic[]): boolean {
@@ -230,9 +253,7 @@ function severityRank(severity: DiagnosticSeverity): number {
   return severity === 'error' ? 0 : severity === 'warning' ? 1 : 2;
 }
 
-export function sortDiagnostics(
-  diagnostics: readonly Diagnostic[]
-): readonly Diagnostic[] {
+export function sortDiagnostics(diagnostics: readonly Diagnostic[]): readonly Diagnostic[] {
   return [...diagnostics].sort((a, b) => {
     const aStart = a.location.span?.start ?? Number.MAX_SAFE_INTEGER;
     const bStart = b.location.span?.start ?? Number.MAX_SAFE_INTEGER;
@@ -245,9 +266,14 @@ export function sortDiagnostics(
 }
 
 export function catalogSeverity(code: string): DiagnosticSeverity {
-  const entry = (DIAGNOSTIC_CATALOG as Record<string, {
-    readonly stage: DiagnosticStage;
-    readonly defaultSeverity: DiagnosticSeverity;
-  }>)[code];
+  const entry = (
+    DIAGNOSTIC_CATALOG as Record<
+      string,
+      {
+        readonly stage: DiagnosticStage;
+        readonly defaultSeverity: DiagnosticSeverity;
+      }
+    >
+  )[code];
   return entry?.defaultSeverity ?? 'error';
 }

@@ -32,7 +32,9 @@ describe('versioned public contracts', () => {
       diagnostics: []
     };
     expect(operationEnvelopeSchema.safeParse(valid).success).toBe(true);
-    expect(operationEnvelopeSchema.safeParse({ ...valid, data: valid.result, result: undefined }).success).toBe(false);
+    expect(
+      operationEnvelopeSchema.safeParse({ ...valid, data: valid.result, result: undefined }).success
+    ).toBe(false);
   });
 
   it('rejects an unknown schema or rule version without fallback', () => {
@@ -48,7 +50,11 @@ describe('versioned public contracts', () => {
     expect(safe.ok).toBe(false);
     expect(() => parseOperationEnvelope(value)).toThrow(/schema version/i);
 
-    const ruleMismatch = { ...value, schemaVersion: CONTRACT_VERSION, ruleVersion: 'pulse-rules-v9' };
+    const ruleMismatch = {
+      ...value,
+      schemaVersion: CONTRACT_VERSION,
+      ruleVersion: 'pulse-rules-v9'
+    };
     expect(() => parseOperationEnvelope(ruleMismatch)).toThrow(/rule version/i);
   });
 
@@ -63,7 +69,12 @@ describe('versioned public contracts', () => {
     };
     expect(operationEnvelopeSchema.safeParse(rejected).success).toBe(true);
     expect(operationEnvelopeSchema.safeParse({ ...rejected, result: {} }).success).toBe(false);
-    expect(operationEnvelopeSchema.safeParse({ ...rejected, diagnostics: [{ ...diagnostic, location: { path: '/tmp/input.pulse' } }] }).success).toBe(false);
+    expect(
+      operationEnvelopeSchema.safeParse({
+        ...rejected,
+        diagnostics: [{ ...diagnostic, location: { path: '/tmp/input.pulse' } }]
+      }).success
+    ).toBe(false);
   });
 
   it('projects application data to result and drops data on non-success states', () => {
@@ -97,7 +108,9 @@ describe('versioned public contracts', () => {
   });
 
   it('keeps diagnostic codes machine-stable while allowing message text', () => {
-    expect(diagnosticSchema.parse({ ...diagnostic, message: '本地化消息' }).code).toBe(diagnostic.code);
+    expect(diagnosticSchema.parse({ ...diagnostic, message: '本地化消息' }).code).toBe(
+      diagnostic.code
+    );
     expect(diagnosticSchema.safeParse({ ...diagnostic, code: 'INVALID' }).success).toBe(false);
   });
 
@@ -209,7 +222,13 @@ describe('versioned public contracts', () => {
     const diff = {
       beforeDigest: '0123456789abcdef',
       afterDigest: '0123456789abcdef',
-      diff: { equal: true, structural: [{ path: 'sections.length', before: 1, after: 2 }], metadata: [], stream: [], text: [] }
+      diff: {
+        equal: true,
+        structural: [{ path: 'sections.length', before: 1, after: 2 }],
+        metadata: [],
+        stream: [],
+        text: []
+      }
     };
     expect(diffDataSchema.safeParse(diff).success).toBe(false);
 
@@ -221,14 +240,16 @@ describe('versioned public contracts', () => {
       failed: 0,
       warningFiles: 0,
       cancelled: false,
-      items: [{
-        id: 'one',
-        index: 0,
-        displayName: 'one.pulse',
-        status: 'success' as const,
-        diagnostics: [],
-        result: { ok: true }
-      }]
+      items: [
+        {
+          id: 'one',
+          index: 0,
+          displayName: 'one.pulse',
+          status: 'success' as const,
+          diagnostics: [],
+          result: { ok: true }
+        }
+      ]
     };
     expect(batchDataSchema.safeParse(batch).success).toBe(false);
   });
@@ -255,14 +276,16 @@ function validInspectData(): Record<string, any> {
     kind: 'waveform-stream',
     ruleVersion: RULE_VERSION,
     points: [point(0, 0, 0), point(1, 100, 100)],
-    segments: [{
-      kind: 'section',
-      sectionIndex: 0,
-      startMs: 0,
-      durationMs: 200,
-      pointStart: 0,
-      pointCount: 2
-    }],
+    segments: [
+      {
+        kind: 'section',
+        sectionIndex: 0,
+        startMs: 0,
+        durationMs: 200,
+        pointStart: 0,
+        pointCount: 2
+      }
+    ],
     totalDurationMs: 200,
     timeGranularityMs: 100,
     warnings: [],
@@ -292,7 +315,12 @@ function validInspectData(): Record<string, any> {
     disabledSectionCount: 0,
     sourceDurationMs: 100,
     effectiveDurationMs: 200,
-    globals: { sectionRestIndex: 0, playbackSpeed: 1, frequencyBalanceIndex: 0, raw: ['0', '1', '0'] },
+    globals: {
+      sectionRestIndex: 0,
+      playbackSpeed: 1,
+      frequencyBalanceIndex: 0,
+      raw: ['0', '1', '0']
+    },
     diagnostics: []
   };
   return {

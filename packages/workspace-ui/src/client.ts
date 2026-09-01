@@ -51,7 +51,11 @@ export interface WorkspaceClient {
   readonly fileMode: 'browser' | 'native';
   readonly open: (signal?: AbortSignal) => Promise<WorkspaceOperation>;
   readonly importFile: (file: WorkspaceFile, signal?: AbortSignal) => Promise<WorkspaceOperation>;
-  readonly inspect: (text: string, displayName: string, signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly inspect: (
+    text: string,
+    displayName: string,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
   readonly decodeQr: (text: string, signal?: AbortSignal) => Promise<WorkspaceOperation>;
   readonly export: (
     document: WorkspaceDocument,
@@ -86,7 +90,10 @@ export interface WorkspaceClient {
     comparison?: WorkspaceFile,
     signal?: AbortSignal
   ) => Promise<WorkspaceOperation>;
-  readonly batchInspect: (files?: readonly WorkspaceFile[], signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly batchInspect: (
+    files?: readonly WorkspaceFile[],
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
   readonly batchExport: (
     files?: readonly WorkspaceFile[],
     mode?: 'source' | 'canonical',
@@ -102,7 +109,10 @@ export interface WorkspaceClient {
     target?: WorkspaceDocument,
     signal?: AbortSignal
   ) => Promise<WorkspaceOperation>;
-  readonly downloadArtifact: (id: string, signal?: AbortSignal) => Promise<WorkspaceArtifact | null>;
+  readonly downloadArtifact: (
+    id: string,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceArtifact | null>;
   readonly saveArtifact: (
     artifact: WorkspaceArtifact,
     suggestedName: string,

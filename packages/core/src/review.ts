@@ -45,11 +45,21 @@ export function reviewedAssistMatches(
 
 /** Validate the bounded interval and endpoint values used by the assist UI. */
 export function isAssistProposalValid(input: AssistProposalFingerprintInput): boolean {
-  return Number.isSafeInteger(input.sectionIndex) && input.sectionIndex >= 0 &&
-    Number.isSafeInteger(input.sectionPointCount) && input.sectionPointCount > 0 &&
-    Number.isSafeInteger(input.startPointIndex) && input.startPointIndex >= 0 &&
-    Number.isSafeInteger(input.endPointIndex) && input.endPointIndex > input.startPointIndex &&
+  return (
+    Number.isSafeInteger(input.sectionIndex) &&
+    input.sectionIndex >= 0 &&
+    Number.isSafeInteger(input.sectionPointCount) &&
+    input.sectionPointCount > 0 &&
+    Number.isSafeInteger(input.startPointIndex) &&
+    input.startPointIndex >= 0 &&
+    Number.isSafeInteger(input.endPointIndex) &&
+    input.endPointIndex > input.startPointIndex &&
     input.endPointIndex < input.sectionPointCount &&
-    Number.isFinite(input.startStrength) && input.startStrength >= 0 && input.startStrength <= 100 &&
-    Number.isFinite(input.endStrength) && input.endStrength >= 0 && input.endStrength <= 100;
+    Number.isFinite(input.startStrength) &&
+    input.startStrength >= 0 &&
+    input.startStrength <= 100 &&
+    Number.isFinite(input.endStrength) &&
+    input.endStrength >= 0 &&
+    input.endStrength <= 100
+  );
 }

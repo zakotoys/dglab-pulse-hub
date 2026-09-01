@@ -1,9 +1,4 @@
-import {
-  DIAGNOSTIC_CODES,
-  location,
-  makeDiagnostic,
-  sortDiagnostics
-} from './diagnostics.js';
+import { DIAGNOSTIC_CODES, location, makeDiagnostic, sortDiagnostics } from './diagnostics.js';
 import {
   FORMAT_PROFILE,
   PULSE_PREFIX,
@@ -15,13 +10,7 @@ import {
   type SourceDocument
 } from './types.js';
 import type { EvidenceLevel } from './types.js';
-import {
-  cloneBytes,
-  decodeUtf8,
-  encodeUtf8,
-  stableDigest,
-  trailingNewline
-} from './numbers.js';
+import { cloneBytes, decodeUtf8, encodeUtf8, stableDigest, trailingNewline } from './numbers.js';
 
 export interface RecognitionOptions {
   readonly maxBytes?: number;
@@ -31,7 +20,10 @@ export interface RecognitionOptions {
 function sourceFromInput(
   input: string | Uint8Array,
   maxBytes: number
-): { readonly source: SourceDocument | null; readonly diagnostics: readonly ReturnType<typeof makeDiagnostic>[] } {
+): {
+  readonly source: SourceDocument | null;
+  readonly diagnostics: readonly ReturnType<typeof makeDiagnostic>[];
+} {
   if (typeof input !== 'string' && !(input instanceof Uint8Array)) {
     return {
       source: null,
@@ -124,13 +116,15 @@ export function recognizeInput(
       ruleVersion: RULE_VERSION,
       evidence: ['unverified'] as readonly EvidenceLevel[],
       source: null,
-      diagnostics: [makeDiagnostic(
-        DIAGNOSTIC_CODES.RECOGNIZE_SIZE_LIMIT,
-        'error',
-        'resource',
-        'Input byte limit must be a non-negative safe integer.',
-        location('$')
-      )]
+      diagnostics: [
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_SIZE_LIMIT,
+          'error',
+          'resource',
+          'Input byte limit must be a non-negative safe integer.',
+          location('$')
+        )
+      ]
     });
   }
   if (safeOptions.allowBom !== undefined && typeof safeOptions.allowBom !== 'boolean') {
@@ -140,13 +134,15 @@ export function recognizeInput(
       ruleVersion: RULE_VERSION,
       evidence: ['unverified'] as readonly EvidenceLevel[],
       source: null,
-      diagnostics: [makeDiagnostic(
-        DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
-        'error',
-        'recognize',
-        'allowBom must be a boolean when provided.',
-        location('allowBom')
-      )]
+      diagnostics: [
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+          'error',
+          'recognize',
+          'allowBom must be a boolean when provided.',
+          location('allowBom')
+        )
+      ]
     });
   }
   const maxBytes = requestedMaxBytes;
@@ -190,8 +186,7 @@ export function recognizeInput(
 
   let format: FormatKind = 'unsupported';
   let profile: typeof FORMAT_PROFILE | 'unknown' = 'unknown';
-  let evidence: readonly EvidenceLevel[] =
-    ['unverified'];
+  let evidence: readonly EvidenceLevel[] = ['unverified'];
   if (source.text.startsWith(PULSE_PREFIX)) {
     format = 'pulse-text';
     profile = FORMAT_PROFILE;

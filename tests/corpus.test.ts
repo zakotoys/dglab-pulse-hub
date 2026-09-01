@@ -11,17 +11,24 @@ const fixtureRoot = join(root, 'tests', 'fixtures');
 describe('checked-in corpus fixtures', () => {
   it('matches every manifest expectation, including invalid encoding', async () => {
     const manifest = JSON.parse(await readFile(join(fixtureRoot, 'manifest.json'), 'utf8')) as {
-      fixtures: readonly { path: string; encoding?: string; expectation: 'accepted' | 'rejected' }[];
+      fixtures: readonly {
+        path: string;
+        encoding?: string;
+        expectation: 'accepted' | 'rejected';
+      }[];
     };
     for (const fixture of manifest.fixtures) {
       const raw = await readFile(join(fixtureRoot, fixture.path));
-      const bytes = fixture.encoding === 'hex'
-        ? Buffer.from(raw.toString('utf8').replace(/\s+/g, ''), 'hex')
-        : raw;
+      const bytes =
+        fixture.encoding === 'hex'
+          ? Buffer.from(raw.toString('utf8').replace(/\s+/g, ''), 'hex')
+          : raw;
       const parsed = parsePulse(new Uint8Array(bytes));
       expect(parsed.accepted, fixture.path).toBe(fixture.expectation === 'accepted');
       if (fixture.encoding === 'hex') {
-        expect(parsed.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_INVALID_ENCODING')).toBe(true);
+        expect(
+          parsed.diagnostics.some((item) => item.code === 'PULSE_RECOGNIZE_INVALID_ENCODING')
+        ).toBe(true);
       }
     }
   });

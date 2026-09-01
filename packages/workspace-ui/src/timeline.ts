@@ -15,9 +15,15 @@ export function timelineSectionForPoint(
   points: readonly TimelineSectionPointLike[],
   pointIndex: number
 ): number | null {
-  if (!Number.isSafeInteger(pointIndex) || pointIndex < 0 || pointIndex >= points.length) return null;
+  if (!Number.isSafeInteger(pointIndex) || pointIndex < 0 || pointIndex >= points.length)
+    return null;
   const point = points[pointIndex];
-  if (point === undefined || !Number.isSafeInteger(point.source.sectionIndex) || point.source.sectionIndex < 0) return null;
+  if (
+    point === undefined ||
+    !Number.isSafeInteger(point.source.sectionIndex) ||
+    point.source.sectionIndex < 0
+  )
+    return null;
   return point.source.sectionIndex;
 }
 
@@ -29,9 +35,10 @@ export function timelineIndexForKey(
   pointCount: number
 ): number | null {
   if (!Number.isSafeInteger(pointCount) || pointCount <= 0) return null;
-  const current = currentIndex === null || !Number.isSafeInteger(currentIndex)
-    ? 0
-    : Math.min(pointCount - 1, Math.max(0, currentIndex));
+  const current =
+    currentIndex === null || !Number.isSafeInteger(currentIndex)
+      ? 0
+      : Math.min(pointCount - 1, Math.max(0, currentIndex));
   if (key === 'Home') return 0;
   if (key === 'End') return pointCount - 1;
   if (key === 'ArrowLeft') return Math.max(0, current - 1);
@@ -74,7 +81,12 @@ export function timelineTimeAtClientX(
   width: number,
   totalDurationMs: number
 ): number | null {
-  if (![clientX, left, width, totalDurationMs].every(Number.isFinite) || width <= 0 || totalDurationMs < 0) return null;
+  if (
+    ![clientX, left, width, totalDurationMs].every(Number.isFinite) ||
+    width <= 0 ||
+    totalDurationMs < 0
+  )
+    return null;
   const ratio = Math.max(0, Math.min(1, (clientX - left) / width));
   return ratio * totalDurationMs;
 }

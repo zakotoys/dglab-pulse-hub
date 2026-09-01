@@ -1,14 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { linkSync, renameSync } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, open } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+  open
+} from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import {
-  DIAGNOSTIC_CODES,
-  makeDiagnostic,
-  location,
-  type Diagnostic
-} from '@dglab-pulse-hub/core';
+import { DIAGNOSTIC_CODES, makeDiagnostic, location, type Diagnostic } from '@dglab-pulse-hub/core';
 import { operationResult, type OperationResult } from './result.js';
 
 export interface FileReadData {
@@ -55,10 +60,7 @@ class NotRegularFileError extends Error {}
  * an early rejection; the byte-by-byte budget remains enforced while reading
  * so a file that grows between stat and read cannot force an oversized
  * allocation. */
-async function readBoundedFile(
-  filePath: string,
-  maxBytes: number
-): Promise<Uint8Array> {
+async function readBoundedFile(filePath: string, maxBytes: number): Promise<Uint8Array> {
   const handle = await open(filePath, 'r');
   try {
     const info = await handle.stat();
@@ -77,9 +79,9 @@ async function readBoundedFile(
       if (read.bytesRead === 0) break;
       if (read.bytesRead > remaining) throw new FileTooLargeError();
       total += read.bytesRead;
-      chunks.push(read.bytesRead === buffer.byteLength
-        ? buffer
-        : buffer.subarray(0, read.bytesRead));
+      chunks.push(
+        read.bytesRead === buffer.byteLength ? buffer : buffer.subarray(0, read.bytesRead)
+      );
     }
     const finalInfo = await handle.stat();
     if (finalInfo.size > maxBytes || total > maxBytes) throw new FileTooLargeError();
@@ -100,21 +102,38 @@ export async function readInputFile(
   }
   try {
     const content = await readBoundedFile(filePath, maxBytes);
-    return operationResult('read-file', 'success', {
-      displayName: sanitizeDisplayName(basename(filePath)),
-      byteSize: content.byteLength,
-      digest: createHash('sha256').update(content).digest('hex'),
-      content
-    }, []);
+    return operationResult(
+      'read-file',
+      'success',
+      {
+        displayName: sanitizeDisplayName(basename(filePath)),
+        byteSize: content.byteLength,
+        digest: createHash('sha256').update(content).digest('hex'),
+        content
+      },
+      []
+    );
   } catch (error) {
     if (error instanceof FileTooLargeError) {
       return operationResult('read-file', 'rejected', null, [
-        makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_SIZE_LIMIT, 'error', 'resource', 'Input file exceeds the byte limit.', location('$'))
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_SIZE_LIMIT,
+          'error',
+          'resource',
+          'Input file exceeds the byte limit.',
+          location('$')
+        )
       ]);
     }
     if (error instanceof NotRegularFileError) {
       return operationResult('read-file', 'rejected', null, [
-        makeDiagnostic(DIAGNOSTIC_CODES.ADAPTER_READ, 'error', 'adapter', 'Input path is not a regular file.', location('$'))
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.ADAPTER_READ,
+          'error',
+          'adapter',
+          'Input path is not a regular file.',
+          location('$')
+        )
       ]);
     }
     return operationResult('read-file', 'failed', null, [
@@ -146,7 +165,11 @@ function validAtomicWriteOptions(value: unknown): value is AtomicWriteOptions {
   if (options.overwrite !== undefined && typeof options.overwrite !== 'boolean') return false;
   if (options.signal !== undefined) {
     const signal = options.signal;
-    if (typeof signal !== 'object' || signal === null || typeof (signal as { readonly aborted?: unknown }).aborted !== 'boolean') {
+    if (
+      typeof signal !== 'object' ||
+      signal === null ||
+      typeof (signal as { readonly aborted?: unknown }).aborted !== 'boolean'
+    ) {
       return false;
     }
   }
@@ -190,7 +213,13 @@ export async function atomicWriteFile(
   try {
     if (options.signal?.aborted) {
       return operationResult('write-file', 'cancelled', null, [
-        makeDiagnostic('PULSE_TASK_CANCELLED', 'info', 'task', 'Write was cancelled.', location('$'))
+        makeDiagnostic(
+          'PULSE_TASK_CANCELLED',
+          'info',
+          'task',
+          'Write was cancelled.',
+          location('$')
+        )
       ]);
     }
     await mkdir(targetDirectory, { recursive: true });
@@ -198,7 +227,13 @@ export async function atomicWriteFile(
       try {
         await access(filePath);
         return operationResult('write-file', 'rejected', null, [
-          makeDiagnostic(DIAGNOSTIC_CODES.ADAPTER_CONFLICT, 'error', 'adapter', 'Output file already exists.', location('$'))
+          makeDiagnostic(
+            DIAGNOSTIC_CODES.ADAPTER_CONFLICT,
+            'error',
+            'adapter',
+            'Output file already exists.',
+            location('$')
+          )
         ]);
       } catch {
         // Target does not exist, which is the expected path for safe create.
@@ -216,7 +251,13 @@ export async function atomicWriteFile(
       await rm(temporaryPath, { force: true });
       temporaryPath = null;
       return operationResult('write-file', 'cancelled', null, [
-        makeDiagnostic('PULSE_TASK_CANCELLED', 'info', 'task', 'Write was cancelled.', location('$'))
+        makeDiagnostic(
+          'PULSE_TASK_CANCELLED',
+          'info',
+          'task',
+          'Write was cancelled.',
+          location('$')
+        )
       ]);
     }
     // The final same-directory metadata operation is deliberately synchronous.
@@ -235,12 +276,19 @@ export async function atomicWriteFile(
       } catch (error) {
         await rm(temporaryPath, { force: true });
         temporaryPath = null;
-        const code = typeof error === 'object' && error !== null && 'code' in error
-          ? String((error as { readonly code?: unknown }).code)
-          : '';
+        const code =
+          typeof error === 'object' && error !== null && 'code' in error
+            ? String((error as { readonly code?: unknown }).code)
+            : '';
         if (code === 'EEXIST') {
           return operationResult('write-file', 'rejected', null, [
-            makeDiagnostic(DIAGNOSTIC_CODES.ADAPTER_CONFLICT, 'error', 'adapter', 'Output file was created concurrently.', location('$'))
+            makeDiagnostic(
+              DIAGNOSTIC_CODES.ADAPTER_CONFLICT,
+              'error',
+              'adapter',
+              'Output file was created concurrently.',
+              location('$')
+            )
           ]);
         }
         throw error;
@@ -248,10 +296,15 @@ export async function atomicWriteFile(
       await rm(temporaryPath, { force: true }).catch(() => undefined);
     }
     temporaryPath = null;
-    return operationResult('write-file', 'success', {
-      displayName,
-      byteSize: bytes.byteLength
-    }, []);
+    return operationResult(
+      'write-file',
+      'success',
+      {
+        displayName,
+        byteSize: bytes.byteLength
+      },
+      []
+    );
   } catch (error) {
     if (temporaryPath !== null) await rm(temporaryPath, { force: true }).catch(() => undefined);
     return operationResult('write-file', 'failed', null, [
@@ -291,9 +344,14 @@ interface ArtifactOwnerRecord {
 function isArtifactOwnerRecord(value: unknown): value is ArtifactOwnerRecord {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
-  return record.version === 1 &&
-    typeof record.pid === 'number' && Number.isSafeInteger(record.pid) && record.pid > 0 &&
-    typeof record.token === 'string' && record.token.length > 0;
+  return (
+    record.version === 1 &&
+    typeof record.pid === 'number' &&
+    Number.isSafeInteger(record.pid) &&
+    record.pid > 0 &&
+    typeof record.token === 'string' &&
+    record.token.length > 0
+  );
 }
 
 function processIsAlive(pid: number): boolean {
@@ -301,9 +359,10 @@ function processIsAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    const code = typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { readonly code?: unknown }).code)
-      : '';
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { readonly code?: unknown }).code)
+        : '';
     return code === 'EPERM';
   }
 }
@@ -311,7 +370,10 @@ function processIsAlive(pid: number): boolean {
 export class TempArtifactStore {
   private directory: string | null = null;
   private initPromise: Promise<void> | null = null;
-  private readonly artifacts = new Map<string, { readonly path: string; readonly descriptor: ArtifactDescriptor }>();
+  private readonly artifacts = new Map<
+    string,
+    { readonly path: string; readonly descriptor: ArtifactDescriptor }
+  >();
   private readonly consuming = new Set<string>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
@@ -374,40 +436,44 @@ export class TempArtifactStore {
       return;
     }
     const staleBefore = Date.now() - Math.max(this.lifetimeMs, this.cleanupIntervalMs);
-    await Promise.all(entries.map(async (entry) => {
-      if (!entry.isDirectory() || !entry.name.startsWith(ARTIFACT_DIRECTORY_PREFIX)) return;
-      const directory = join(tmpdir(), entry.name);
-      try {
-        let owner: unknown;
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isDirectory() || !entry.name.startsWith(ARTIFACT_DIRECTORY_PREFIX)) return;
+        const directory = join(tmpdir(), entry.name);
         try {
-          owner = JSON.parse(await readFile(join(directory, ARTIFACT_OWNER_FILE), 'utf8')) as unknown;
+          let owner: unknown;
+          try {
+            owner = JSON.parse(
+              await readFile(join(directory, ARTIFACT_OWNER_FILE), 'utf8')
+            ) as unknown;
+          } catch {
+            const info = await stat(directory).catch(() => null);
+            if (info === null || info.mtimeMs > staleBefore) return;
+            await rm(directory, { recursive: true, force: true });
+            return;
+          }
+          if (!isArtifactOwnerRecord(owner)) {
+            const info = await stat(directory).catch(() => null);
+            if (info === null || info.mtimeMs > staleBefore) return;
+            await rm(directory, { recursive: true, force: true });
+            return;
+          }
+          // A matching PID is only trustworthy when the per-process owner token
+          // also matches. This handles PID reuse after an unclean process stop
+          // while preserving directories owned by another live process.
+          if (owner.pid === process.pid) {
+            if (owner.token === ARTIFACT_OWNER_TOKEN) return;
+            await rm(directory, { recursive: true, force: true });
+            return;
+          }
+          if (processIsAlive(owner.pid)) return;
+          await rm(directory, { recursive: true, force: true });
         } catch {
-          const info = await stat(directory).catch(() => null);
-          if (info === null || info.mtimeMs > staleBefore) return;
-          await rm(directory, { recursive: true, force: true });
-          return;
+          // Cleanup is best effort; the active store still gets an isolated
+          // directory and the periodic sweep can retry this entry later.
         }
-        if (!isArtifactOwnerRecord(owner)) {
-          const info = await stat(directory).catch(() => null);
-          if (info === null || info.mtimeMs > staleBefore) return;
-          await rm(directory, { recursive: true, force: true });
-          return;
-        }
-        // A matching PID is only trustworthy when the per-process owner token
-        // also matches. This handles PID reuse after an unclean process stop
-        // while preserving directories owned by another live process.
-        if (owner.pid === process.pid) {
-          if (owner.token === ARTIFACT_OWNER_TOKEN) return;
-          await rm(directory, { recursive: true, force: true });
-          return;
-        }
-        if (processIsAlive(owner.pid)) return;
-        await rm(directory, { recursive: true, force: true });
-      } catch {
-        // Cleanup is best effort; the active store still gets an isolated
-        // directory and the periodic sweep can retry this entry later.
-      }
-    }));
+      })
+    );
   }
 
   public async put(
@@ -427,9 +493,12 @@ export class TempArtifactStore {
       const id = randomUUID();
       const safeName = sanitizeDisplayName(displayName);
       path = join(this.directory, id + '-' + safeName);
-      const contentType = typeof options.contentType === 'string' && options.contentType.length <= 127 && /^[A-Za-z0-9!#$%&*+.^_`|~-]+\/[A-Za-z0-9!#$%&*+.^_`|~-]+$/.test(options.contentType)
-        ? options.contentType
-        : 'application/octet-stream';
+      const contentType =
+        typeof options.contentType === 'string' &&
+        options.contentType.length <= 127 &&
+        /^[A-Za-z0-9!#$%&*+.^_`|~-]+\/[A-Za-z0-9!#$%&*+.^_`|~-]+$/.test(options.contentType)
+          ? options.contentType
+          : 'application/octet-stream';
       await writeFile(path, new Uint8Array(content), { mode: 0o600 });
       const descriptor: ArtifactDescriptor = Object.freeze({
         id,
@@ -453,7 +522,13 @@ export class TempArtifactStore {
   }
 
   public async read(id: string): Promise<Uint8Array | null> {
-    if (typeof id !== 'string' || id.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(id) || this.consuming.has(id)) return null;
+    if (
+      typeof id !== 'string' ||
+      id.length > 128 ||
+      !/^[A-Za-z0-9._~-]+$/.test(id) ||
+      this.consuming.has(id)
+    )
+      return null;
     const artifact = this.artifacts.get(id);
     if (artifact === undefined) return null;
     if (artifact.descriptor.expiresAt <= Date.now()) {
@@ -474,8 +549,16 @@ export class TempArtifactStore {
   }
 
   /** Atomically claim and remove an artifact for a one-shot download. */
-  public async consume(id: string): Promise<{ readonly descriptor: ArtifactDescriptor; readonly bytes: Uint8Array } | null> {
-    if (typeof id !== 'string' || id.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(id) || this.consuming.has(id)) return null;
+  public async consume(
+    id: string
+  ): Promise<{ readonly descriptor: ArtifactDescriptor; readonly bytes: Uint8Array } | null> {
+    if (
+      typeof id !== 'string' ||
+      id.length > 128 ||
+      !/^[A-Za-z0-9._~-]+$/.test(id) ||
+      this.consuming.has(id)
+    )
+      return null;
     const artifact = this.artifacts.get(id);
     if (artifact === undefined) return null;
     if (artifact.descriptor.expiresAt <= Date.now()) {
@@ -550,6 +633,7 @@ export function sanitizeDisplayName(name: string): string {
   const source = typeof name === 'string' ? name : 'pulse-output.pulse';
   const base = basename(source).replace(/[\u0000-\u001f\u007f]/g, '_');
   const normalized = base.replace(/[\\/]+/g, '_').trim();
-  if (normalized.length === 0 || normalized === '.' || normalized === '..') return 'pulse-output.pulse';
+  if (normalized.length === 0 || normalized === '.' || normalized === '..')
+    return 'pulse-output.pulse';
   return normalized.slice(0, 180);
 }

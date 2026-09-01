@@ -9,14 +9,24 @@
 ### 实施顺序
 
 1. 建立 npm workspaces、TypeScript 严格配置、单元测试、lint/format、构建和 CI。
-2. 将 `.example` 登记为本地只读 corpus；生成确定性的文件标识、字节长度、section/点位统计和校验信息。把“原样语料是否可提交”与干净 clone 的行为写入 provenance 记录；在来源和再分发权确认前，CI 只使用覆盖相同结构特征的最小合成夹具。
-3. 先冻结支持画像：`parse-supported` 覆盖 1..10 section，`app-verified` 逐项记录目标 App 证据；11 个 section、缺失字段和超限输入必须有明确拒绝预期。
-4. 先写 tokenizer/grammar 的表格驱动失败测试，再实现只负责结构拆分的 parser prototype。矩阵中的每个样例都必须写明 accepted/rejected、诊断 code 和位置预期。
-5. 为错误输入建立最小变异集：错误前缀、编码标记、缺少 `=`、空 section、字段数量错误、非法数值、小数异常、错误开关、错误锚点、超限 section。
-6. 输出机器可读的 corpus report，确认每个样例能被完整消费且没有忽略尾随 token；报告同时输出 parse profile 和互操作证据状态。
-7. 在 M1 前冻结 stream 规则表和 golden vectors：100 ms 点位、完整重复、目标/实际时长、全局 rest、播放速度、禁用 section、四种模式、端点采样、舍入和单位边界。未知映射保留为 `Not verified`。
-8. 建立 `contracts` workspace，选择并记录 schema library，写出 result envelope 草案和未知 schema/rule version 的拒绝测试；同时把 ADR-0003 与 TRD 的 FileMetadata 公共字段完成对齐。
-9. 用真实 App 做最小互操作记录：原文件导入、未修改导出再导入、规范化导出再导入。无法测试的项明确标为 `Not verified`，不得写成支持承诺。
+2. 将 `.example`
+   登记为本地只读 corpus；生成确定性的文件标识、字节长度、section/点位统计和校验信息。把“原样语料是否可提交”与干净 clone 的行为写入 provenance 记录；在来源和再分发权确认前，CI 只使用覆盖相同结构特征的最小合成夹具。
+3. 先冻结支持画像：`parse-supported` 覆盖 1..10 section，`app-verified`
+   逐项记录目标 App 证据；11 个 section、缺失字段和超限输入必须有明确拒绝预期。
+4. 先写 tokenizer/grammar 的表格驱动失败测试，再实现只负责结构拆分的 parser
+   prototype。矩阵中的每个样例都必须写明 accepted/rejected、诊断 code 和位置预期。
+5. 为错误输入建立最小变异集：错误前缀、编码标记、缺少
+   `=`、空 section、字段数量错误、非法数值、小数异常、错误开关、错误锚点、超限 section。
+6. 输出机器可读的 corpus report，确认每个样例能被完整消费且没有忽略尾随 token；报告同时输出 parse
+   profile 和互操作证据状态。
+7. 在 M1 前冻结 stream 规则表和 golden vectors：100
+   ms 点位、完整重复、目标/实际时长、全局 rest、播放速度、禁用 section、四种模式、端点采样、舍入和单位边界。未知映射保留为
+   `Not verified`。
+8. 建立 `contracts` workspace，选择并记录 schema library，写出 result
+   envelope 草案和未知 schema/rule
+   version 的拒绝测试；同时把 ADR-0003 与 TRD 的 FileMetadata 公共字段完成对齐。
+9. 用真实 App 做最小互操作记录：原文件导入、未修改导出再导入、规范化导出再导入。无法测试的项明确标为
+   `Not verified`，不得写成支持承诺。
 
 ### 交付物
 
@@ -28,30 +38,42 @@
 
 ### 退出标准
 
-- 本地 corpus suite 中 16 个样例全部被解析到 EOF，统计与 metadata manifest 一致；缺少 `.example` 时明确 skip，并由 CI 合成夹具继续覆盖规则。provenance 和再分发结论已记录，不能把忽略目录当作干净 clone 的必备输入。
-- grammar 矩阵的每个输入都有确定的 accepted/rejected 结论、稳定 code 和结构位置；`parse-supported` 与 `app-verified` 没有混用。
+- 本地 corpus suite 中 16 个样例全部被解析到 EOF，统计与 metadata manifest 一致；缺少 `.example`
+  时明确 skip，并由 CI 合成夹具继续覆盖规则。provenance 和再分发结论已记录，不能把忽略目录当作干净 clone 的必备输入。
+- grammar 矩阵的每个输入都有确定的 accepted/rejected 结论、稳定 code 和结构位置；`parse-supported`
+  与 `app-verified` 没有混用。
 - parser 不使用 `Number(x) || default` 一类会吞掉零值/非法值的写法。
 - 所有拒绝路径返回稳定 code 和结构位置，不以异常文本作为契约。
 - 尚未确认的字段只有中性名称，不在代码中伪装为物理单位。
-- FileMetadata 的公共边界已与 ADR-0003 对齐：可公开显示的名称必须是明确的 `displayName`，路径、临时路径和未经证实的通用 `version` 不进入公共 DTO。
-- stream 规则、schema library、result envelope 和未知版本拒绝行为已有可执行测试；尚未具备的 App 证据显式为 `Not verified`，不提前进入 M1/M2 的通过条件。
+- FileMetadata 的公共边界已与 ADR-0003 对齐：可公开显示的名称必须是明确的
+  `displayName`，路径、临时路径和未经证实的通用 `version` 不进入公共 DTO。
+- stream 规则、schema library、result
+  envelope 和未知版本拒绝行为已有可执行测试；尚未具备的 App 证据显式为
+  `Not verified`，不提前进入 M1/M2 的通过条件。
 
 ## 2. M1：核心单文件闭环
 
 ### 目标
 
-提供第一个真正可用的产品：通过 Node 命令处理一个 `.pulse`，获得诊断、metadata 和逻辑 stream，并安全导出。
+提供第一个真正可用的产品：通过 Node 命令处理一个
+`.pulse`，获得诊断、metadata 和逻辑 stream，并安全导出。
 
 ### 实施顺序
 
 1. **解析边界**：以测试定义 `SourceDocument -> SyntacticPulse`，保留原始文本、数值 lexeme 和位置。
 2. **规范化边界**：以测试定义 `SyntacticPulse -> Pulse`，验证字段数量、范围、启用状态和曲线点。
 3. **诊断**：为识别、语法、范围、语义和导出建立 code 目录及 severity 规则。
-4. **metadata**：先实现文件、Pulse、section 层；每个字段标记 `raw`、`derived` 或 `unverified mapping` 来源。公共 DTO 只通过明确的 `displayName` 表达用户可见名称，不暴露本地路径、临时路径或未经证实的通用 `version`。
-5. **展开**：严格按 M0 冻结的 stream 规则表和 golden vectors 生成逻辑 stream，覆盖 100 ms 曲线点、完整脉冲元重复、section 目标/实际时长、rest、播放速度、禁用 section 和四种频率模式。
+4. **metadata**：先实现文件、Pulse、section 层；每个字段标记 `raw`、`derived` 或
+   `unverified mapping` 来源。公共 DTO 只通过明确的 `displayName`
+   表达用户可见名称，不暴露本地路径、临时路径或未经证实的通用 `version`。
+5. **展开**：严格按 M0 冻结的 stream 规则表和 golden vectors 生成逻辑 stream，覆盖 100
+   ms 曲线点、完整脉冲元重复、section 目标/实际时长、rest、播放速度、禁用 section 和四种频率模式。
 6. **序列化**：实现源快照导出和规范化导出；两者均执行导出前校验。
-7. **用例**：组合 `inspectPulse` 和 `exportPulse`，提供 Node 命令作为可运行入口；结果统一经过 status/result/diagnostics envelope，并明确成功加 warning 与取消的状态。
-8. **闭环测试**：对 corpus 执行 parse -> validate -> expand -> serialize -> parse，并比较受支持语义。
+7. **用例**：组合 `inspectPulse` 和
+   `exportPulse`，提供 Node 命令作为可运行入口；结果统一经过 status/result/diagnostics
+   envelope，并明确成功加 warning 与取消的状态。
+8. **闭环测试**：对 corpus 执行 parse -> validate -> expand -> serialize ->
+   parse，并比较受支持语义。
 
 ### 交付物
 
@@ -65,7 +87,8 @@
 - IO-001、IO-003、VAL-001..004、PRE-001..002、EDIT-006、TASK-001 有自动化证据。
 - TASK-003 的公共结果不泄漏路径，且 direct/CLI 共享同一 schema、rule version、状态和诊断投影。
 - 未修改文件可按源快照无损导出；规范化导出的语义往返稳定。
-- WaveformStream 点位能追溯到 section、脉冲元重复序号和曲线点，并通过 M0 golden vectors 固定时长、rest、速度、禁用 section 和模式规则。
+- WaveformStream 点位能追溯到 section、脉冲元重复序号和曲线点，并通过 M0 golden
+  vectors 固定时长、rest、速度、禁用 section 和模式规则。
 - 无 DOM、Electron、HTTP 或设备协议依赖进入 core/application。
 
 ## 3. M2：Web 工作台 MVP
@@ -89,7 +112,8 @@
 - 用户不阅读说明即可从首屏开始导入并完成下载。
 - API 和 Node 对同一输入产生等价的 schema、状态、诊断、metadata、stream 和导出内容。
 - 请求结束、取消、失败、客户端断开、任务过期或进程停止后临时内容按 PDR-0003 删除；若下载需要延长存活期，PDR-0003 的成功/删除语义已先完成决策更新。
-- 未知 schema/rule version 被明确拒绝；上传大小、展开点数、处理时长和并发限制在应用层生效，任务之间不能互相读取或覆盖临时内容。
+- 未知 schema/rule
+  version 被明确拒绝；上传大小、展开点数、处理时长和并发限制在应用层生效，任务之间不能互相读取或覆盖临时内容。
 - UI 对错误/警告提供文字、位置和建议，不只依赖颜色。
 
 ## 4. M3：Electron 离线 MVP
@@ -132,7 +156,8 @@ M4 以小增量逐项加入，每项都在 M2/M3 已工作的单文件产品上�
 
 ### M4.3 预览与图片导出
 
-- 从同一不可变 stream snapshot 生成屏幕 SVG 与导出 SVG；不引入未在 M1/M2 契约中定义的第二套波形中间模型。
+- 从同一不可变 stream
+  snapshot 生成屏幕 SVG 与导出 SVG；不引入未在 M1/M2 契约中定义的第二套波形中间模型。
 - PNG/JPG 只作为 SVG/snapshot 的编码 adapter，不重新计算波形。
 - 验证非空像素、尺寸、关键坐标、长 stream 和中文 metadata。
 
@@ -148,8 +173,11 @@ M4 以小增量逐项加入，每项都在 M2/M3 已工作的单文件产品上�
 - 编辑命令作用于 Pulse 草稿；stream、metadata 和 diff 始终重新派生。
 - 撤销/重做保存领域命令或不可变快照，不保存组件状态。
 - 自动点只在受影响锚点区间重算；导出前执行完整校验。
-- “智能化手动修改”在基础编辑稳定后作为可取消、可预览、可复现的 reviewed assist command 加入，不引入自动提交的黑盒修改。
-- VAL-006 的编辑插值与升级复用属于两个验收作用域；M4.5 开始前必须先按 [PDR-0002](../pdr/0002-release-slicing-and-upgrade-gate.md) 记录拆分决策，否则原有条件门槛同时约束两者。
+- “智能化手动修改”在基础编辑稳定后作为可取消、可预览、可复现的 reviewed assist
+  command 加入，不引入自动提交的黑盒修改。
+- VAL-006 的编辑插值与升级复用属于两个验收作用域；M4.5 开始前必须先按
+  [PDR-0002](../pdr/0002-release-slicing-and-upgrade-gate.md)
+  记录拆分决策，否则原有条件门槛同时约束两者。
 
 ### M4.6 版本升级（条件能力）
 

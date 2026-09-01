@@ -16,22 +16,24 @@
 ### 1.1 决策与证据前置
 
 - 每个格式、互操作和生命周期矩阵项都必须声明预期结果（accepted/rejected、状态、诊断 code 或清理动作）及证据来源；只有“覆盖了样例”不算完成。
-- `parse-supported`、`app-verified` 和 `Not verified` 分开记录。`Not verified` 不能作为通过、发布或 App 等价行为的证据。
-- 公共契约只比较逻辑 metadata、明确的 `displayName`、`formatProfile`、`ruleVersion`、状态、结果和诊断；本地路径、临时路径和实现类布局不得进入跨端 schema。
+- `parse-supported`、`app-verified` 和 `Not verified` 分开记录。`Not verified`
+  不能作为通过、发布或 App 等价行为的证据。
+- 公共契约只比较逻辑 metadata、明确的
+  `displayName`、`formatProfile`、`ruleVersion`、状态、结果和诊断；本地路径、临时路径和实现类布局不得进入跨端 schema。
 - schema/rule version 不匹配必须拒绝并返回可诊断结果；不通过静默降级、字段猜测或兼容别名继续处理。
 
 ## 2. 测试层级
 
-| 层级 | 主要对象 | 必测内容 | 不应测试的内容 |
-| --- | --- | --- | --- |
-| 单元 | tokenizer、parser、validator、interpolation、expansion、serializer | 边界值、错误位置、不变量、确定性 | UI 文案和 adapter 行为 |
-| 属性/变异 | 数值、分隔符、section、点位集合 | parser 不崩溃、不会忽略 token、往返不变量 | 代替真实互操作测试 |
-| Corpus | `.example` 和确认来源的固定夹具 | 全量可读、统计稳定、语义往返 | 将 corpus 中出现的值误当成完整合法范围 |
-| 契约 | application schema、HTTP、IPC、CLI JSON | 同输入同结果、版本拒绝、诊断 code | 内部对象布局 |
-| 组件 | 工作区、诊断列表、metadata、时间轴、编辑器 | 用户操作、状态和无障碍语义 | 重新验证 core 数学规则 |
-| E2E | Web/Electron 可执行产品 | 导入到导出、失败恢复、取消、文件生命周期 | 穷举字段组合 |
-| 互操作 | DG-LAB App | 导入接受性、未修改/修改导出、QR 扫描 | 用社区实现替代官方 App 结果 |
-| 非功能 | parser/API/UI/部署 | 上限、性能、内存、清理、安全、可观察性 | 无门槛的“看起来够快” |
+| 层级      | 主要对象                                                           | 必测内容                                  | 不应测试的内容                         |
+| --------- | ------------------------------------------------------------------ | ----------------------------------------- | -------------------------------------- |
+| 单元      | tokenizer、parser、validator、interpolation、expansion、serializer | 边界值、错误位置、不变量、确定性          | UI 文案和 adapter 行为                 |
+| 属性/变异 | 数值、分隔符、section、点位集合                                    | parser 不崩溃、不会忽略 token、往返不变量 | 代替真实互操作测试                     |
+| Corpus    | `.example` 和确认来源的固定夹具                                    | 全量可读、统计稳定、语义往返              | 将 corpus 中出现的值误当成完整合法范围 |
+| 契约      | application schema、HTTP、IPC、CLI JSON                            | 同输入同结果、版本拒绝、诊断 code         | 内部对象布局                           |
+| 组件      | 工作区、诊断列表、metadata、时间轴、编辑器                         | 用户操作、状态和无障碍语义                | 重新验证 core 数学规则                 |
+| E2E       | Web/Electron 可执行产品                                            | 导入到导出、失败恢复、取消、文件生命周期  | 穷举字段组合                           |
+| 互操作    | DG-LAB App                                                         | 导入接受性、未修改/修改导出、QR 扫描      | 用社区实现替代官方 App 结果            |
+| 非功能    | parser/API/UI/部署                                                 | 上限、性能、内存、清理、安全、可观察性    | 无门槛的“看起来够快”                   |
 
 ## 3. 核心不变量
 
@@ -42,7 +44,8 @@
 - 原始曲线强度在语义层保留小数，不因预览或设备范围提前取整。
 - stream 是派生值，不反写 source snapshot。
 - section 实际时长等于完整脉冲元次数乘以脉冲元时长；重复次数至少为 1，计算规则由契约测试固定。
-- WaveformStream 的全局 rest、播放速度、禁用 section、端点采样、舍入、四种频率模式和资源上限均由冻结规则表及 golden vectors 固定；不能在 UI 或 adapter 中补默认值。
+- WaveformStream 的全局 rest、播放速度、禁用 section、端点采样、舍入、四种频率模式和资源上限均由冻结规则表及 golden
+  vectors 固定；不能在 UI 或 adapter 中补默认值。
 - 相同输入、rule version 和操作参数产生相同 Pulse、stream、诊断及规范化输出。
 - 存在阻断错误时不得返回成功导出。
 - 未编辑源快照导出不改变字节；规范化导出满足语义往返，而非强求字节相等。
@@ -67,7 +70,8 @@
 - section 目标时长小于、等于、大于脉冲元时长，以及非整倍数。
 - 四种频率模式的首点、末点、单重复和多重复。
 - 全部 section 禁用、部分禁用、超过官方 UI 可见数量但在支持画像内。
-- 每个 section 数量边界同时标记 parse-supported 和 app-verified；未验证的 4..10 section 不能被测试名称或 UI 文案描述成 App 支持。
+- 每个 section 数量边界同时标记 parse-supported 和 app-verified；未验证的 4..10
+  section 不能被测试名称或 UI 文案描述成 App 支持。
 
 ### 4.3 序列化与编辑
 
@@ -95,7 +99,8 @@
 建立同一组 golden request/response，分别经过 direct application、CLI、HTTP 和 IPC：
 
 - 比较 schema version、rule version、诊断 code/location、metadata、stream 和导出摘要。
-- 比较成功加 warning、失败、取消的状态转移及 result/download descriptor；不把 adapter 私有路径纳入结果。
+- 比较成功加 warning、失败、取消的状态转移及 result/download
+  descriptor；不把 adapter 私有路径纳入结果。
 - 忽略任务 ID、墙上时钟、临时路径等环境字段。
 - 任一入口不得偷偷裁剪核心结果；展示层裁剪必须发生在 view model 并可追溯。
 - HTTP/IPC 的未知 schema version 必须拒绝，不做静默降级。
@@ -104,16 +109,16 @@
 
 具体数值由 M0/M1 基线测量后冻结；在冻结前使用以下方法，不假设虚假的生产阈值：
 
-| 风险 | 基线方式 | 发布前必须固定 |
-| --- | --- | --- |
-| 输入文本过大 | 记录字节数与 parse 峰值内存 | 单文件字节上限 |
-| stream 展开过大 | 记录 section/点数/重复数与输出点数 | 最大 section、源点、派生点 |
-| QR 解压炸弹 | 测试压缩比和流式中止 | 压缩输入与解压输出上限 |
-| 批量耗尽 | 有界并发压力测试 | 文件数、总字节、并发数、超时 |
-| 时间轴卡顿 | 真实长 stream 帧率/交互测量 | 渲染点预算与降采样规则 |
-| 临时文件泄漏 | 成功/失败/取消故障注入 | 最大生命周期与清理 SLA |
-| 任务 artifact 生命周期 | 下载关闭、客户端断开、过期、优雅停止和重启清理注入 | 存活期、删除触发器、孤儿清理 SLA |
-| 访问边界与任务隔离 | 无账户信任边界、并发任务、跨任务路径读取尝试 | 上传授权/能力边界、隔离、日志脱敏 |
+| 风险                   | 基线方式                                           | 发布前必须固定                    |
+| ---------------------- | -------------------------------------------------- | --------------------------------- |
+| 输入文本过大           | 记录字节数与 parse 峰值内存                        | 单文件字节上限                    |
+| stream 展开过大        | 记录 section/点数/重复数与输出点数                 | 最大 section、源点、派生点        |
+| QR 解压炸弹            | 测试压缩比和流式中止                               | 压缩输入与解压输出上限            |
+| 批量耗尽               | 有界并发压力测试                                   | 文件数、总字节、并发数、超时      |
+| 时间轴卡顿             | 真实长 stream 帧率/交互测量                        | 渲染点预算与降采样规则            |
+| 临时文件泄漏           | 成功/失败/取消故障注入                             | 最大生命周期与清理 SLA            |
+| 任务 artifact 生命周期 | 下载关闭、客户端断开、过期、优雅停止和重启清理注入 | 存活期、删除触发器、孤儿清理 SLA  |
+| 访问边界与任务隔离     | 无账户信任边界、并发任务、跨任务路径读取尝试       | 上传授权/能力边界、隔离、日志脱敏 |
 
 上限必须由 application/adapter 强制，不能只依赖 Nginx 或 UI 控件。
 
@@ -129,5 +134,6 @@ M2 必须冻结应用层限制和任务生命周期；M5 只为不同部署环�
 - 错误、取消、资源上限和隐私路径均有验证。
 - PRD/TRD/PDR/ADR/plan 的链接和状态同步。
 - 人工互操作项记录 App 版本、平台、输入哈希、步骤和结果；未执行时明确写 `Not verified`。
-- `Conditional`、`Blocked`、`Deferred` 和 `Not verified` 项不计入里程碑通过；延期必须链接批准的 PDR/ADR 决策。
+- `Conditional`、`Blocked`、`Deferred` 和 `Not verified`
+  项不计入里程碑通过；延期必须链接批准的 PDR/ADR 决策。
 - corpus 的来源、再分发权和干净 clone 行为有记录；忽略的本地文件不能作为唯一 CI 证据。

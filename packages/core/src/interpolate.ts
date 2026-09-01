@@ -10,19 +10,11 @@ export function quadraticCurve(x: number): number {
   return 1 - (1 - clamped) ** 2;
 }
 
-export function interpolateQuadratic(
-  start: number,
-  end: number,
-  x: number
-): number {
+export function interpolateQuadratic(start: number, end: number, x: number): number {
   return Math.round(start + (end - start) * quadraticCurve(x));
 }
 
-function rawInterpolateQuadratic(
-  start: number,
-  end: number,
-  x: number
-): number {
+function rawInterpolateQuadratic(start: number, end: number, x: number): number {
   return start + (end - start) * quadraticCurve(x);
 }
 
@@ -45,10 +37,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validAssistPoint(value: unknown): value is QuadraticAssistPoint {
-  return isRecord(value) &&
-    typeof value.strength === 'number' && Number.isFinite(value.strength) &&
-    value.strength >= 0 && value.strength <= 100 &&
-    (value.anchor === 0 || value.anchor === 1);
+  return (
+    isRecord(value) &&
+    typeof value.strength === 'number' &&
+    Number.isFinite(value.strength) &&
+    value.strength >= 0 &&
+    value.strength <= 100 &&
+    (value.anchor === 0 || value.anchor === 1)
+  );
 }
 
 function normalizedAssistStrength(value: number): number {
@@ -66,11 +62,20 @@ export function previewQuadraticAssist(
   options: QuadraticAssistOptions
 ): readonly number[] | null {
   if (!Array.isArray(points) || points.length === 0 || !isRecord(options)) return null;
-  if (!Number.isSafeInteger(options.startPointIndex) || options.startPointIndex < 0 ||
-      !Number.isSafeInteger(options.endPointIndex) || options.endPointIndex <= options.startPointIndex ||
-      options.endPointIndex >= points.length ||
-      !Number.isFinite(options.startStrength) || options.startStrength < 0 || options.startStrength > 100 ||
-      !Number.isFinite(options.endStrength) || options.endStrength < 0 || options.endStrength > 100) return null;
+  if (
+    !Number.isSafeInteger(options.startPointIndex) ||
+    options.startPointIndex < 0 ||
+    !Number.isSafeInteger(options.endPointIndex) ||
+    options.endPointIndex <= options.startPointIndex ||
+    options.endPointIndex >= points.length ||
+    !Number.isFinite(options.startStrength) ||
+    options.startStrength < 0 ||
+    options.startStrength > 100 ||
+    !Number.isFinite(options.endStrength) ||
+    options.endStrength < 0 ||
+    options.endStrength > 100
+  )
+    return null;
   for (let index = 0; index < points.length; index += 1) {
     if (!validAssistPoint(points[index])) return null;
   }
@@ -78,11 +83,13 @@ export function previewQuadraticAssist(
   const start = options.startPointIndex;
   const end = options.endPointIndex;
   const values = points.map((point) => point.strength);
-  const anchors = points.map((point, index) => (
-    index === start || index === end || (index > start && index < end && point.anchor === 1)
-      ? index
-      : -1
-  )).filter((index) => index >= 0);
+  const anchors = points
+    .map((point, index) =>
+      index === start || index === end || (index > start && index < end && point.anchor === 1)
+        ? index
+        : -1
+    )
+    .filter((index) => index >= 0);
   values[start] = normalizedAssistStrength(options.startStrength);
   values[end] = normalizedAssistStrength(options.endStrength);
 
@@ -90,12 +97,8 @@ export function previewQuadraticAssist(
     const leftIndex = anchors[anchorCursor];
     const rightIndex = anchors[anchorCursor + 1];
     if (leftIndex === undefined || rightIndex === undefined || rightIndex <= leftIndex) continue;
-    const leftValue = leftIndex === start
-      ? values[start]
-      : points[leftIndex]?.strength;
-    const rightValue = rightIndex === end
-      ? values[end]
-      : points[rightIndex]?.strength;
+    const leftValue = leftIndex === start ? values[start] : points[leftIndex]?.strength;
+    const rightValue = rightIndex === end ? values[end] : points[rightIndex]?.strength;
     if (leftValue === undefined || rightValue === undefined) return null;
     for (let index = leftIndex + 1; index < rightIndex; index += 1) {
       const point = points[index];
@@ -116,7 +119,8 @@ function numberToDecimal(value: number): string {
 export interface ResolvedControlPoint {
   readonly value: number;
   readonly decimal: string;
-  readonly origin: 'source-anchor' | 'source-point' | 'quadratic-interpolation' | 'boundary-interpolation';
+  readonly origin:
+    'source-anchor' | 'source-point' | 'quadratic-interpolation' | 'boundary-interpolation';
 }
 
 /**
@@ -124,18 +128,21 @@ export interface ResolvedControlPoint {
  * anchors are never overwritten. Missing anchors at either boundary use the
  * boundary source value and are marked separately for the UI.
  */
-export function resolveControlPoints(
-  points: readonly ControlPoint[]
-): { readonly points: readonly ResolvedControlPoint[]; readonly diagnostics: readonly ReturnType<typeof makeDiagnostic>[] } {
+export function resolveControlPoints(points: readonly ControlPoint[]): {
+  readonly points: readonly ResolvedControlPoint[];
+  readonly diagnostics: readonly ReturnType<typeof makeDiagnostic>[];
+} {
   const diagnostics: ReturnType<typeof makeDiagnostic>[] = [];
   if (!Array.isArray(points)) {
-    diagnostics.push(makeDiagnostic(
-      DIAGNOSTIC_CODES.SEMANTIC_INVALID_MODEL,
-      'error',
-      'semantic',
-      'Control points must be an array.',
-      location('points')
-    ));
+    diagnostics.push(
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.SEMANTIC_INVALID_MODEL,
+        'error',
+        'semantic',
+        'Control points must be an array.',
+        location('points')
+      )
+    );
     return { points: Object.freeze([]), diagnostics: Object.freeze(diagnostics) };
   }
   if (points.length === 0) return { points: Object.freeze([]), diagnostics };
@@ -148,15 +155,22 @@ export function resolveControlPoints(
   for (let index = 0; index < points.length; index += 1) {
     const point = points[index];
     if (point === undefined) continue;
-    if (!isRecord(point) || typeof point.strength !== 'number' || !Number.isFinite(point.strength) ||
-        typeof point.strengthDecimal !== 'string' || (point.anchor !== 0 && point.anchor !== 1)) {
-      diagnostics.push(makeDiagnostic(
-        DIAGNOSTIC_CODES.SEMANTIC_INVALID_MODEL,
-        'error',
-        'semantic',
-        'Control point is malformed.',
-        location('points[' + index + ']', undefined, { pointIndex: index })
-      ));
+    if (
+      !isRecord(point) ||
+      typeof point.strength !== 'number' ||
+      !Number.isFinite(point.strength) ||
+      typeof point.strengthDecimal !== 'string' ||
+      (point.anchor !== 0 && point.anchor !== 1)
+    ) {
+      diagnostics.push(
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.SEMANTIC_INVALID_MODEL,
+          'error',
+          'semantic',
+          'Control point is malformed.',
+          location('points[' + index + ']', undefined, { pointIndex: index })
+        )
+      );
       resolved.push({ value: 0, decimal: '0', origin: 'boundary-interpolation' });
       continue;
     }
@@ -185,11 +199,17 @@ export function resolveControlPoints(
     const rightIndex = rightAnchor ?? points.length - 1;
     const leftPoint = points[leftIndex];
     const rightPoint = points[rightIndex];
-    if (leftPoint === undefined || rightPoint === undefined ||
-        !isRecord(leftPoint) || !isRecord(rightPoint) ||
-        typeof leftPoint.strength !== 'number' || typeof rightPoint.strength !== 'number' ||
-        !Number.isFinite(leftPoint.strength) || !Number.isFinite(rightPoint.strength) ||
-        rightIndex <= leftIndex) {
+    if (
+      leftPoint === undefined ||
+      rightPoint === undefined ||
+      !isRecord(leftPoint) ||
+      !isRecord(rightPoint) ||
+      typeof leftPoint.strength !== 'number' ||
+      typeof rightPoint.strength !== 'number' ||
+      !Number.isFinite(leftPoint.strength) ||
+      !Number.isFinite(rightPoint.strength) ||
+      rightIndex <= leftIndex
+    ) {
       resolved.push({
         value: point.strength,
         decimal: point.strengthDecimal,
@@ -198,33 +218,33 @@ export function resolveControlPoints(
       continue;
     }
     const x = (index - leftIndex) / (rightIndex - leftIndex);
-    const rawValue = rawInterpolateQuadratic(
-      leftPoint.strength,
-      rightPoint.strength,
-      x
-    );
+    const rawValue = rawInterpolateQuadratic(leftPoint.strength, rightPoint.strength, x);
     const roundedValue = Math.round(rawValue);
     if (roundedValue !== rawValue && !roundedReported) {
-      diagnostics.push(makeDiagnostic(
-        DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED,
-        'warning',
-        'semantic',
-        'Interpolated intensity was rounded to the nearest integer.',
-        location('points[' + index + '].strength', undefined, { pointIndex: index }),
-        { parameters: { value: rawValue, rounded: roundedValue } }
-      ));
+      diagnostics.push(
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED,
+          'warning',
+          'semantic',
+          'Interpolated intensity was rounded to the nearest integer.',
+          location('points[' + index + '].strength', undefined, { pointIndex: index }),
+          { parameters: { value: rawValue, rounded: roundedValue } }
+        )
+      );
       roundedReported = true;
     }
     const value = Math.min(100, Math.max(0, roundedValue));
     if (value !== roundedValue && !clippedReported) {
-      diagnostics.push(makeDiagnostic(
-        DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_CLIPPED,
-        'warning',
-        'semantic',
-        'An interpolated intensity was clipped to the supported range.',
-        location('points[' + index + '].strength', undefined, { pointIndex: index }),
-        { parameters: { value: rawValue, min: 0, max: 100 } }
-      ));
+      diagnostics.push(
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_CLIPPED,
+          'warning',
+          'semantic',
+          'An interpolated intensity was clipped to the supported range.',
+          location('points[' + index + '].strength', undefined, { pointIndex: index }),
+          { parameters: { value: rawValue, min: 0, max: 100 } }
+        )
+      );
       clippedReported = true;
     }
     const origin =

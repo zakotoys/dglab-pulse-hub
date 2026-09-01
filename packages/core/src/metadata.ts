@@ -67,26 +67,28 @@ export function projectMetadata(
 ): PulseMetadataBundle {
   const rules = options.rules ?? DEFAULT_RULE_SET;
   const diagnostics = sortDiagnostics(options.diagnostics ?? []);
-  const sections: SectionMetadata[] = pulse.sections.map((_, index) => {
-    const sectionDiagnostics = diagnostics.filter(
-      (item) => item.location.sectionIndex === index
-    );
-    return sectionMetadata(pulse, index, sectionDiagnostics, rules);
-  }).filter((item): item is SectionMetadata => item !== null);
+  const sections: SectionMetadata[] = pulse.sections
+    .map((_, index) => {
+      const sectionDiagnostics = diagnostics.filter((item) => item.location.sectionIndex === index);
+      return sectionMetadata(pulse, index, sectionDiagnostics, rules);
+    })
+    .filter((item): item is SectionMetadata => item !== null);
   const effectiveStream = stream ?? expandWaveform(pulse, {}, rules).stream;
-  const stats = effectiveStream === null
-    ? Object.freeze({
-        pointCount: 0,
-        totalDurationMs: 0,
-        minFrequencyIndex: null,
-        maxFrequencyIndex: null,
-        minIntensity: null,
-        maxIntensity: null,
-        meanIntensity: null
-      })
-    : streamStats(effectiveStream);
+  const stats =
+    effectiveStream === null
+      ? Object.freeze({
+          pointCount: 0,
+          totalDurationMs: 0,
+          minFrequencyIndex: null,
+          maxFrequencyIndex: null,
+          minIntensity: null,
+          maxIntensity: null,
+          meanIntensity: null
+        })
+      : streamStats(effectiveStream);
   const targetDuration = sections.reduce((sum, item) => sum + item.targetDurationMs, 0);
-  const effectiveDuration = effectiveStream?.totalDurationMs ??
+  const effectiveDuration =
+    effectiveStream?.totalDurationMs ??
     sections.reduce((sum, item) => sum + item.effectiveDurationMs, 0);
   const pulseMetadata: PulseMetadata = Object.freeze({
     sectionCount: pulse.sections.length,
@@ -111,7 +113,9 @@ export function projectMetadata(
     formatProfile: FORMAT_PROFILE,
     ruleVersion: rules.id,
     evidence: pulse.evidence,
-    status: options.status ?? (diagnostics.some((item) => item.severity === 'error') ? 'rejected' : 'accepted')
+    status:
+      options.status ??
+      (diagnostics.some((item) => item.severity === 'error') ? 'rejected' : 'accepted')
   });
   return Object.freeze({
     file,

@@ -47,19 +47,32 @@ describe('format and numeric matrix', () => {
     expect(parsePulse(VALID + '\r\n\r\n').accepted).toBe(false);
     const malformed = parsePulse(VALID + '+bad+0,0,0,1,1/0-1,1-1');
     expect(malformed.accepted).toBe(false);
-    expect(malformed.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.SYNTAX_INVALID_SECTION_SEPARATOR)).toBe(true);
+    expect(
+      malformed.diagnostics.some(
+        (item) => item.code === DIAGNOSTIC_CODES.SYNTAX_INVALID_SECTION_SEPARATOR
+      )
+    ).toBe(true);
   });
 
   it('accepts the supported section ceiling while rejecting one beyond it', () => {
     const section = '0,0,0,1,1/0-1,100-1';
-    const ten = 'Dungeonlab+pulse:0,1,0=' + Array.from({ length: 10 }, () => section).join('+section+');
+    const ten =
+      'Dungeonlab+pulse:0,1,0=' + Array.from({ length: 10 }, () => section).join('+section+');
     const accepted = parsePulse(ten);
     expect(accepted.accepted).toBe(true);
     expect(accepted.pulse?.sections).toHaveLength(10);
-    expect(accepted.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.SEMANTIC_UNVERIFIED_SECTION_COUNT)).toBe(true);
-    const eleven = parsePulse('Dungeonlab+pulse:0,1,0=' + Array.from({ length: 11 }, () => section).join('+section+'));
+    expect(
+      accepted.diagnostics.some(
+        (item) => item.code === DIAGNOSTIC_CODES.SEMANTIC_UNVERIFIED_SECTION_COUNT
+      )
+    ).toBe(true);
+    const eleven = parsePulse(
+      'Dungeonlab+pulse:0,1,0=' + Array.from({ length: 11 }, () => section).join('+section+')
+    );
     expect(eleven.accepted).toBe(false);
-    expect(eleven.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.RANGE_SECTION_COUNT)).toBe(true);
+    expect(
+      eleven.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.RANGE_SECTION_COUNT)
+    ).toBe(true);
   });
 });
 
@@ -70,20 +83,30 @@ describe('stream rules and provenance', () => {
       expect(parsed.pulse).not.toBeNull();
       if (parsed.pulse === null) continue;
       const section = parsed.pulse.sections[0]!;
-      expect(frequencyAt(section, 0)).toBe(mode === 1 ? 10 : mode === 2 ? 20 : mode === 3 ? 10 : 20);
-      expect(frequencyAt(section, 2)).toBe(mode === 1 ? 10 : mode === 2 ? 20 : mode === 3 ? 20 : 10);
+      expect(frequencyAt(section, 0)).toBe(
+        mode === 1 ? 10 : mode === 2 ? 20 : mode === 3 ? 10 : 20
+      );
+      expect(frequencyAt(section, 2)).toBe(
+        mode === 1 ? 10 : mode === 2 ? 20 : mode === 3 ? 20 : 10
+      );
     }
   });
 
   it('repeats complete pulse elements, inserts rest, and applies speed', () => {
-    const parsed = parsePulse('Dungeonlab+pulse:2,2,0=0,0,2,1,1/0-1,100-1+section+1,1,0,1,1/0-1,100-1');
+    const parsed = parsePulse(
+      'Dungeonlab+pulse:2,2,0=0,0,2,1,1/0-1,100-1+section+1,1,0,1,1/0-1,100-1'
+    );
     expect(parsed.pulse).not.toBeNull();
     if (parsed.pulse === null) return;
     const expanded = expandWaveform(parsed.pulse);
     expect(expanded.stream).not.toBeNull();
     expect(expanded.sectionTiming[0]?.repetitionCount).toBe(2);
     expect(expanded.stream?.points).toHaveLength(6);
-    expect(expanded.stream?.segments.map((segment) => segment.kind)).toEqual(['section', 'rest', 'section']);
+    expect(expanded.stream?.segments.map((segment) => segment.kind)).toEqual([
+      'section',
+      'rest',
+      'section'
+    ]);
     expect(expanded.stream?.totalDurationMs).toBe(400);
     const fast = expandWaveform(parsed.pulse, {}, { ...DEFAULT_RULE_SET, speedDivisor: true });
     expect(fast.stream?.timeGranularityMs).toBe(50);
@@ -95,14 +118,20 @@ describe('stream rules and provenance', () => {
     if (parsed.pulse === null) return;
     const resolved = resolveControlPoints(parsed.pulse.sections[0]!.pulseElement.points);
     expect(resolved.points.map((point) => point.origin)).toEqual([
-      'source-anchor', 'quadratic-interpolation', 'source-anchor'
+      'source-anchor',
+      'quadratic-interpolation',
+      'source-anchor'
     ]);
     expect(resolved.points[1]?.value).toBe(interpolateQuadratic(0, 100, 0.5));
     const noAnchors = parsePulse('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-0,50-0,100-0');
     expect(noAnchors.pulse).not.toBeNull();
     if (noAnchors.pulse !== null) {
       const result = resolveControlPoints(noAnchors.pulse.sections[0]!.pulseElement.points);
-      expect(result.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_UNVERIFIED)).toBe(true);
+      expect(
+        result.diagnostics.some(
+          (item) => item.code === DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_UNVERIFIED
+        )
+      ).toBe(true);
     }
   });
 });
@@ -119,7 +148,9 @@ describe('editing, validation, and rendering', () => {
     expect(history.canUndo).toBe(true);
     expect(history.current.sections[0]!.pulseElement.points[1]!.strength).toBe(40);
     history.undo();
-    expect(history.current.sections[0]!.pulseElement.points[1]!.strength).toBe(parsed.pulse.sections[0]!.pulseElement.points[1]!.strength);
+    expect(history.current.sections[0]!.pulseElement.points[1]!.strength).toBe(
+      parsed.pulse.sections[0]!.pulseElement.points[1]!.strength
+    );
     history.redo();
     expect(history.canRedo).toBe(false);
     expect(diffPulse(parsed.pulse, history.current).equal).toBe(false);
@@ -127,20 +158,24 @@ describe('editing, validation, and rendering', () => {
     expect(parsePulse(serialized.bytes).accepted).toBe(true);
   });
 
-  it('promotes an automatic point when its strength is edited so the stream keeps the user value', () => {
-    const parsed = parsePulse('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,50-0,100-1');
-    expect(parsed.pulse).not.toBeNull();
-    if (parsed.pulse === null) return;
-    const edited = setControlPointStrength(parsed.pulse, 0, 1, 40);
-    expect(edited.pulse).not.toBeNull();
-    if (edited.pulse === null) return;
-    const point = edited.pulse.sections[0]!.pulseElement.points[1]!;
-    expect(point.anchor).toBe(1);
-    expect(point.strengthDecimal).toBe('40');
-    const expanded = expandWaveform(edited.pulse);
-    expect(expanded.stream?.points[1]?.intensityDecimal).toBe('40');
-    expect(edited.changeRecords.some((record) => record.path.endsWith('.anchor'))).toBe(true);
-  });
+  it(
+    'promotes an automatic point when its strength is edited ' +
+      'so the stream keeps the user value',
+    () => {
+      const parsed = parsePulse('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,50-0,100-1');
+      expect(parsed.pulse).not.toBeNull();
+      if (parsed.pulse === null) return;
+      const edited = setControlPointStrength(parsed.pulse, 0, 1, 40);
+      expect(edited.pulse).not.toBeNull();
+      if (edited.pulse === null) return;
+      const point = edited.pulse.sections[0]!.pulseElement.points[1]!;
+      expect(point.anchor).toBe(1);
+      expect(point.strengthDecimal).toBe('40');
+      const expanded = expandWaveform(edited.pulse);
+      expect(expanded.stream?.points[1]?.intensityDecimal).toBe('40');
+      expect(edited.changeRecords.some((record) => record.path.endsWith('.anchor'))).toBe(true);
+    }
+  );
 
   it('recomputes automatic points after removing an interior anchor', () => {
     const parsed = parsePulse('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,25-0,50-1,75-0,100-1');
@@ -151,10 +186,14 @@ describe('editing, validation, and rendering', () => {
     if (removed.pulse === null) return;
     const points = removed.pulse.sections[0]!.pulseElement.points;
     expect(points.map((point) => point.strengthDecimal)).toEqual(['0', '56', '89', '100']);
-    expect(removed.changeRecords.filter((record) => record.kind === 'interpolation')).toHaveLength(2);
-    expect(expandWaveform(removed.pulse).stream?.points.slice(0, 4).map((point) => point.intensityDecimal)).toEqual([
-      '0', '56', '89', '100'
-    ]);
+    expect(removed.changeRecords.filter((record) => record.kind === 'interpolation')).toHaveLength(
+      2
+    );
+    expect(
+      expandWaveform(removed.pulse)
+        .stream?.points.slice(0, 4)
+        .map((point) => point.intensityDecimal)
+    ).toEqual(['0', '56', '89', '100']);
   });
 
   it('projects derived pulse and section metadata in semantic diffs', () => {
@@ -164,8 +203,12 @@ describe('editing, validation, and rendering', () => {
     expect(after).not.toBeNull();
     if (before === null || after === null) return;
     const diff = diffPulse(before, after);
-    expect(diff.metadata.some((entry) => entry.path === 'metadata.pulse.sourceDurationMs')).toBe(true);
-    expect(diff.metadata.some((entry) => entry.path === 'metadata.sections[0].targetDurationMs')).toBe(true);
+    expect(diff.metadata.some((entry) => entry.path === 'metadata.pulse.sourceDurationMs')).toBe(
+      true
+    );
+    expect(
+      diff.metadata.some((entry) => entry.path === 'metadata.sections[0].targetDurationMs')
+    ).toBe(true);
     expect(diff.stream.some((entry) => entry.path === 'stream.points.length')).toBe(true);
   });
 
@@ -204,7 +247,9 @@ describe('editing, validation, and rendering', () => {
         endStrength: 90,
         reviewed: true
       });
-      expect(anchored.changeRecords.filter((record) => record.path.endsWith('.anchor'))).toHaveLength(2);
+      expect(
+        anchored.changeRecords.filter((record) => record.path.endsWith('.anchor'))
+      ).toHaveLength(2);
     }
   });
 
@@ -262,7 +307,9 @@ describe('editing, validation, and rendering', () => {
       endStrength: 90,
       reviewed: true
     });
-    expect(applied.pulse?.sections[0]?.pulseElement.points.slice(0, 5).map((point) => point.strength)).toEqual(preview);
+    expect(
+      applied.pulse?.sections[0]?.pulseElement.points.slice(0, 5).map((point) => point.strength)
+    ).toEqual(preview);
   });
 
   it('rejects malformed models without throwing', () => {
@@ -299,7 +346,11 @@ describe('editing, validation, and rendering', () => {
     });
     const inconsistentSyntax = { ...parsed.syntax, globals } as never;
     expect(validateSyntax(inconsistentSyntax).valid).toBe(false);
-    expect(validateSyntax(inconsistentSyntax).diagnostics.some((item) => item.location.path === 'globals[0]')).toBe(true);
+    expect(
+      validateSyntax(inconsistentSyntax).diagnostics.some(
+        (item) => item.location.path === 'globals[0]'
+      )
+    ).toBe(true);
 
     const malformedRules = {
       ...DEFAULT_RULE_SET,
@@ -322,29 +373,40 @@ describe('editing, validation, and rendering', () => {
     const point = section.points[0]!;
     const shiftedSection = {
       ...parsed.syntax,
-      sections: [{
-        ...section,
-        span: { ...section.span, start: section.span.start + 1, column: section.span.column + 1 }
-      }]
+      sections: [
+        {
+          ...section,
+          span: { ...section.span, start: section.span.start + 1, column: section.span.column + 1 }
+        }
+      ]
     } as never;
     expect(validateSyntax(shiftedSection).valid).toBe(false);
     const staleLocation = {
       ...parsed.syntax,
-      globals: [{
-        ...parsed.syntax.globals[0],
-        span: { ...parsed.syntax.globals[0].span, line: 2, column: 1 }
-      }, parsed.syntax.globals[1], parsed.syntax.globals[2]]
+      globals: [
+        {
+          ...parsed.syntax.globals[0],
+          span: { ...parsed.syntax.globals[0].span, line: 2, column: 1 }
+        },
+        parsed.syntax.globals[1],
+        parsed.syntax.globals[2]
+      ]
     } as never;
     expect(validateSyntax(staleLocation).valid).toBe(false);
     const shiftedPoint = {
       ...parsed.syntax,
-      sections: [{
-        ...section,
-        points: [{
-          ...point,
-          span: { ...point.span, start: point.span.start + 1, column: point.span.column + 1 }
-        }, ...section.points.slice(1)]
-      }]
+      sections: [
+        {
+          ...section,
+          points: [
+            {
+              ...point,
+              span: { ...point.span, start: point.span.start + 1, column: point.span.column + 1 }
+            },
+            ...section.points.slice(1)
+          ]
+        }
+      ]
     } as never;
     expect(validateSyntax(shiftedPoint).valid).toBe(false);
   });
@@ -357,19 +419,23 @@ describe('editing, validation, and rendering', () => {
     const point = section.pulseElement.points[0]!;
     const malformed = {
       ...parsed.pulse,
-      sections: [{
-        ...section,
-        raw: undefined,
-        pulseElement: {
-          ...section.pulseElement,
-          points: [{ ...point, strengthRaw: '99' }]
+      sections: [
+        {
+          ...section,
+          raw: undefined,
+          pulseElement: {
+            ...section.pulseElement,
+            points: [{ ...point, strengthRaw: '99' }]
+          }
         }
-      }]
+      ]
     } as never;
     const result = validatePulse(malformed);
     expect(result.valid).toBe(false);
     expect(result.diagnostics.some((item) => item.location.path.endsWith('.raw'))).toBe(true);
-    expect(result.diagnostics.some((item) => item.location.path.endsWith('.strengthRaw'))).toBe(true);
+    expect(result.diagnostics.some((item) => item.location.path.endsWith('.strengthRaw'))).toBe(
+      true
+    );
   });
 
   it('enforces the source snapshot byte budget for built Pulse models', () => {
@@ -378,7 +444,9 @@ describe('editing, validation, and rendering', () => {
     if (parsed.pulse === null) return;
     const validation = validatePulse(parsed.pulse, { ...DEFAULT_RULE_SET, maxBytes: 8 });
     expect(validation.valid).toBe(false);
-    expect(validation.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.RESOURCE_BYTES_LIMIT)).toBe(true);
+    expect(
+      validation.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.RESOURCE_BYTES_LIMIT)
+    ).toBe(true);
   });
 
   it('rejects a source snapshot with the wrong format identity', () => {
@@ -406,7 +474,13 @@ describe('editing, validation, and rendering', () => {
     const scheduled: Array<() => void> = [];
     const controller = new PreviewPlaybackController(stream, {
       clock: { now: () => now },
-      scheduler: { set: (callback) => { scheduled.push(callback); return callback; }, clear: () => undefined }
+      scheduler: {
+        set: (callback) => {
+          scheduled.push(callback);
+          return callback;
+        },
+        clear: () => undefined
+      }
     });
     controller.play();
     now = stream.totalDurationMs + 1;
@@ -463,14 +537,18 @@ describe('editing, validation, and rendering', () => {
     const edited = setControlPointStrength(parsed.pulse, 0, 1, 42);
     expect(edited.pulse).not.toBeNull();
     if (edited.pulse === null) return;
-    expect(edited.pulse.sections[0]!.pulseElement.points.map((point) => point.strengthDecimal)).toEqual([
-      '0', '42', '100'
-    ]);
+    expect(
+      edited.pulse.sections[0]!.pulseElement.points.map((point) => point.strengthDecimal)
+    ).toEqual(['0', '42', '100']);
     const repeated = expandWaveform(edited.pulse).stream!;
-    expect(repeated.points.map((point) => point.source.repetitionIndex)).toEqual([0, 0, 0, 1, 1, 1]);
-    expect(repeated.points.filter((point) => point.source.controlPointIndex === 1).map((point) => point.intensityDecimal)).toEqual([
-      '42', '42'
+    expect(repeated.points.map((point) => point.source.repetitionIndex)).toEqual([
+      0, 0, 0, 1, 1, 1
     ]);
+    expect(
+      repeated.points
+        .filter((point) => point.source.controlPointIndex === 1)
+        .map((point) => point.intensityDecimal)
+    ).toEqual(['42', '42']);
   });
 
   it('renders an all-disabled pulse as a finite empty scene', () => {
@@ -487,9 +565,11 @@ describe('editing, validation, and rendering', () => {
     expect(expanded.stream.totalDurationMs).toBe(0);
     const scene = createPlotScene(expanded.stream, { width: 160, height: 160 });
     expect(scene.points).toHaveLength(0);
-    expect(scene.points.every((point) =>
-      [point.x, point.intensityY, point.frequencyY].every(Number.isFinite)
-    )).toBe(true);
+    expect(
+      scene.points.every((point) =>
+        [point.x, point.intensityY, point.frequencyY].every(Number.isFinite)
+      )
+    ).toBe(true);
     const svg = renderSvg(expanded.stream, { width: 160, height: 160 });
     expect(svg).not.toMatch(/(?:NaN|Infinity)/);
     expect(svg).toContain('<path class="intensity" d=""');

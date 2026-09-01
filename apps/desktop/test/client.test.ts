@@ -69,6 +69,10 @@ describe('Electron workspace client', () => {
     const result = await client.saveArtifact(artifact, artifact.displayName);
 
     expect(saveArtifact).toHaveBeenCalledWith({ artifact, suggestedName: 'source.qr.jpg' });
-    expect(result).toMatchObject({ operation: 'write-file', status: 'success', result: { displayName: 'source.qr (1).jpg' } });
+    expect(result).toMatchObject({
+      operation: 'write-file',
+      status: 'success',
+      result: { displayName: 'source.qr (1).jpg' }
+    });
   });
 });

@@ -23,7 +23,10 @@ interface DesktopApi {
   readonly open: () => Promise<unknown>;
   readonly inspectCurrent: () => Promise<unknown>;
   readonly decodeQr: (payload: { readonly text: string }) => Promise<unknown>;
-  readonly edit: (payload: { readonly sourceDigest: string; readonly command: EditPayload }) => Promise<unknown>;
+  readonly edit: (payload: {
+    readonly sourceDigest: string;
+    readonly command: EditPayload;
+  }) => Promise<unknown>;
   readonly assist: (payload: {
     readonly sourceDigest: string;
     readonly sectionIndex: number;
@@ -39,9 +42,21 @@ interface DesktopApi {
   readonly onHistoryReset: (listener: (value: unknown) => void) => () => void;
   readonly batchInspect: () => Promise<unknown>;
   readonly batchExport: (payload?: { readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
-  readonly renderPreview: (payload: { readonly sourceDigest: string; readonly displayName?: string; readonly format: 'svg' | 'png' | 'jpg' }) => Promise<unknown>;
-  readonly export: (payload: { readonly sourceDigest: string; readonly displayName?: string; readonly format?: 'pulse-text' | 'qr-envelope'; readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
-  readonly saveArtifact: (payload: { readonly artifact: WorkspaceArtifact; readonly suggestedName: string }) => Promise<unknown>;
+  readonly renderPreview: (payload: {
+    readonly sourceDigest: string;
+    readonly displayName?: string;
+    readonly format: 'svg' | 'png' | 'jpg';
+  }) => Promise<unknown>;
+  readonly export: (payload: {
+    readonly sourceDigest: string;
+    readonly displayName?: string;
+    readonly format?: 'pulse-text' | 'qr-envelope';
+    readonly mode?: 'source' | 'canonical';
+  }) => Promise<unknown>;
+  readonly saveArtifact: (payload: {
+    readonly artifact: WorkspaceArtifact;
+    readonly suggestedName: string;
+  }) => Promise<unknown>;
 }
 
 declare global {
@@ -62,13 +77,15 @@ function failureEnvelope(
     operation: /^[a-z][a-z0-9-]{0,79}$/.test(operation) ? operation : 'request',
     status,
     result: null,
-    diagnostics: [{
-      code,
-      severity: status === 'cancelled' ? 'info' : 'error',
-      stage: status === 'cancelled' ? 'task' : 'adapter',
-      message,
-      location: { path: '$' }
-    }]
+    diagnostics: [
+      {
+        code,
+        severity: status === 'cancelled' ? 'info' : 'error',
+        stage: status === 'cancelled' ? 'task' : 'adapter',
+        message,
+        location: { path: '$' }
+      }
+    ]
   };
 }
 
@@ -76,7 +93,11 @@ function parseEnvelope(value: unknown, operation: string): OperationEnvelope {
   const parsed = safeParseOperationEnvelope(value);
   return parsed.ok
     ? parsed.value
-    : failureEnvelope(operation, 'The desktop operation returned an invalid response.', 'PULSE_TASK_INVALID_TRANSITION');
+    : failureEnvelope(
+        operation,
+        'The desktop operation returned an invalid response.',
+        'PULSE_TASK_INVALID_TRANSITION'
+      );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,15 +105,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseExportResponse(value: unknown): WorkspaceOperation {
-  if (!isRecord(value) || !('envelope' in value)) return { envelope: parseEnvelope(value, 'export') };
+  if (!isRecord(value) || !('envelope' in value))
+    return { envelope: parseEnvelope(value, 'export') };
   const envelope = parseEnvelope(value.envelope, 'export');
   if (value.artifact === undefined) return { envelope };
-  if (!isRecord(value.artifact) ||
-      !(value.artifact.bytes instanceof Uint8Array) ||
-      typeof value.artifact.displayName !== 'string' ||
-      value.artifact.displayName.length === 0 ||
-      typeof value.artifact.contentType !== 'string') {
-    return { envelope: failureEnvelope('export', 'The desktop export artifact was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+  if (
+    !isRecord(value.artifact) ||
+    !(value.artifact.bytes instanceof Uint8Array) ||
+    typeof value.artifact.displayName !== 'string' ||
+    value.artifact.displayName.length === 0 ||
+    typeof value.artifact.contentType !== 'string'
+  ) {
+    return {
+      envelope: failureEnvelope(
+        'export',
+        'The desktop export artifact was invalid.',
+        'PULSE_TASK_INVALID_TRANSITION'
+      )
+    };
   }
   return {
     envelope,
@@ -115,16 +145,29 @@ function throwIfAborted(signal?: AbortSignal): void {
 function inspectOperation(envelope: OperationEnvelope): WorkspaceOperation {
   if (envelope.status !== 'success') return { envelope };
   const parsed = inspectDataSchema.safeParse(envelope.result);
-  if (!parsed.success) return { envelope: failureEnvelope('inspect', 'The desktop inspection result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+  if (!parsed.success)
+    return {
+      envelope: failureEnvelope(
+        'inspect',
+        'The desktop inspection result was invalid.',
+        'PULSE_TASK_INVALID_TRANSITION'
+      )
+    };
   const document = documentFromInspect(envelope, parsed.data.metadata.file.displayName);
   return document === null ? { envelope } : { envelope, document };
 }
 
-function mergeDiagnostics(operation: WorkspaceOperation, preceding: OperationEnvelope): WorkspaceOperation {
+function mergeDiagnostics(
+  operation: WorkspaceOperation,
+  preceding: OperationEnvelope
+): WorkspaceOperation {
   if (preceding.diagnostics.length === 0) return operation;
   return {
     ...operation,
-    envelope: { ...operation.envelope, diagnostics: [...preceding.diagnostics, ...operation.envelope.diagnostics] }
+    envelope: {
+      ...operation.envelope,
+      diagnostics: [...preceding.diagnostics, ...operation.envelope.diagnostics]
+    }
   };
 }
 
@@ -146,19 +189,34 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
         throwIfAborted(signal);
         return operation;
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('inspect', 'Open') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('inspect', 'Open') };
         return { envelope: failureEnvelope('inspect', 'The selected file could not be opened.') };
       }
     },
 
     async importFile(_file: WorkspaceFile, signal) {
       throwIfAborted(signal);
-      return { envelope: failureEnvelope('inspect', 'File import is provided by the native file dialog.', 'PULSE_ADAPTER_READ_FAILED', 'rejected') };
+      return {
+        envelope: failureEnvelope(
+          'inspect',
+          'File import is provided by the native file dialog.',
+          'PULSE_ADAPTER_READ_FAILED',
+          'rejected'
+        )
+      };
     },
 
     async inspect(_text: string, _displayName: string, signal) {
       throwIfAborted(signal);
-      return { envelope: failureEnvelope('inspect', 'Native inspection does not accept renderer source text.', 'PULSE_EXPORT_SOURCE_UNAVAILABLE', 'rejected') };
+      return {
+        envelope: failureEnvelope(
+          'inspect',
+          'Native inspection does not accept renderer source text.',
+          'PULSE_EXPORT_SOURCE_UNAVAILABLE',
+          'rejected'
+        )
+      };
     },
 
     async decodeQr(text, signal) {
@@ -168,7 +226,8 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
         throwIfAborted(signal);
         return operation;
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('qr-decode', 'QR decoding') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('qr-decode', 'QR decoding') };
         return { envelope: failureEnvelope('qr-decode', 'QR content could not be decoded.') };
       }
     },
@@ -176,16 +235,19 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async export(document, format, mode, signal) {
       try {
         throwIfAborted(signal);
-        const operation = parseExportResponse(await api.export({
-          sourceDigest: document.digest,
-          displayName: document.displayName,
-          format,
-          ...(format === 'pulse-text' ? { mode } : {})
-        }));
+        const operation = parseExportResponse(
+          await api.export({
+            sourceDigest: document.digest,
+            displayName: document.displayName,
+            format,
+            ...(format === 'pulse-text' ? { mode } : {})
+          })
+        );
         throwIfAborted(signal);
         return { ...operation, document };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('export', 'Export') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('export', 'Export') };
         return { envelope: failureEnvelope('export', 'The selected pulse could not be exported.') };
       }
     },
@@ -193,11 +255,19 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async renderPreview(document, format, signal) {
       try {
         throwIfAborted(signal);
-        const envelope = parseEnvelope(await api.renderPreview({ sourceDigest: document.digest, displayName: document.displayName, format }), 'render');
+        const envelope = parseEnvelope(
+          await api.renderPreview({
+            sourceDigest: document.digest,
+            displayName: document.displayName,
+            format
+          }),
+          'render'
+        );
         throwIfAborted(signal);
         return { envelope, document };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('render', 'Preview rendering') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('render', 'Preview rendering') };
         return { envelope: failureEnvelope('render', 'The preview could not be saved.') };
       }
     },
@@ -205,15 +275,23 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async edit(document, command, signal) {
       try {
         throwIfAborted(signal);
-        const editEnvelope = parseEnvelope(await api.edit({ sourceDigest: document.digest, command }), 'edit');
+        const editEnvelope = parseEnvelope(
+          await api.edit({ sourceDigest: document.digest, command }),
+          'edit'
+        );
         if (editEnvelope.status !== 'success') return { envelope: editEnvelope };
         const editParsed = editDataSchema.safeParse(editEnvelope.result);
         const inspected = inspectOperation(parseEnvelope(await api.inspectCurrent(), 'inspect'));
-        if (inspected.envelope.status !== 'success' || inspected.document === undefined) return { envelope: inspected.envelope };
+        if (inspected.envelope.status !== 'success' || inspected.document === undefined)
+          return { envelope: inspected.envelope };
         throwIfAborted(signal);
-        return { ...mergeDiagnostics(inspected, editEnvelope), ...(editParsed.success ? { editData: editParsed.data } : {}) };
+        return {
+          ...mergeDiagnostics(inspected, editEnvelope),
+          ...(editParsed.success ? { editData: editParsed.data } : {})
+        };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('edit', 'Edit') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('edit', 'Edit') };
         return { envelope: failureEnvelope('edit', 'The pulse edit could not be completed.') };
       }
     },
@@ -221,15 +299,23 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async assist(document, input, signal) {
       try {
         throwIfAborted(signal);
-        const editEnvelope = parseEnvelope(await api.assist({ sourceDigest: document.digest, ...input }), 'edit');
+        const editEnvelope = parseEnvelope(
+          await api.assist({ sourceDigest: document.digest, ...input }),
+          'edit'
+        );
         if (editEnvelope.status !== 'success') return { envelope: editEnvelope };
         const editParsed = editDataSchema.safeParse(editEnvelope.result);
         const inspected = inspectOperation(parseEnvelope(await api.inspectCurrent(), 'inspect'));
-        if (inspected.envelope.status !== 'success' || inspected.document === undefined) return { envelope: inspected.envelope };
+        if (inspected.envelope.status !== 'success' || inspected.document === undefined)
+          return { envelope: inspected.envelope };
         throwIfAborted(signal);
-        return { ...mergeDiagnostics(inspected, editEnvelope), ...(editParsed.success ? { editData: editParsed.data } : {}) };
+        return {
+          ...mergeDiagnostics(inspected, editEnvelope),
+          ...(editParsed.success ? { editData: editParsed.data } : {})
+        };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('edit', 'Curve application') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('edit', 'Curve application') };
         return { envelope: failureEnvelope('edit', 'The assisted edit could not be completed.') };
       }
     },
@@ -238,11 +324,19 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
       try {
         throwIfAborted(signal);
         const envelope = parseEnvelope(await api.diff({ sourceDigest: document.digest }), 'diff');
-        if (envelope.status === 'success' && !diffDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('diff', 'The diff result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        if (envelope.status === 'success' && !diffDataSchema.safeParse(envelope.result).success)
+          return {
+            envelope: failureEnvelope(
+              'diff',
+              'The diff result was invalid.',
+              'PULSE_TASK_INVALID_TRANSITION'
+            )
+          };
         throwIfAborted(signal);
         return { envelope };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('diff', 'Diff') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('diff', 'Diff') };
         return { envelope: failureEnvelope('diff', 'The documents could not be compared.') };
       }
     },
@@ -251,10 +345,18 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
       try {
         throwIfAborted(signal);
         const envelope = parseEnvelope(await api.batchInspect(), 'batch');
-        if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('batch', 'The batch result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success)
+          return {
+            envelope: failureEnvelope(
+              'batch',
+              'The batch result was invalid.',
+              'PULSE_TASK_INVALID_TRANSITION'
+            )
+          };
         return { envelope };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('batch', 'Batch task') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('batch', 'Batch task') };
         return { envelope: failureEnvelope('batch', 'The batch task could not be completed.') };
       }
     },
@@ -262,11 +364,22 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async batchExport(_files, mode, signal) {
       try {
         throwIfAborted(signal);
-        const envelope = parseEnvelope(await api.batchExport(mode === undefined ? {} : { mode }), 'batch');
-        if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success) return { envelope: failureEnvelope('batch', 'The batch result was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+        const envelope = parseEnvelope(
+          await api.batchExport(mode === undefined ? {} : { mode }),
+          'batch'
+        );
+        if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success)
+          return {
+            envelope: failureEnvelope(
+              'batch',
+              'The batch result was invalid.',
+              'PULSE_TASK_INVALID_TRANSITION'
+            )
+          };
         return { envelope };
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('batch', 'Batch export') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('batch', 'Batch export') };
         return { envelope: failureEnvelope('batch', 'The batch export could not be completed.') };
       }
     },
@@ -274,24 +387,34 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async undo(document, _target, signal) {
       try {
         throwIfAborted(signal);
-        const operation = inspectOperation(parseEnvelope(await api.undo({ sourceDigest: document.digest }), 'undo'));
+        const operation = inspectOperation(
+          parseEnvelope(await api.undo({ sourceDigest: document.digest }), 'undo')
+        );
         throwIfAborted(signal);
         return operation;
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('undo', 'Undo') };
-        return { envelope: failureEnvelope('undo', 'The earlier pulse snapshot could not be restored.') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('undo', 'Undo') };
+        return {
+          envelope: failureEnvelope('undo', 'The earlier pulse snapshot could not be restored.')
+        };
       }
     },
 
     async redo(document, _target, signal) {
       try {
         throwIfAborted(signal);
-        const operation = inspectOperation(parseEnvelope(await api.redo({ sourceDigest: document.digest }), 'redo'));
+        const operation = inspectOperation(
+          parseEnvelope(await api.redo({ sourceDigest: document.digest }), 'redo')
+        );
         throwIfAborted(signal);
         return operation;
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('redo', 'Redo') };
-        return { envelope: failureEnvelope('redo', 'The later pulse snapshot could not be restored.') };
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('redo', 'Redo') };
+        return {
+          envelope: failureEnvelope('redo', 'The later pulse snapshot could not be restored.')
+        };
       }
     },
 
@@ -303,11 +426,15 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async saveArtifact(artifact: WorkspaceArtifact, suggestedName: string, signal) {
       try {
         throwIfAborted(signal);
-        const envelope = parseEnvelope(await api.saveArtifact({ artifact, suggestedName }), 'export');
+        const envelope = parseEnvelope(
+          await api.saveArtifact({ artifact, suggestedName }),
+          'export'
+        );
         throwIfAborted(signal);
         return envelope;
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return cancelled('export', 'Export');
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return cancelled('export', 'Export');
         return failureEnvelope('export', 'The exported artifact could not be saved.');
       }
     },

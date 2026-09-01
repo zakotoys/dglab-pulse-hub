@@ -18,29 +18,37 @@ describe('web workspace client', () => {
       streamDigest: '0123456789abcdef',
       contentType: 'image/svg+xml'
     };
-    const fetchMock = vi.fn().mockResolvedValue(new Response('<svg/>', {
-      status: 200,
-      headers: {
-        'content-type': 'image/svg+xml',
-        'content-disposition': 'attachment; filename="pulse-preview.svg"',
-        'x-pulse-result': JSON.stringify(descriptor)
-      }
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('<svg/>', {
+        status: 200,
+        headers: {
+          'content-type': 'image/svg+xml',
+          'content-disposition': 'attachment; filename="pulse-preview.svg"',
+          'x-pulse-result': JSON.stringify(descriptor)
+        }
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
-    const operation = await createWebWorkspaceClient().renderPreview({
-      displayName: 'source.pulse',
-      digest: 'fedcba9876543210',
-      text: SOURCE
-    }, 'svg');
+    const operation = await createWebWorkspaceClient().renderPreview(
+      {
+        displayName: 'source.pulse',
+        digest: 'fedcba9876543210',
+        text: SOURCE
+      },
+      'svg'
+    );
 
     expect(operation.envelope.status).toBe('success');
     expect(operation.envelope.result).toEqual(descriptor);
     expect(operation.artifact?.displayName).toBe('pulse-preview.svg');
     expect(operation.artifact?.bytes.byteLength).toBe(6);
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/pulses/preview', expect.objectContaining({
-      method: 'POST'
-    }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/pulses/preview',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    );
   });
 
   it('uses a JPEG fallback name for QR image exports', async () => {
@@ -53,20 +61,26 @@ describe('web workspace client', () => {
       roundTripVerified: true,
       contentType: 'image/jpeg'
     };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
-      status: 200,
-      headers: {
-        'content-type': 'image/jpeg',
-        'x-pulse-result': JSON.stringify(descriptor)
-      }
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+          'x-pulse-result': JSON.stringify(descriptor)
+        }
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
-    const operation = await createWebWorkspaceClient().export({
-      displayName: 'source.pulse',
-      digest: 'fedcba9876543210',
-      text: SOURCE
-    }, 'qr-envelope', 'canonical');
+    const operation = await createWebWorkspaceClient().export(
+      {
+        displayName: 'source.pulse',
+        digest: 'fedcba9876543210',
+        text: SOURCE
+      },
+      'qr-envelope',
+      'canonical'
+    );
 
     expect(operation.envelope.status).toBe('success');
     expect(operation.artifact?.displayName).toBe('pulse.qr.jpg');
@@ -84,21 +98,29 @@ describe('web workspace client', () => {
       roundTripVerified: true,
       contentType: 'image/jpeg'
     };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
-      status: 200,
-      headers: {
-        'content-type': 'image/jpeg',
-        'content-disposition': 'attachment; filename="132-____.qr.jpg"; filename*=UTF-8\'\'132-%E6%BC%82%E6%B5%AE%E4%B9%8B%E7%BE%BD.qr.jpg',
-        'x-pulse-result': JSON.stringify(descriptor)
-      }
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+          'content-disposition':
+            'attachment; filename="132-____.qr.jpg"; filename*=UTF-8\'\'' +
+            '132-%E6%BC%82%E6%B5%AE%E4%B9%8B%E7%BE%BD.qr.jpg',
+          'x-pulse-result': JSON.stringify(descriptor)
+        }
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
-    const operation = await createWebWorkspaceClient().export({
-      displayName: '132-漂浮之羽.pulse',
-      digest: 'fedcba9876543210',
-      text: SOURCE
-    }, 'qr-envelope', 'canonical');
+    const operation = await createWebWorkspaceClient().export(
+      {
+        displayName: '132-漂浮之羽.pulse',
+        digest: 'fedcba9876543210',
+        text: SOURCE
+      },
+      'qr-envelope',
+      'canonical'
+    );
 
     expect(operation.envelope.status).toBe('success');
     expect(operation.artifact?.displayName).toBe('132-漂浮之羽.qr.jpg');
@@ -111,18 +133,22 @@ describe('web workspace client', () => {
       operation: 'batch',
       status: 'rejected',
       result: null,
-      diagnostics: [{
-        code: 'PULSE_TASK_INPUT_LIMIT',
-        severity: 'error',
-        stage: 'resource',
-        message: 'Batch input was rejected.',
-        location: { path: '$' }
-      }]
+      diagnostics: [
+        {
+          code: 'PULSE_TASK_INPUT_LIMIT',
+          severity: 'error',
+          stage: 'resource',
+          message: 'Batch input was rejected.',
+          location: { path: '$' }
+        }
+      ]
     } as const;
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(responseEnvelope), {
-      status: 422,
-      headers: { 'content-type': 'application/json' }
-    }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(responseEnvelope), {
+        status: 422,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const operation = await createWebWorkspaceClient().batchExport([

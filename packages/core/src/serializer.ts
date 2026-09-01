@@ -5,12 +5,7 @@ import {
   makeDiagnostic,
   sortDiagnostics
 } from './diagnostics.js';
-import {
-  decodeUtf8,
-  encodeUtf8,
-  normalizeDecimal,
-  stableDigest
-} from './numbers.js';
+import { decodeUtf8, encodeUtf8, normalizeDecimal, stableDigest } from './numbers.js';
 import { parsePulseText } from './parser.js';
 import { validatePulse } from './validator.js';
 import {
@@ -24,8 +19,13 @@ import {
 } from './types.js';
 
 function isRecordPulse(value: unknown): value is Pulse {
-  return typeof value === 'object' && value !== null &&
-    'source' in value && 'sections' in value && 'globals' in value;
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'source' in value &&
+    'sections' in value &&
+    'globals' in value
+  );
 }
 
 export function canonicalPulseText(pulse: Pulse): string {
@@ -34,19 +34,21 @@ export function canonicalPulseText(pulse: Pulse): string {
     String(pulse.globals.playbackSpeed),
     String(pulse.globals.frequencyBalanceIndex)
   ].join(',');
-  const sections = pulse.sections.map((section) => {
-    const header = [
-      String(section.frequencyStartIndex),
-      String(section.frequencyEndIndex),
-      String(section.durationIndex),
-      String(section.frequencyMode),
-      section.enabled ? '1' : '0'
-    ].join(',');
-    const points = section.pulseElement.points
-      .map((point) => normalizeDecimal(point.strengthDecimal) + '-' + String(point.anchor))
-      .join(',');
-    return header + '/' + points;
-  }).join('+section+');
+  const sections = pulse.sections
+    .map((section) => {
+      const header = [
+        String(section.frequencyStartIndex),
+        String(section.frequencyEndIndex),
+        String(section.durationIndex),
+        String(section.frequencyMode),
+        section.enabled ? '1' : '0'
+      ].join(',');
+      const points = section.pulseElement.points
+        .map((point) => normalizeDecimal(point.strengthDecimal) + '-' + String(point.anchor))
+        .join(',');
+      return header + '/' + points;
+    })
+    .join('+section+');
   return PULSE_PREFIX + globals + '=' + sections;
 }
 
@@ -64,7 +66,9 @@ export function serializePulse(
   const requestedMode = options.mode as string | undefined;
   let mode: 'canonical' | 'source' =
     requestedMode === undefined
-      ? (isRecordPulse(pulse) && pulse.revision === 0 && pulse.changeRecords.length === 0 ? 'source' : 'canonical')
+      ? isRecordPulse(pulse) && pulse.revision === 0 && pulse.changeRecords.length === 0
+        ? 'source'
+        : 'canonical'
       : requestedMode === 'source' || requestedMode === 'canonical'
         ? requestedMode
         : 'canonical';
@@ -138,18 +142,26 @@ export function serializePulse(
     text = canonicalPulseText(pulse);
     bytes = encodeUtf8(text);
     if (text !== pulse.source.text) {
-      changes.push(Object.freeze({
-        id: 'format-normalization-' + stableDigest(encodeUtf8(JSON.stringify({
-          revision: pulse.revision,
+      changes.push(
+        Object.freeze({
+          id:
+            'format-normalization-' +
+            stableDigest(
+              encodeUtf8(
+                JSON.stringify({
+                  revision: pulse.revision,
+                  before: pulse.source.text,
+                  after: text
+                })
+              )
+            ),
+          kind: 'format-normalization',
+          description: 'Canonical serialization normalized separators and numeric lexemes.',
+          path: '$',
           before: pulse.source.text,
           after: text
-        }))),
-        kind: 'format-normalization',
-        description: 'Canonical serialization normalized separators and numeric lexemes.',
-        path: '$',
-        before: pulse.source.text,
-        after: text
-      }));
+        })
+      );
     }
   }
   if (options.validate !== false) {

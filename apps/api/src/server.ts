@@ -1,8 +1,4 @@
-import Fastify, {
-  type FastifyInstance,
-  type FastifyReply,
-  type FastifyRequest
-} from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import { realpathSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
@@ -40,10 +36,7 @@ import {
   type ControlPoint,
   type Diagnostic
 } from '@dglab-pulse-hub/core';
-import {
-  batchExportRequestSchema,
-  batchRequestSchema
-} from '@dglab-pulse-hub/contracts';
+import { batchExportRequestSchema, batchRequestSchema } from '@dglab-pulse-hub/contracts';
 
 export interface ApiOptions {
   readonly maxBytes?: number;
@@ -93,9 +86,14 @@ function validIndex(value: unknown): value is number {
 function isOrigin(value: string): boolean {
   try {
     const parsed = new URL(value);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-      parsed.username === '' && parsed.password === '' &&
-      parsed.pathname === '/' && parsed.search === '' && parsed.hash === '';
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      parsed.pathname === '/' &&
+      parsed.search === '' &&
+      parsed.hash === ''
+    );
   } catch {
     return false;
   }
@@ -126,46 +124,72 @@ interface BatchRequestRead {
   readonly error?: OperationResult<never>;
 }
 
-type MultipartFilePart = Extract<Awaited<ReturnType<FastifyRequest['file']>>, { readonly type: 'file' }>;
+type MultipartFilePart = Extract<
+  Awaited<ReturnType<FastifyRequest['file']>>,
+  { readonly type: 'file' }
+>;
 
 export function buildServer(options: ApiOptions = {}): FastifyInstance {
   if (options.maxBytes !== undefined && !validPositiveSafeInteger(options.maxBytes)) {
     throw new RangeError('API maxBytes must be a positive safe integer.');
   }
-  if (options.maxExpandedPoints !== undefined && !validPositiveSafeInteger(options.maxExpandedPoints)) {
+  if (
+    options.maxExpandedPoints !== undefined &&
+    !validPositiveSafeInteger(options.maxExpandedPoints)
+  ) {
     throw new RangeError('API maxExpandedPoints must be a positive safe integer.');
   }
-  if (options.maxExpandedDurationMs !== undefined && !validPositiveSafeInteger(options.maxExpandedDurationMs)) {
+  if (
+    options.maxExpandedDurationMs !== undefined &&
+    !validPositiveSafeInteger(options.maxExpandedDurationMs)
+  ) {
     throw new RangeError('API maxExpandedDurationMs must be a positive safe integer.');
   }
   if (options.maxBatchFiles !== undefined && !validPositiveSafeInteger(options.maxBatchFiles)) {
     throw new RangeError('API maxBatchFiles must be a positive safe integer.');
   }
-  if (options.maxBatchTotalBytes !== undefined && !validPositiveSafeInteger(options.maxBatchTotalBytes)) {
+  if (
+    options.maxBatchTotalBytes !== undefined &&
+    !validPositiveSafeInteger(options.maxBatchTotalBytes)
+  ) {
     throw new RangeError('API maxBatchTotalBytes must be a positive safe integer.');
   }
-  if (options.batchConcurrency !== undefined && !validPositiveSafeInteger(options.batchConcurrency)) {
+  if (
+    options.batchConcurrency !== undefined &&
+    !validPositiveSafeInteger(options.batchConcurrency)
+  ) {
     throw new RangeError('API batchConcurrency must be a positive safe integer.');
   }
-  if (options.processingTimeoutMs !== undefined && !validPositiveSafeInteger(options.processingTimeoutMs)) {
+  if (
+    options.processingTimeoutMs !== undefined &&
+    !validPositiveSafeInteger(options.processingTimeoutMs)
+  ) {
     throw new RangeError('API processingTimeoutMs must be a positive safe integer.');
   }
-  if (options.artifactLifetimeMs !== undefined && !validPositiveSafeInteger(options.artifactLifetimeMs)) {
+  if (
+    options.artifactLifetimeMs !== undefined &&
+    !validPositiveSafeInteger(options.artifactLifetimeMs)
+  ) {
     throw new RangeError('API artifactLifetimeMs must be a positive safe integer.');
   }
-  if (options.artifactCleanupIntervalMs !== undefined && !validPositiveSafeInteger(options.artifactCleanupIntervalMs)) {
+  if (
+    options.artifactCleanupIntervalMs !== undefined &&
+    !validPositiveSafeInteger(options.artifactCleanupIntervalMs)
+  ) {
     throw new RangeError('API artifactCleanupIntervalMs must be a positive safe integer.');
   }
-  if (options.corsOrigin !== undefined &&
-      (typeof options.corsOrigin !== 'string' || options.corsOrigin.length === 0 ||
-       (options.corsOrigin !== '*' && !isOrigin(options.corsOrigin)))) {
+  if (
+    options.corsOrigin !== undefined &&
+    (typeof options.corsOrigin !== 'string' ||
+      options.corsOrigin.length === 0 ||
+      (options.corsOrigin !== '*' && !isOrigin(options.corsOrigin)))
+  ) {
     throw new RangeError('API corsOrigin must be "*" or a valid origin.');
   }
   const limits = { ...DEFAULT_API_LIMITS, ...options };
-  const artifactStore = options.artifactStore ?? new TempArtifactStore(
-    limits.artifactLifetimeMs,
-    limits.artifactCleanupIntervalMs
-  );
+  const artifactStore =
+    options.artifactStore ??
+    new TempArtifactStore(limits.artifactLifetimeMs, limits.artifactCleanupIntervalMs);
   const ownsArtifactStore = options.artifactStore === undefined;
   const app = Fastify({
     logger: options.logger === true,
@@ -198,17 +222,33 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
     reply.header('x-frame-options', 'DENY');
     reply.header('referrer-policy', 'no-referrer');
     reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
-    reply.header('cross-origin-resource-policy', options.corsOrigin === undefined ? 'same-origin' : 'cross-origin');
+    reply.header(
+      'cross-origin-resource-policy',
+      options.corsOrigin === undefined ? 'same-origin' : 'cross-origin'
+    );
     reply.header('cache-control', 'no-store');
-    const requestOrigin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
-    const corsAllowed = options.corsOrigin !== undefined &&
-      (options.corsOrigin === '*' || requestOrigin === undefined || requestOrigin === options.corsOrigin);
+    const requestOrigin =
+      typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+    const corsAllowed =
+      options.corsOrigin !== undefined &&
+      (options.corsOrigin === '*' ||
+        requestOrigin === undefined ||
+        requestOrigin === options.corsOrigin);
     if (corsAllowed) {
       reply.header('access-control-allow-origin', options.corsOrigin);
       reply.header('access-control-allow-methods', 'GET,POST,OPTIONS');
       reply.header('access-control-allow-headers', 'content-type');
       reply.header('access-control-max-age', '600');
-      reply.header('access-control-expose-headers', 'content-disposition,x-pulse-result,x-pulse-schema-version,x-pulse-rule-version,x-pulse-stream-digest');
+      reply.header(
+        'access-control-expose-headers',
+        [
+          'content-disposition',
+          'x-pulse-result',
+          'x-pulse-schema-version',
+          'x-pulse-rule-version',
+          'x-pulse-stream-digest'
+        ].join(',')
+      );
       reply.header('vary', 'Origin');
     }
     return payload;
@@ -216,8 +256,13 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
 
   if (options.corsOrigin !== undefined) {
     app.options('*', async (request, reply) => {
-      const requestOrigin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
-      if (options.corsOrigin !== '*' && requestOrigin !== undefined && requestOrigin !== options.corsOrigin) {
+      const requestOrigin =
+        typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+      if (
+        options.corsOrigin !== '*' &&
+        requestOrigin !== undefined &&
+        requestOrigin !== options.corsOrigin
+      ) {
         return reply.code(403).send();
       }
       return reply.code(204).send();
@@ -274,7 +319,8 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
     try {
       const parsed = await readBatchRequest(request, limits, requestSignal.signal, 'inspect');
       if (parsed.error !== undefined) return sendEnvelope(reply, parsed.error);
-      if (parsed.request === null) return sendEnvelope(reply, batchRequestFailure('Batch request could not be read.'));
+      if (parsed.request === null)
+        return sendEnvelope(reply, batchRequestFailure('Batch request could not be read.'));
       const result = await inspectBatch(parsed.request.inputs, {
         concurrency: parsed.request.concurrency,
         maxFiles: limits.maxBatchFiles,
@@ -295,15 +341,19 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
     try {
       const parsed = await readBatchRequest(request, limits, requestSignal.signal, 'export');
       if (parsed.error !== undefined) return sendEnvelope(reply, parsed.error);
-      if (parsed.request === null) return sendEnvelope(reply, batchRequestFailure('Batch request could not be read.'));
-      const result = await exportBatch(parsed.request.inputs as readonly (BatchInput & { readonly outputDisplayName?: string })[], {
-        concurrency: parsed.request.concurrency,
-        maxFiles: limits.maxBatchFiles,
-        maxTotalBytes: parsed.request.maxTotalBytes,
-        maxBytes: limits.maxBytes,
-        mode: parsed.request.mode,
-        signal: requestSignal.signal
-      });
+      if (parsed.request === null)
+        return sendEnvelope(reply, batchRequestFailure('Batch request could not be read.'));
+      const result = await exportBatch(
+        parsed.request.inputs as readonly (BatchInput & { readonly outputDisplayName?: string })[],
+        {
+          concurrency: parsed.request.concurrency,
+          maxFiles: limits.maxBatchFiles,
+          maxTotalBytes: parsed.request.maxTotalBytes,
+          maxBytes: limits.maxBytes,
+          mode: parsed.request.mode,
+          signal: requestSignal.signal
+        }
+      );
       const effective = requestResult(result, requestSignal.signal);
       if (effective.status !== 'success' || effective.data === null) {
         return sendEnvelope(reply, effective);
@@ -321,7 +371,10 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       const parsed = await readDiffRequest(request, limits, requestSignal.signal);
       if (parsed.error !== undefined) return sendEnvelope(reply, parsed.error);
       if (parsed.before === null || parsed.after === null) {
-        return sendEnvelope(reply, batchRequestFailure('Diff request must contain before and after documents.'));
+        return sendEnvelope(
+          reply,
+          batchRequestFailure('Diff request must contain before and after documents.')
+        );
       }
       const result = diffPulses(parsed.before.content, parsed.after.content, {
         maxBytes: limits.maxBytes,
@@ -349,21 +402,24 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       });
       if (typeError !== null) return sendEnvelope(reply, typeError);
       const requestedFormat = body?.format;
-      const format = requestedFormat === undefined
-        ? undefined
-        : requestedFormat as 'pulse-text' | 'qr-envelope';
+      const format =
+        requestedFormat === undefined
+          ? undefined
+          : (requestedFormat as 'pulse-text' | 'qr-envelope');
       const mode = body?.mode as 'canonical' | 'source' | undefined;
       const result = exportPulse(input.content, {
         maxBytes: limits.maxBytes,
-        displayName: typeof body?.displayName === 'string'
-          ? sanitizeDisplayName(body.displayName)
-          : 'pulse.pulse',
+        displayName:
+          typeof body?.displayName === 'string'
+            ? sanitizeDisplayName(body.displayName)
+            : 'pulse.pulse',
         format,
         mode,
         signal: requestSignal.signal
       });
       const effective = requestResult(result, requestSignal.signal);
-      if (effective.status !== 'success' || effective.data === null) return sendEnvelope(reply, effective);
+      if (effective.status !== 'success' || effective.data === null)
+        return sendEnvelope(reply, effective);
       const displayName = sanitizeDisplayName(effective.data.displayName);
       const headerSafeDisplayName = asciiDisplayName(displayName);
       const dto = toOperationDto({
@@ -395,12 +451,24 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       const decoded = decodeQr(input.text, { maxDecodedBytes: limits.maxBytes });
       const diagnostics = [...decoded.diagnostics];
       if (!decoded.accepted || decoded.pulseText === null) {
-        return sendEnvelope(reply, requestResult(operationResult('qr-decode', 'rejected', null, diagnostics), requestSignal.signal));
+        return sendEnvelope(
+          reply,
+          requestResult(
+            operationResult('qr-decode', 'rejected', null, diagnostics),
+            requestSignal.signal
+          )
+        );
       }
       const parsed = parsePulse(decoded.pulseText, { maxBytes: limits.maxBytes });
       diagnostics.push(...parsed.diagnostics);
       if (parsed.pulse === null || diagnostics.some((item) => item.severity === 'error')) {
-        return sendEnvelope(reply, requestResult(operationResult('qr-decode', 'rejected', null, diagnostics), requestSignal.signal));
+        return sendEnvelope(
+          reply,
+          requestResult(
+            operationResult('qr-decode', 'rejected', null, diagnostics),
+            requestSignal.signal
+          )
+        );
       }
       let stagedArtifactId: string | null = null;
       try {
@@ -411,23 +479,44 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
           { contentType: 'text/plain' },
           requestSignal.signal
         );
-        if (artifact === null) return requestSignal.signal.aborted
-          ? sendEnvelope(reply, requestCancelled(requestSignal.signal))
-          : sendEnvelope(reply, operationResult('qr-decode', 'failed', null, [
-              adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Decoded QR content could not be staged for download.')
-            ]));
+        if (artifact === null)
+          return requestSignal.signal.aborted
+            ? sendEnvelope(reply, requestCancelled(requestSignal.signal))
+            : sendEnvelope(
+                reply,
+                operationResult('qr-decode', 'failed', null, [
+                  adapterDiagnostic(
+                    DIAGNOSTIC_CODES.ADAPTER_WRITE,
+                    'Decoded QR content could not be staged for download.'
+                  )
+                ])
+              );
         stagedArtifactId = artifact.id;
-        const effective = requestResult(operationResult('qr-decode', 'success', {
-          pulseText: decoded.pulseText,
-          downloadId: artifact.id
-        }, diagnostics), requestSignal.signal);
+        const effective = requestResult(
+          operationResult(
+            'qr-decode',
+            'success',
+            {
+              pulseText: decoded.pulseText,
+              downloadId: artifact.id
+            },
+            diagnostics
+          ),
+          requestSignal.signal
+        );
         if (effective.status !== 'success') await artifactStore.remove(artifact.id);
         return sendEnvelope(reply, effective);
       } catch {
         if (stagedArtifactId !== null) await artifactStore.remove(stagedArtifactId);
-        return sendEnvelope(reply, operationResult('qr-decode', 'failed', null, [
-          adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Decoded QR content could not be staged for download.')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('qr-decode', 'failed', null, [
+            adapterDiagnostic(
+              DIAGNOSTIC_CODES.ADAPTER_WRITE,
+              'Decoded QR content could not be staged for download.'
+            )
+          ])
+        );
       }
     } finally {
       requestSignal.dispose();
@@ -447,23 +536,32 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       try {
         text = new TextDecoder('utf-8', { fatal: true }).decode(input.content);
       } catch {
-        return sendEnvelope(reply, operationResult('qr-encode', 'rejected', null, [
-          makeDiagnostic(
-            DIAGNOSTIC_CODES.RECOGNIZE_INVALID_ENCODING,
-            'error',
-            'recognize',
-            'Input is not valid UTF-8.',
-            location('$')
-          )
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('qr-encode', 'rejected', null, [
+            makeDiagnostic(
+              DIAGNOSTIC_CODES.RECOGNIZE_INVALID_ENCODING,
+              'error',
+              'recognize',
+              'Input is not valid UTF-8.',
+              location('$')
+            )
+          ])
+        );
       }
       const encoded = encodeQr(text, { maxDecodedBytes: limits.maxBytes });
-      return sendEnvelope(reply, requestResult(operationResult(
-        'qr-encode',
-        encoded.content === null ? 'rejected' : 'success',
-        encoded.content === null ? null : { content: encoded.content },
-        encoded.diagnostics
-      ), requestSignal.signal));
+      return sendEnvelope(
+        reply,
+        requestResult(
+          operationResult(
+            'qr-encode',
+            encoded.content === null ? 'rejected' : 'success',
+            encoded.content === null ? null : { content: encoded.content },
+            encoded.diagnostics
+          ),
+          requestSignal.signal
+        )
+      );
     } finally {
       requestSignal.dispose();
     }
@@ -474,8 +572,16 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
     try {
       const body = jsonBody(request);
       const bodyError = validateJsonKeys(body, [
-        'text', 'displayName', 'kind', 'sectionIndex', 'pointIndex', 'value',
-        'startIndex', 'endIndex', 'atIndex', 'anchor'
+        'text',
+        'displayName',
+        'kind',
+        'sectionIndex',
+        'pointIndex',
+        'value',
+        'startIndex',
+        'endIndex',
+        'atIndex',
+        'anchor'
       ]);
       if (bodyError !== null) return sendEnvelope(reply, bodyError);
       const typeError = validateJsonFieldTypes(body, {
@@ -493,19 +599,29 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       if (typeError !== null) return sendEnvelope(reply, typeError);
       const text = typeof body?.text === 'string' ? body.text : null;
       if (text === null) {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-          editDiagnostic('Input must contain a text string.', 'text')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, [
+            editDiagnostic('Input must contain a text string.', 'text')
+          ])
+        );
       }
       const commandResult = editCommandFromBody(body ?? {});
       if (commandResult.command === null) {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, commandResult.diagnostics));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, commandResult.diagnostics)
+        );
       }
       if (encodeUtf8(text).byteLength > limits.maxBytes) {
         return sendEnvelope(reply, rejectedInput('Request exceeds the configured byte limit.'));
       }
       const edited = requestResult(
-        applyPulseEdit(text, { command: commandResult.command, maxBytes: limits.maxBytes, signal: requestSignal.signal }),
+        applyPulseEdit(text, {
+          command: commandResult.command,
+          maxBytes: limits.maxBytes,
+          signal: requestSignal.signal
+        }),
         requestSignal.signal
       );
       if (edited.status !== 'success' || edited.data === null) return sendEnvelope(reply, edited);
@@ -513,31 +629,53 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       try {
         const artifact = await putRequestArtifact(
           artifactStore,
-          sanitizeDisplayName(typeof body?.displayName === 'string' ? body.displayName : 'edited.pulse'),
+          sanitizeDisplayName(
+            typeof body?.displayName === 'string' ? body.displayName : 'edited.pulse'
+          ),
           edited.data.bytes,
           { contentType: 'text/plain' },
           requestSignal.signal
         );
-        if (artifact === null) return requestSignal.signal.aborted
-          ? sendEnvelope(reply, requestCancelled(requestSignal.signal))
-          : sendEnvelope(reply, operationResult('edit', 'failed', null, [
-              adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Edited content could not be staged for download.')
-            ]));
+        if (artifact === null)
+          return requestSignal.signal.aborted
+            ? sendEnvelope(reply, requestCancelled(requestSignal.signal))
+            : sendEnvelope(
+                reply,
+                operationResult('edit', 'failed', null, [
+                  adapterDiagnostic(
+                    DIAGNOSTIC_CODES.ADAPTER_WRITE,
+                    'Edited content could not be staged for download.'
+                  )
+                ])
+              );
         stagedArtifactId = artifact.id;
-        const withArtifact = operationResult('edit', 'success', {
-          ...edited.data,
-          downloadId: artifact.id,
-          contentType: 'text/plain'
-        }, edited.diagnostics);
+        const withArtifact = operationResult(
+          'edit',
+          'success',
+          {
+            ...edited.data,
+            downloadId: artifact.id,
+            contentType: 'text/plain'
+          },
+          edited.diagnostics
+        );
         return sendEnvelope(reply, withArtifact);
       } catch {
         if (stagedArtifactId !== null) await artifactStore.remove(stagedArtifactId);
         throw new Error('artifact-send-failed');
       }
     } catch {
-      return sendEnvelope(reply, requestSignal.signal.aborted ? requestCancelled(requestSignal.signal) : operationResult('edit', 'failed', null, [
-        adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Edited content could not be staged for download.')
-      ]));
+      return sendEnvelope(
+        reply,
+        requestSignal.signal.aborted
+          ? requestCancelled(requestSignal.signal)
+          : operationResult('edit', 'failed', null, [
+              adapterDiagnostic(
+                DIAGNOSTIC_CODES.ADAPTER_WRITE,
+                'Edited content could not be staged for download.'
+              )
+            ])
+      );
     } finally {
       requestSignal.dispose();
     }
@@ -548,33 +686,57 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
     try {
       const body = jsonBody(request);
       const bodyError = validateJsonKeys(body, [
-        'text', 'displayName', 'sectionIndex', 'startPointIndex', 'endPointIndex',
-        'startStrength', 'endStrength', 'reviewed'
+        'text',
+        'displayName',
+        'sectionIndex',
+        'startPointIndex',
+        'endPointIndex',
+        'startStrength',
+        'endStrength',
+        'reviewed'
       ]);
       if (bodyError !== null) return sendEnvelope(reply, bodyError);
       if (body === null || typeof body.text !== 'string') {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-          editDiagnostic('Assist input must contain a text string.', 'text')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, [
+            editDiagnostic('Assist input must contain a text string.', 'text')
+          ])
+        );
       }
       if (body.displayName !== undefined && typeof body.displayName !== 'string') {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-          editDiagnostic('Assist displayName must be text.', 'displayName')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, [
+            editDiagnostic('Assist displayName must be text.', 'displayName')
+          ])
+        );
       }
-      const numericFields = ['sectionIndex', 'startPointIndex', 'endPointIndex', 'startStrength', 'endStrength'] as const;
+      const numericFields = [
+        'sectionIndex',
+        'startPointIndex',
+        'endPointIndex',
+        'startStrength',
+        'endStrength'
+      ] as const;
       for (const field of numericFields) {
         const value = body[field];
         if (typeof value !== 'number' || !Number.isFinite(value)) {
-          return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-            editDiagnostic('Assist field has an invalid numeric value.', field)
-          ]));
+          return sendEnvelope(
+            reply,
+            operationResult('edit', 'rejected', null, [
+              editDiagnostic('Assist field has an invalid numeric value.', field)
+            ])
+          );
         }
       }
       if (typeof body.reviewed !== 'boolean') {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-          editDiagnostic('Assist must include an explicit reviewed boolean.', 'reviewed')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, [
+            editDiagnostic('Assist must include an explicit reviewed boolean.', 'reviewed')
+          ])
+        );
       }
       const sectionIndex = body.sectionIndex as number;
       const startPointIndex = body.startPointIndex as number;
@@ -582,17 +744,24 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       const startStrength = body.startStrength as number;
       const endStrength = body.endStrength as number;
       if (![sectionIndex, startPointIndex, endPointIndex].every(validIndex)) {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-          editDiagnostic('Assist indexes must be non-negative safe integers.', 'command')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, [
+            editDiagnostic('Assist indexes must be non-negative safe integers.', 'command')
+          ])
+        );
       }
       if (![startStrength, endStrength].every((value) => value >= 0 && value <= 100)) {
-        return sendEnvelope(reply, operationResult('edit', 'rejected', null, [
-          editDiagnostic('Assist endpoint strengths must be between 0 and 100.', 'command')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'rejected', null, [
+            editDiagnostic('Assist endpoint strengths must be between 0 and 100.', 'command')
+          ])
+        );
       }
       const inputBytes = encodeUtf8(body.text);
-      if (inputBytes.byteLength > limits.maxBytes) return sendEnvelope(reply, rejectedInput('Request exceeds the configured byte limit.'));
+      if (inputBytes.byteLength > limits.maxBytes)
+        return sendEnvelope(reply, rejectedInput('Request exceeds the configured byte limit.'));
       const edited = applyPulseAssist(body.text, {
         maxBytes: limits.maxBytes,
         sectionIndex,
@@ -604,30 +773,47 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
         signal: requestSignal.signal
       });
       const effective = requestResult(edited, requestSignal.signal);
-      if (effective.status !== 'success' || effective.data === null) return sendEnvelope(reply, effective);
+      if (effective.status !== 'success' || effective.data === null)
+        return sendEnvelope(reply, effective);
       let artifactId: string | null = null;
       try {
         const artifact = await putRequestArtifact(
           artifactStore,
-          sanitizeDisplayName(typeof body.displayName === 'string' ? body.displayName : 'assisted.pulse'),
+          sanitizeDisplayName(
+            typeof body.displayName === 'string' ? body.displayName : 'assisted.pulse'
+          ),
           effective.data.bytes,
           { contentType: 'text/plain' },
           requestSignal.signal
         );
         if (artifact === null) return sendEnvelope(reply, requestCancelled(requestSignal.signal));
         artifactId = artifact.id;
-        const staged = requestResult(operationResult('edit', 'success', {
-          ...effective.data,
-          downloadId: artifact.id,
-          contentType: 'text/plain'
-        }, effective.diagnostics), requestSignal.signal);
+        const staged = requestResult(
+          operationResult(
+            'edit',
+            'success',
+            {
+              ...effective.data,
+              downloadId: artifact.id,
+              contentType: 'text/plain'
+            },
+            effective.diagnostics
+          ),
+          requestSignal.signal
+        );
         if (staged.status !== 'success') await artifactStore.remove(artifact.id);
         return sendEnvelope(reply, staged);
       } catch {
         if (artifactId !== null) await artifactStore.remove(artifactId);
-        return sendEnvelope(reply, operationResult('edit', 'failed', null, [
-          adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Assisted edit could not be staged for download.')
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('edit', 'failed', null, [
+            adapterDiagnostic(
+              DIAGNOSTIC_CODES.ADAPTER_WRITE,
+              'Assisted edit could not be staged for download.'
+            )
+          ])
+        );
       }
     } finally {
       requestSignal.dispose();
@@ -649,19 +835,20 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       });
       if (typeError !== null) return sendEnvelope(reply, typeError);
       const requestedFormat = body?.format;
-      const format = requestedFormat === undefined
-        ? 'svg'
-        : requestedFormat;
+      const format = requestedFormat === undefined ? 'svg' : requestedFormat;
       if (format !== 'svg' && format !== 'png' && format !== 'jpg') {
-        return sendEnvelope(reply, operationResult('render', 'rejected', null, [
-          makeDiagnostic(
-            DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_FORMAT,
-            'error',
-            'export',
-            'Preview format is not supported.',
-            location('format')
-          )
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('render', 'rejected', null, [
+            makeDiagnostic(
+              DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_FORMAT,
+              'error',
+              'export',
+              'Preview format is not supported.',
+              location('format')
+            )
+          ])
+        );
       }
       const inspected = inspectPulse(input.content, {
         input: { displayName: input.displayName, bytes: input.content.byteLength },
@@ -671,7 +858,11 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
         signal: requestSignal.signal
       });
       const effective = requestResult(inspected, requestSignal.signal);
-      if (effective.status !== 'success' || effective.data?.stream === null || effective.data?.stream === undefined) {
+      if (
+        effective.status !== 'success' ||
+        effective.data?.stream === null ||
+        effective.data?.stream === undefined
+      ) {
         return sendEnvelope(reply, effective);
       }
       try {
@@ -685,7 +876,8 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
           operationResult('render', 'success', renderResult, effective.diagnostics),
           requestSignal.signal
         );
-        if (afterRender.status !== 'success' || afterRender.data === null) return sendEnvelope(reply, afterRender);
+        if (afterRender.status !== 'success' || afterRender.data === null)
+          return sendEnvelope(reply, afterRender);
         const dto = toOperationDto(afterRender);
         return reply
           .code(200)
@@ -697,15 +889,18 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
           .header('x-pulse-result', JSON.stringify(dto.result))
           .send(Buffer.from(image.bytes));
       } catch {
-        return sendEnvelope(reply, operationResult('render', 'rejected', null, [
-          makeDiagnostic(
-            DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_FORMAT,
-            'error',
-            'export',
-            'Preview could not be encoded in the requested format.',
-            location('format')
-          )
-        ]));
+        return sendEnvelope(
+          reply,
+          operationResult('render', 'rejected', null, [
+            makeDiagnostic(
+              DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_FORMAT,
+              'error',
+              'export',
+              'Preview could not be encoded in the requested format.',
+              location('format')
+            )
+          ])
+        );
       }
     } finally {
       requestSignal.dispose();
@@ -739,24 +934,54 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
 
   app.setErrorHandler((error, _request, reply) => {
     if (reply.sent) return;
-    const errorCode = typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { readonly code?: unknown }).code)
-      : '';
-    const tooLarge = errorCode === 'FST_ERR_CTP_BODY_TOO_LARGE' || errorCode === 'FST_REQ_FILE_TOO_LARGE';
+    const errorCode =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { readonly code?: unknown }).code)
+        : '';
+    const tooLarge =
+      errorCode === 'FST_ERR_CTP_BODY_TOO_LARGE' || errorCode === 'FST_REQ_FILE_TOO_LARGE';
     const unsupported = errorCode === 'FST_ERR_CTP_INVALID_MEDIA_TYPE';
-    const invalidJson = errorCode === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
-      errorCode === 'FST_ERR_CTP_EMPTY_JSON_BODY';
+    const invalidJson =
+      errorCode === 'FST_ERR_CTP_INVALID_JSON_BODY' || errorCode === 'FST_ERR_CTP_EMPTY_JSON_BODY';
     const statusCode = tooLarge ? 413 : unsupported ? 415 : invalidJson ? 422 : 500;
     const diagnostic = tooLarge
-      ? makeDiagnostic(DIAGNOSTIC_CODES.TASK_INPUT_LIMIT, 'error', 'resource', 'Request exceeds the configured byte limit.', location('$'))
+      ? makeDiagnostic(
+          DIAGNOSTIC_CODES.TASK_INPUT_LIMIT,
+          'error',
+          'resource',
+          'Request exceeds the configured byte limit.',
+          location('$')
+        )
       : unsupported
-        ? makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT, 'error', 'recognize', 'Request content type is not supported.', location('$'))
+        ? makeDiagnostic(
+            DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+            'error',
+            'recognize',
+            'Request content type is not supported.',
+            location('$')
+          )
         : invalidJson
-          ? makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT, 'error', 'recognize', 'Request JSON body is invalid.', location('$'))
+          ? makeDiagnostic(
+              DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+              'error',
+              'recognize',
+              'Request JSON body is invalid.',
+              location('$')
+            )
           : adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_READ, 'Request could not be processed.');
-    reply.code(statusCode).type('application/json').send(toOperationDto(
-      operationResult('request', tooLarge || unsupported || invalidJson ? 'rejected' : 'failed', null, [diagnostic])
-    ));
+    reply
+      .code(statusCode)
+      .type('application/json')
+      .send(
+        toOperationDto(
+          operationResult(
+            'request',
+            tooLarge || unsupported || invalidJson ? 'rejected' : 'failed',
+            null,
+            [diagnostic]
+          )
+        )
+      );
   });
 
   return app;
@@ -782,7 +1007,13 @@ interface DiffRequestRead {
 
 function batchRequestFailure(message: string): OperationResult<never> {
   return operationResult('batch', 'rejected', null, [
-    makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT, 'error', 'recognize', message, location('$'))
+    makeDiagnostic(
+      DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+      'error',
+      'recognize',
+      message,
+      location('$')
+    )
   ]);
 }
 
@@ -812,15 +1043,31 @@ async function readBatchRequest(
   operation: 'inspect' | 'export'
 ): Promise<BatchRequestRead> {
   if (signal.aborted) return { request: null, error: requestCancelled(signal) };
-  const contentType = String(request.headers?.['content-type'] ?? '').split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  const contentType =
+    String(request.headers?.['content-type'] ?? '')
+      .split(';', 1)[0]
+      ?.trim()
+      .toLowerCase() ?? '';
   if (contentType === 'application/json') {
     const body = jsonBody(request);
-    if (body === null) return { request: null, error: batchRequestFailure('Batch JSON body must be an object.') };
-    const parsed = (operation === 'export' ? batchExportRequestSchema : batchRequestSchema).safeParse(body);
+    if (body === null)
+      return { request: null, error: batchRequestFailure('Batch JSON body must be an object.') };
+    const parsed = (
+      operation === 'export' ? batchExportRequestSchema : batchRequestSchema
+    ).safeParse(body);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
-      const path = issue === undefined ? '$' : issue.path.map((part) => typeof part === 'number' ? '[' + part + ']' : String(part)).join('.').replace('.[', '[');
-      return { request: null, error: invalidSchemaFailure(path, 'Batch request has an invalid shape.') };
+      const path =
+        issue === undefined
+          ? '$'
+          : issue.path
+              .map((part) => (typeof part === 'number' ? '[' + part + ']' : String(part)))
+              .join('.')
+              .replace('.[', '[');
+      return {
+        request: null,
+        error: invalidSchemaFailure(path, 'Batch request has an invalid shape.')
+      };
     }
     const value = parsed.data as {
       readonly items: readonly {
@@ -835,11 +1082,17 @@ async function readBatchRequest(
     };
     const concurrency = value.concurrency ?? limits.batchConcurrency;
     if (concurrency > limits.batchConcurrency) {
-      return { request: null, error: batchLimitFailure('Requested batch concurrency exceeds the configured limit.') };
+      return {
+        request: null,
+        error: batchLimitFailure('Requested batch concurrency exceeds the configured limit.')
+      };
     }
     const maxTotalBytes = value.maxTotalBytes ?? limits.maxBatchTotalBytes;
     if (maxTotalBytes > limits.maxBatchTotalBytes) {
-      return { request: null, error: batchLimitFailure('Requested batch byte limit exceeds the configured limit.') };
+      return {
+        request: null,
+        error: batchLimitFailure('Requested batch byte limit exceeds the configured limit.')
+      };
     }
     const inputs: BatchApiInput[] = [];
     let totalBytes = 0;
@@ -848,11 +1101,17 @@ async function readBatchRequest(
       if (item === undefined) continue;
       const bytes = encodeUtf8(item.text);
       if (bytes.byteLength > limits.maxBytes) {
-        return { request: null, error: batchLimitFailure('A batch item exceeds the configured byte limit.') };
+        return {
+          request: null,
+          error: batchLimitFailure('A batch item exceeds the configured byte limit.')
+        };
       }
       totalBytes += bytes.byteLength;
       if (totalBytes > maxTotalBytes) {
-        return { request: null, error: batchLimitFailure('Batch byte count exceeds the configured limit.') };
+        return {
+          request: null,
+          error: batchLimitFailure('Batch byte count exceeds the configured limit.')
+        };
       }
       inputs.push({
         ...(item.id === undefined ? {} : { id: item.id }),
@@ -938,7 +1197,9 @@ async function readMultipartBatchRequest(
         if (!accepted) invalidField = true;
         else if (!itemExceeded) {
           files.push({
-            displayName: sanitizeDisplayName(part.filename || 'item-' + String(fileCount).padStart(4, '0') + '.pulse'),
+            displayName: sanitizeDisplayName(
+              part.filename || 'item-' + String(fileCount).padStart(4, '0') + '.pulse'
+            ),
             content: new Uint8Array(Buffer.concat(chunks))
           });
         }
@@ -966,22 +1227,64 @@ async function readMultipartBatchRequest(
   } catch (error) {
     if (signal.aborted) return { request: null, error: requestCancelled(signal) };
     if (isMultipartLimitError(error)) {
-      return { request: null, error: batchLimitFailure('Multipart batch upload exceeds a configured limit.') };
+      return {
+        request: null,
+        error: batchLimitFailure('Multipart batch upload exceeds a configured limit.')
+      };
     }
     return { request: null, error: batchRequestFailure('Multipart batch upload is invalid.') };
   }
   if (signal.aborted) return { request: null, error: requestCancelled(signal) };
-  if (invalidField) return { request: null, error: batchRequestFailure('Multipart batch request contains unsupported or duplicate fields.') };
-  if (fileCount > limits.maxBatchFiles) return { request: null, error: batchLimitFailure('Batch file count exceeds the configured limit.') };
-  if (exceeded) return { request: null, error: batchLimitFailure('Batch byte count exceeds the configured limit.') };
-  if (fileCount === 0 || files.length === 0) return { request: null, error: batchRequestFailure('Multipart batch request must contain at least one file field.') };
-  const concurrency = parseMultipartPositiveInteger(concurrencyRaw, limits.batchConcurrency, 'concurrency');
+  if (invalidField)
+    return {
+      request: null,
+      error: batchRequestFailure(
+        'Multipart batch request contains unsupported or duplicate fields.'
+      )
+    };
+  if (fileCount > limits.maxBatchFiles)
+    return {
+      request: null,
+      error: batchLimitFailure('Batch file count exceeds the configured limit.')
+    };
+  if (exceeded)
+    return {
+      request: null,
+      error: batchLimitFailure('Batch byte count exceeds the configured limit.')
+    };
+  if (fileCount === 0 || files.length === 0)
+    return {
+      request: null,
+      error: batchRequestFailure('Multipart batch request must contain at least one file field.')
+    };
+  const concurrency = parseMultipartPositiveInteger(
+    concurrencyRaw,
+    limits.batchConcurrency,
+    'concurrency'
+  );
   if (concurrency.error !== undefined) return { request: null, error: concurrency.error };
-  if (concurrency.value > limits.batchConcurrency) return { request: null, error: batchLimitFailure('Requested batch concurrency exceeds the configured limit.') };
-  const maxTotalBytes = parseMultipartPositiveInteger(maxTotalBytesRaw, limits.maxBatchTotalBytes, 'maxTotalBytes');
+  if (concurrency.value > limits.batchConcurrency)
+    return {
+      request: null,
+      error: batchLimitFailure('Requested batch concurrency exceeds the configured limit.')
+    };
+  const maxTotalBytes = parseMultipartPositiveInteger(
+    maxTotalBytesRaw,
+    limits.maxBatchTotalBytes,
+    'maxTotalBytes'
+  );
   if (maxTotalBytes.error !== undefined) return { request: null, error: maxTotalBytes.error };
-  if (maxTotalBytes.value > limits.maxBatchTotalBytes) return { request: null, error: batchLimitFailure('Requested batch byte limit exceeds the configured limit.') };
-  if (modeRaw !== undefined && operation === 'export' && modeRaw !== 'canonical' && modeRaw !== 'source') {
+  if (maxTotalBytes.value > limits.maxBatchTotalBytes)
+    return {
+      request: null,
+      error: batchLimitFailure('Requested batch byte limit exceeds the configured limit.')
+    };
+  if (
+    modeRaw !== undefined &&
+    operation === 'export' &&
+    modeRaw !== 'canonical' &&
+    modeRaw !== 'source'
+  ) {
     return { request: null, error: invalidSchemaFailure('mode', 'Batch export mode is invalid.') };
   }
   const metadata = parseMultipartManifest(manifestRaw, files.length, operation);
@@ -994,13 +1297,19 @@ async function readMultipartBatchRequest(
       ? { outputDisplayName: metadata.items[index]?.outputDisplayName }
       : {})
   }));
-  if (totalBytes > maxTotalBytes.value) return { request: null, error: batchLimitFailure('Batch byte count exceeds the configured limit.') };
+  if (totalBytes > maxTotalBytes.value)
+    return {
+      request: null,
+      error: batchLimitFailure('Batch byte count exceeds the configured limit.')
+    };
   return {
     request: {
       inputs,
       concurrency: concurrency.value,
       maxTotalBytes: maxTotalBytes.value,
-      ...(operation === 'export' && modeRaw !== undefined ? { mode: modeRaw as 'canonical' | 'source' } : {})
+      ...(operation === 'export' && modeRaw !== undefined
+        ? { mode: modeRaw as 'canonical' | 'source' }
+        : {})
     }
   };
 }
@@ -1011,19 +1320,29 @@ function parseMultipartPositiveInteger(
   field: string
 ): { readonly value: number; readonly error?: OperationResult<never> } {
   if (raw === undefined) return { value: fallback };
-  if (!/^[0-9]+$/.test(raw)) return { value: fallback, error: invalidSchemaFailure(field, 'Multipart batch option must be a positive integer.') };
+  if (!/^[0-9]+$/.test(raw))
+    return {
+      value: fallback,
+      error: invalidSchemaFailure(field, 'Multipart batch option must be a positive integer.')
+    };
   const value = Number(raw);
-  if (!validPositiveSafeInteger(value)) return { value: fallback, error: invalidSchemaFailure(field, 'Multipart batch option must be a positive integer.') };
+  if (!validPositiveSafeInteger(value))
+    return {
+      value: fallback,
+      error: invalidSchemaFailure(field, 'Multipart batch option must be a positive integer.')
+    };
   return { value };
 }
 
 function isMultipartLimitError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null || !('code' in error)) return false;
   const code = String((error as { readonly code?: unknown }).code);
-  return code === 'FST_REQ_FILE_TOO_LARGE' ||
+  return (
+    code === 'FST_REQ_FILE_TOO_LARGE' ||
     code === 'FST_FILES_LIMIT' ||
     code === 'FST_FIELDS_LIMIT' ||
-    code === 'FST_PARTS_LIMIT';
+    code === 'FST_PARTS_LIMIT'
+  );
 }
 
 interface MultipartManifestItem {
@@ -1042,42 +1361,95 @@ function parseMultipartManifest(
   try {
     value = JSON.parse(raw);
   } catch {
-    return { items: [], error: invalidSchemaFailure('manifest', 'Multipart manifest must be valid JSON.') };
+    return {
+      items: [],
+      error: invalidSchemaFailure('manifest', 'Multipart manifest must be valid JSON.')
+    };
   }
   if (!Array.isArray(value) || value.length !== count) {
-    return { items: [], error: invalidSchemaFailure('manifest', 'Multipart manifest must describe every uploaded file.') };
+    return {
+      items: [],
+      error: invalidSchemaFailure(
+        'manifest',
+        'Multipart manifest must describe every uploaded file.'
+      )
+    };
   }
   const items: MultipartManifestItem[] = [];
   const ids = new Set<string>();
   for (let index = 0; index < value.length; index += 1) {
     const item = value[index];
     if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      return { items: [], error: invalidSchemaFailure('manifest[' + index + ']', 'Multipart manifest item is invalid.') };
+      return {
+        items: [],
+        error: invalidSchemaFailure(
+          'manifest[' + index + ']',
+          'Multipart manifest item is invalid.'
+        )
+      };
     }
     const candidate = item as Record<string, unknown>;
-    const allowed = operation === 'export'
-      ? ['id', 'displayName', 'outputDisplayName']
-      : ['id', 'displayName'];
+    const allowed =
+      operation === 'export' ? ['id', 'displayName', 'outputDisplayName'] : ['id', 'displayName'];
     if (Object.keys(candidate).some((key) => !allowed.includes(key))) {
-      return { items: [], error: invalidSchemaFailure('manifest[' + index + ']', 'Multipart manifest item contains unsupported fields.') };
+      return {
+        items: [],
+        error: invalidSchemaFailure(
+          'manifest[' + index + ']',
+          'Multipart manifest item contains unsupported fields.'
+        )
+      };
     }
     const id = candidate.id;
     const displayName = candidate.displayName;
     const outputDisplayName = candidate.outputDisplayName;
-    if (id !== undefined && (typeof id !== 'string' || id.length === 0 || id.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(id) || ids.has(id))) {
-      return { items: [], error: invalidSchemaFailure('manifest[' + index + '].id', 'Multipart item IDs must be unique safe strings.') };
+    if (
+      id !== undefined &&
+      (typeof id !== 'string' ||
+        id.length === 0 ||
+        id.length > 128 ||
+        !/^[A-Za-z0-9._~-]+$/.test(id) ||
+        ids.has(id))
+    ) {
+      return {
+        items: [],
+        error: invalidSchemaFailure(
+          'manifest[' + index + '].id',
+          'Multipart item IDs must be unique safe strings.'
+        )
+      };
     }
     if (typeof id === 'string') ids.add(id);
-    if (displayName !== undefined && (typeof displayName !== 'string' || displayName.length === 0)) {
-      return { items: [], error: invalidSchemaFailure('manifest[' + index + '].displayName', 'Multipart displayName is invalid.') };
+    if (
+      displayName !== undefined &&
+      (typeof displayName !== 'string' || displayName.length === 0)
+    ) {
+      return {
+        items: [],
+        error: invalidSchemaFailure(
+          'manifest[' + index + '].displayName',
+          'Multipart displayName is invalid.'
+        )
+      };
     }
-    if (outputDisplayName !== undefined && (typeof outputDisplayName !== 'string' || outputDisplayName.length === 0)) {
-      return { items: [], error: invalidSchemaFailure('manifest[' + index + '].outputDisplayName', 'Multipart outputDisplayName is invalid.') };
+    if (
+      outputDisplayName !== undefined &&
+      (typeof outputDisplayName !== 'string' || outputDisplayName.length === 0)
+    ) {
+      return {
+        items: [],
+        error: invalidSchemaFailure(
+          'manifest[' + index + '].outputDisplayName',
+          'Multipart outputDisplayName is invalid.'
+        )
+      };
     }
     items.push({
       ...(typeof id === 'string' ? { id } : {}),
       ...(typeof displayName === 'string' ? { displayName: sanitizeDisplayName(displayName) } : {}),
-      ...(typeof outputDisplayName === 'string' ? { outputDisplayName: sanitizeDisplayName(outputDisplayName) } : {})
+      ...(typeof outputDisplayName === 'string'
+        ? { outputDisplayName: sanitizeDisplayName(outputDisplayName) }
+        : {})
     });
   }
   return { items };
@@ -1089,24 +1461,45 @@ async function readDiffRequest(
   signal: AbortSignal
 ): Promise<DiffRequestRead> {
   if (signal.aborted) return { before: null, after: null, error: requestCancelled(signal) };
-  const contentType = String(request.headers?.['content-type'] ?? '').split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  const contentType =
+    String(request.headers?.['content-type'] ?? '')
+      .split(';', 1)[0]
+      ?.trim()
+      .toLowerCase() ?? '';
   if (contentType === 'application/json') {
     const body = jsonBody(request);
-    if (body === null) return { before: null, after: null, error: invalidSchemaFailure('$', 'Diff JSON body must be an object.') };
+    if (body === null)
+      return {
+        before: null,
+        after: null,
+        error: invalidSchemaFailure('$', 'Diff JSON body must be an object.')
+      };
     const keys = validateJsonKeys(body, ['before', 'after']);
     if (keys !== null) return { before: null, after: null, error: keys };
     const types = validateJsonFieldTypes(body, { before: 'string', after: 'string' });
     if (types !== null) return { before: null, after: null, error: types };
     if (typeof body.before !== 'string' || typeof body.after !== 'string') {
-      return { before: null, after: null, error: invalidSchemaFailure('$', 'Diff request must contain before and after text.') };
+      return {
+        before: null,
+        after: null,
+        error: invalidSchemaFailure('$', 'Diff request must contain before and after text.')
+      };
     }
     const beforeBytes = encodeUtf8(body.before);
     const afterBytes = encodeUtf8(body.after);
     if (beforeBytes.byteLength > limits.maxBytes || afterBytes.byteLength > limits.maxBytes) {
-      return { before: null, after: null, error: batchLimitFailure('A diff document exceeds the configured byte limit.') };
+      return {
+        before: null,
+        after: null,
+        error: batchLimitFailure('A diff document exceeds the configured byte limit.')
+      };
     }
     if (beforeBytes.byteLength + afterBytes.byteLength > limits.maxBatchTotalBytes) {
-      return { before: null, after: null, error: batchLimitFailure('Diff byte count exceeds the configured limit.') };
+      return {
+        before: null,
+        after: null,
+        error: batchLimitFailure('Diff byte count exceeds the configured limit.')
+      };
     }
     return {
       before: { content: beforeBytes, displayName: 'before.pulse' },
@@ -1118,7 +1511,13 @@ async function readDiffRequest(
       before: null,
       after: null,
       error: operationResult('request', 'rejected', null, [
-        makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT, 'error', 'recognize', 'Diff requests require application/json or multipart/form-data.', location('$'))
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+          'error',
+          'recognize',
+          'Diff requests require application/json or multipart/form-data.',
+          location('$')
+        )
       ])
     };
   }
@@ -1133,7 +1532,11 @@ async function readDiffRequest(
         invalid = true;
         continue;
       }
-      const acceptedName = part.fieldname === 'before' || part.fieldname === 'after' || part.fieldname === 'file' || part.fieldname === 'files';
+      const acceptedName =
+        part.fieldname === 'before' ||
+        part.fieldname === 'after' ||
+        part.fieldname === 'file' ||
+        part.fieldname === 'files';
       const chunks: Buffer[] = [];
       let size = 0;
       let exceeded = !acceptedName;
@@ -1144,7 +1547,10 @@ async function readDiffRequest(
         }
         if (exceeded) continue;
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        if (buffer.byteLength > limits.maxBytes - size || buffer.byteLength > limits.maxBatchTotalBytes - totalBytes) {
+        if (
+          buffer.byteLength > limits.maxBytes - size ||
+          buffer.byteLength > limits.maxBatchTotalBytes - totalBytes
+        ) {
           exceeded = true;
           limitExceeded = true;
           continue;
@@ -1173,9 +1579,17 @@ async function readDiffRequest(
   } catch (error) {
     if (signal.aborted) return { before: null, after: null, error: requestCancelled(signal) };
     if (isMultipartLimitError(error)) {
-      return { before: null, after: null, error: batchLimitFailure('Multipart diff upload exceeds a configured limit.') };
+      return {
+        before: null,
+        after: null,
+        error: batchLimitFailure('Multipart diff upload exceeds a configured limit.')
+      };
     }
-    return { before: null, after: null, error: invalidSchemaFailure('$', 'Multipart diff upload is invalid.') };
+    return {
+      before: null,
+      after: null,
+      error: invalidSchemaFailure('$', 'Multipart diff upload is invalid.')
+    };
   }
   const namedCount = Number(named.before !== undefined) + Number(named.after !== undefined);
   const fileCount = namedCount + unnamed.length;
@@ -1183,15 +1597,21 @@ async function readDiffRequest(
   // positional; named `before`/`after` parts are explicit.  Mixing those
   // forms, or silently ignoring a third part, makes the comparison
   // ambiguous and must be rejected at the transport boundary.
-  const ambiguous = fileCount !== 2 || (namedCount > 0 && unnamed.length > 0) ||
+  const ambiguous =
+    fileCount !== 2 ||
+    (namedCount > 0 && unnamed.length > 0) ||
     (namedCount === 2 && (named.before === undefined || named.after === undefined));
   if (invalid || ambiguous || totalBytes > limits.maxBatchTotalBytes) {
     return {
       before: null,
       after: null,
-      error: invalid || limitExceeded || totalBytes > limits.maxBatchTotalBytes
-        ? batchLimitFailure('Multipart diff upload is invalid or exceeds a configured limit.')
-        : invalidSchemaFailure('$', 'Diff multipart request must contain exactly before and after files.')
+      error:
+        invalid || limitExceeded || totalBytes > limits.maxBatchTotalBytes
+          ? batchLimitFailure('Multipart diff upload is invalid or exceeds a configured limit.')
+          : invalidSchemaFailure(
+              '$',
+              'Diff multipart request must contain exactly before and after files.'
+            )
     };
   }
   if (unnamed.length === 2) {
@@ -1199,7 +1619,14 @@ async function readDiffRequest(
     named.after = unnamed[1];
   }
   if (named.before === undefined || named.after === undefined) {
-    return { before: null, after: null, error: invalidSchemaFailure('$', 'Diff multipart request must contain before and after files.') };
+    return {
+      before: null,
+      after: null,
+      error: invalidSchemaFailure(
+        '$',
+        'Diff multipart request must contain before and after files.'
+      )
+    };
   }
   return { before: named.before, after: named.after };
 }
@@ -1217,11 +1644,23 @@ function requestResult<T>(result: OperationResult<T>, signal: AbortSignal): Oper
 }
 
 function cancelDiagnostic(): Diagnostic {
-  return makeDiagnostic(DIAGNOSTIC_CODES.TASK_CANCELLED, 'info', 'task', 'Request was cancelled.', location('$'));
+  return makeDiagnostic(
+    DIAGNOSTIC_CODES.TASK_CANCELLED,
+    'info',
+    'task',
+    'Request was cancelled.',
+    location('$')
+  );
 }
 
 function timeoutDiagnostic(): Diagnostic {
-  return makeDiagnostic(DIAGNOSTIC_CODES.TASK_TIMEOUT, 'error', 'task', 'Request processing exceeded the configured timeout.', location('$'));
+  return makeDiagnostic(
+    DIAGNOSTIC_CODES.TASK_TIMEOUT,
+    'error',
+    'task',
+    'Request processing exceeded the configured timeout.',
+    location('$')
+  );
 }
 
 async function readRequestInput(
@@ -1229,8 +1668,13 @@ async function readRequestInput(
   maxBytes: number,
   signal?: AbortSignal
 ): Promise<RequestInput> {
-  if (signal?.aborted) return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
-  const contentType = String(request.headers?.['content-type'] ?? '').split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  if (signal?.aborted)
+    return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
+  const contentType =
+    String(request.headers?.['content-type'] ?? '')
+      .split(';', 1)[0]
+      ?.trim()
+      .toLowerCase() ?? '';
   if (contentType === 'multipart/form-data') {
     try {
       let fileBytes: Uint8Array | null = null;
@@ -1253,7 +1697,11 @@ async function readRequestInput(
           for await (const chunk of part.file) {
             if (signal?.aborted) {
               part.file.destroy();
-              return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
+              return {
+                content: new Uint8Array(),
+                displayName: 'pulse',
+                error: requestCancelled(signal)
+              };
             }
             if (!acceptedPart || partExceeded) continue;
             const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
@@ -1271,52 +1719,106 @@ async function readRequestInput(
           }
           continue;
         }
-        if (part.fieldname !== 'displayName' || displayName !== undefined || typeof part.value !== 'string') {
+        if (
+          part.fieldname !== 'displayName' ||
+          displayName !== undefined ||
+          typeof part.value !== 'string'
+        ) {
           invalidField = true;
           continue;
         }
         displayName = part.value;
       }
       if (invalidField) {
-        return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('Multipart request contains unsupported fields.') };
+        return {
+          content: new Uint8Array(),
+          displayName: 'pulse',
+          error: rejectedInput('Multipart request contains unsupported fields.')
+        };
       }
       if (fileBytes === null || fileCount !== 1) {
-        return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('Multipart request must contain exactly one file field.') };
+        return {
+          content: new Uint8Array(),
+          displayName: 'pulse',
+          error: rejectedInput('Multipart request must contain exactly one file field.')
+        };
       }
-      if (exceeded) return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('Uploaded file exceeds the byte limit.') };
-      if (signal?.aborted) return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
+      if (exceeded)
+        return {
+          content: new Uint8Array(),
+          displayName: 'pulse',
+          error: rejectedInput('Uploaded file exceeds the byte limit.')
+        };
+      if (signal?.aborted)
+        return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
       return {
         content: fileBytes,
         displayName: sanitizeDisplayName(displayName ?? (fileName || 'pulse'))
       };
     } catch {
-      return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('Multipart upload is invalid or exceeds the byte limit.') };
+      return {
+        content: new Uint8Array(),
+        displayName: 'pulse',
+        error: rejectedInput('Multipart upload is invalid or exceeds the byte limit.')
+      };
     }
   }
   if (JSON_CONTENT_TYPES.includes(contentType)) {
     const body = jsonBody(request);
     const text = typeof body?.text === 'string' ? body.text : null;
-    if (text === null) return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('JSON body must contain a text string.') };
+    if (text === null)
+      return {
+        content: new Uint8Array(),
+        displayName: 'pulse',
+        error: rejectedInput('JSON body must contain a text string.')
+      };
     const bytes = encodeUtf8(text);
-    if (signal?.aborted) return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
-    if (bytes.byteLength > maxBytes) return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('Request exceeds the configured byte limit.') };
-    return { content: bytes, displayName: typeof body?.displayName === 'string' ? sanitizeDisplayName(body.displayName) : 'pulse' };
+    if (signal?.aborted)
+      return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
+    if (bytes.byteLength > maxBytes)
+      return {
+        content: new Uint8Array(),
+        displayName: 'pulse',
+        error: rejectedInput('Request exceeds the configured byte limit.')
+      };
+    return {
+      content: bytes,
+      displayName:
+        typeof body?.displayName === 'string' ? sanitizeDisplayName(body.displayName) : 'pulse'
+    };
   }
   if (contentType !== '' && !RAW_CONTENT_TYPES.includes(contentType)) {
     return {
       content: new Uint8Array(),
       displayName: 'pulse',
       error: operationResult('request', 'rejected', null, [
-        makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT, 'error', 'recognize', 'Request content type is not supported.', location('$'))
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+          'error',
+          'recognize',
+          'Request content type is not supported.',
+          location('$')
+        )
       ])
     };
   }
   const raw = request.body;
-  const bytes = typeof raw === 'string'
-    ? encodeUtf8(raw)
-    : Buffer.isBuffer(raw) ? new Uint8Array(raw) : raw instanceof Uint8Array ? new Uint8Array(raw) : new Uint8Array();
-  if (signal?.aborted) return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
-  if (bytes.byteLength > maxBytes) return { content: new Uint8Array(), displayName: 'pulse', error: rejectedInput('Request exceeds the configured byte limit.') };
+  const bytes =
+    typeof raw === 'string'
+      ? encodeUtf8(raw)
+      : Buffer.isBuffer(raw)
+        ? new Uint8Array(raw)
+        : raw instanceof Uint8Array
+          ? new Uint8Array(raw)
+          : new Uint8Array();
+  if (signal?.aborted)
+    return { content: new Uint8Array(), displayName: 'pulse', error: requestCancelled(signal) };
+  if (bytes.byteLength > maxBytes)
+    return {
+      content: new Uint8Array(),
+      displayName: 'pulse',
+      error: rejectedInput('Request exceeds the configured byte limit.')
+    };
   return { content: bytes, displayName: 'pulse' };
 }
 
@@ -1326,37 +1828,75 @@ async function readTextRequest(
   signal?: AbortSignal
 ): Promise<{ readonly text: string; readonly error?: OperationResult<never> }> {
   if (signal?.aborted) return { text: '', error: requestCancelled(signal) };
-  const contentType = String(request.headers?.['content-type'] ?? '').split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  const contentType =
+    String(request.headers?.['content-type'] ?? '')
+      .split(';', 1)[0]
+      ?.trim()
+      .toLowerCase() ?? '';
   if (contentType === 'application/json') {
     const body = jsonBody(request);
     const value = typeof body?.text === 'string' ? body.text : null;
-    if (value === null) return { text: '', error: rejectedInput('JSON body must contain a text string.') };
+    if (value === null)
+      return { text: '', error: rejectedInput('JSON body must contain a text string.') };
     if (signal?.aborted) return { text: '', error: requestCancelled(signal) };
-    if (encodeUtf8(value).byteLength > maxBytes) return { text: '', error: rejectedInput('Request exceeds the configured byte limit.') };
+    if (encodeUtf8(value).byteLength > maxBytes)
+      return { text: '', error: rejectedInput('Request exceeds the configured byte limit.') };
     return { text: value };
   }
   if (contentType !== '' && !RAW_CONTENT_TYPES.includes(contentType)) {
     return {
       text: '',
       error: operationResult('request', 'rejected', null, [
-        makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT, 'error', 'recognize', 'Request content type is not supported.', location('$'))
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_UNSUPPORTED_INPUT,
+          'error',
+          'recognize',
+          'Request content type is not supported.',
+          location('$')
+        )
       ])
     };
   }
   const raw = request.body;
-  const bytes = typeof raw === 'string' ? encodeUtf8(raw) : Buffer.isBuffer(raw) ? new Uint8Array(raw) : raw instanceof Uint8Array ? new Uint8Array(raw) : new Uint8Array();
+  const bytes =
+    typeof raw === 'string'
+      ? encodeUtf8(raw)
+      : Buffer.isBuffer(raw)
+        ? new Uint8Array(raw)
+        : raw instanceof Uint8Array
+          ? new Uint8Array(raw)
+          : new Uint8Array();
   if (signal?.aborted) return { text: '', error: requestCancelled(signal) };
-  if (bytes.byteLength > maxBytes) return { text: '', error: rejectedInput('Request exceeds the configured byte limit.') };
+  if (bytes.byteLength > maxBytes)
+    return { text: '', error: rejectedInput('Request exceeds the configured byte limit.') };
   try {
     return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
   } catch {
-    return { text: '', error: operationResult('request', 'rejected', null, [makeDiagnostic(DIAGNOSTIC_CODES.RECOGNIZE_INVALID_ENCODING, 'error', 'recognize', 'Input is not valid UTF-8.', location('$'))]) };
+    return {
+      text: '',
+      error: operationResult('request', 'rejected', null, [
+        makeDiagnostic(
+          DIAGNOSTIC_CODES.RECOGNIZE_INVALID_ENCODING,
+          'error',
+          'recognize',
+          'Input is not valid UTF-8.',
+          location('$')
+        )
+      ])
+    };
   }
 }
 
 function jsonBody(request: FastifyRequest): Record<string, unknown> | null {
   const value = request.body;
-  if (typeof value !== 'object' || value === null || Buffer.isBuffer(value) || value instanceof Uint8Array || Array.isArray(value)) return null;
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Buffer.isBuffer(value) ||
+    value instanceof Uint8Array ||
+    Array.isArray(value)
+  )
+    return null;
   return value as Record<string, unknown>;
 }
 
@@ -1393,9 +1933,10 @@ function validateJsonFieldTypes(
   for (const [field, expected] of Object.entries(fields)) {
     const value = body[field];
     if (value === undefined) continue;
-    const valid = expected === 'string'
-      ? typeof value === 'string'
-      : typeof value === 'number' && Number.isFinite(value);
+    const valid =
+      expected === 'string'
+        ? typeof value === 'string'
+        : typeof value === 'number' && Number.isFinite(value);
     if (valid) continue;
     return operationResult('request', 'rejected', null, [
       makeDiagnostic(
@@ -1410,7 +1951,11 @@ function validateJsonFieldTypes(
   return null;
 }
 
-function requestAbortSignal(request: FastifyRequest, timeoutMs?: number, reply?: FastifyReply): RequestSignal {
+function requestAbortSignal(
+  request: FastifyRequest,
+  timeoutMs?: number,
+  reply?: FastifyReply
+): RequestSignal {
   const controller = new AbortController();
   const raw = request.raw;
   const responseRaw = reply?.raw;
@@ -1450,68 +1995,171 @@ function requestAbortSignal(request: FastifyRequest, timeoutMs?: number, reply?:
   };
 }
 
-function editCommandFromBody(body: Record<string, unknown>): { readonly command: EditCommand | null; readonly diagnostics: readonly Diagnostic[] } {
+function editCommandFromBody(body: Record<string, unknown>): {
+  readonly command: EditCommand | null;
+  readonly diagnostics: readonly Diagnostic[];
+} {
   if (typeof body.kind !== 'string') {
-    return { command: null, diagnostics: [editDiagnostic('Edit command kind is required.', 'kind')] };
+    return {
+      command: null,
+      diagnostics: [editDiagnostic('Edit command kind is required.', 'kind')]
+    };
   }
   const kind = body.kind;
-  const commandFields: readonly string[] = kind === 'strength' || kind === 'anchor'
-    ? ['pointIndex', 'value']
-    : kind === 'frequency'
-      ? ['startIndex', 'endIndex']
-      : kind === 'duration'
-        ? ['value']
-        : kind === 'remove-point'
-          ? ['pointIndex']
-          : kind === 'add-point'
-            ? ['atIndex', 'value', 'anchor']
-            : [];
+  const commandFields: readonly string[] =
+    kind === 'strength' || kind === 'anchor'
+      ? ['pointIndex', 'value']
+      : kind === 'frequency'
+        ? ['startIndex', 'endIndex']
+        : kind === 'duration'
+          ? ['value']
+          : kind === 'remove-point'
+            ? ['pointIndex']
+            : kind === 'add-point'
+              ? ['atIndex', 'value', 'anchor']
+              : [];
   const commandFieldSet = new Set(commandFields);
   for (const field of ['pointIndex', 'value', 'startIndex', 'endIndex', 'atIndex', 'anchor']) {
     if (body[field] !== undefined && !commandFieldSet.has(field)) {
-      return { command: null, diagnostics: [editDiagnostic('Edit field is not valid for this command kind.', field)] };
+      return {
+        command: null,
+        diagnostics: [editDiagnostic('Edit field is not valid for this command kind.', field)]
+      };
     }
   }
   const sectionIndex = body.sectionIndex;
-  if (!validIndex(sectionIndex)) return { command: null, diagnostics: [editDiagnostic('Section index must be a non-negative safe integer.', 'sectionIndex')] };
+  if (!validIndex(sectionIndex))
+    return {
+      command: null,
+      diagnostics: [
+        editDiagnostic('Section index must be a non-negative safe integer.', 'sectionIndex')
+      ]
+    };
   const section = sectionIndex as number;
   if (kind === 'strength') {
     const pointIndex = body.pointIndex;
     const value = body.value;
-    if (!validIndex(pointIndex)) return { command: null, diagnostics: [editDiagnostic('Point index must be a non-negative safe integer.', 'pointIndex')] };
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) return { command: null, diagnostics: [editDiagnostic('Strength must be a finite number between 0 and 100.', 'value')] };
-    return { command: { kind: 'strength', sectionIndex: section, pointIndex: pointIndex as number, value }, diagnostics: [] };
+    if (!validIndex(pointIndex))
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic('Point index must be a non-negative safe integer.', 'pointIndex')
+        ]
+      };
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100)
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic('Strength must be a finite number between 0 and 100.', 'value')
+        ]
+      };
+    return {
+      command: { kind: 'strength', sectionIndex: section, pointIndex: pointIndex as number, value },
+      diagnostics: []
+    };
   }
   if (kind === 'anchor') {
     const pointIndex = body.pointIndex;
     const value = body.value;
-    if (!validIndex(pointIndex) || (value !== 0 && value !== 1)) return { command: null, diagnostics: [editDiagnostic('Anchor edits require a valid point index and a value of 0 or 1.', 'value')] };
-    return { command: { kind: 'anchor', sectionIndex: section, pointIndex: pointIndex as number, value }, diagnostics: [] };
+    if (!validIndex(pointIndex) || (value !== 0 && value !== 1))
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic('Anchor edits require a valid point index and a value of 0 or 1.', 'value')
+        ]
+      };
+    return {
+      command: { kind: 'anchor', sectionIndex: section, pointIndex: pointIndex as number, value },
+      diagnostics: []
+    };
   }
   if (kind === 'frequency') {
     const startIndex = body.startIndex;
     const endIndex = body.endIndex;
-    if (!validIndex(startIndex) || !validIndex(endIndex) || startIndex > 83 || endIndex > 83) return { command: null, diagnostics: [editDiagnostic('Frequency indexes must be integers between 0 and 83.', 'frequency')] };
-    return { command: { kind: 'frequency', sectionIndex: section, startIndex: startIndex as number, endIndex: endIndex as number }, diagnostics: [] };
+    if (!validIndex(startIndex) || !validIndex(endIndex) || startIndex > 83 || endIndex > 83)
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic('Frequency indexes must be integers between 0 and 83.', 'frequency')
+        ]
+      };
+    return {
+      command: {
+        kind: 'frequency',
+        sectionIndex: section,
+        startIndex: startIndex as number,
+        endIndex: endIndex as number
+      },
+      diagnostics: []
+    };
   }
   if (kind === 'duration') {
     const value = body.value;
-    if (!validIndex(value) || value > 99) return { command: null, diagnostics: [editDiagnostic('Duration index must be an integer between 0 and 99.', 'durationIndex')] };
-    return { command: { kind: 'duration', sectionIndex: section, value: value as number }, diagnostics: [] };
+    if (!validIndex(value) || value > 99)
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic('Duration index must be an integer between 0 and 99.', 'durationIndex')
+        ]
+      };
+    return {
+      command: { kind: 'duration', sectionIndex: section, value: value as number },
+      diagnostics: []
+    };
   }
   if (kind === 'remove-point') {
     const pointIndex = body.pointIndex;
-    if (!validIndex(pointIndex)) return { command: null, diagnostics: [editDiagnostic('Point index must be a non-negative safe integer.', 'pointIndex')] };
-    return { command: { kind: 'remove-point', sectionIndex: section, pointIndex: pointIndex as number }, diagnostics: [] };
+    if (!validIndex(pointIndex))
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic('Point index must be a non-negative safe integer.', 'pointIndex')
+        ]
+      };
+    return {
+      command: { kind: 'remove-point', sectionIndex: section, pointIndex: pointIndex as number },
+      diagnostics: []
+    };
   }
   if (kind === 'add-point') {
     const value = body.value;
     const anchor = body.anchor;
     const atIndex = body.atIndex;
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100 || (anchor !== 0 && anchor !== 1) || (atIndex !== undefined && !validIndex(atIndex))) return { command: null, diagnostics: [editDiagnostic('Added points require strength 0..100, anchor 0/1, and an optional valid insertion index.', 'point')] };
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > 100 ||
+      (anchor !== 0 && anchor !== 1) ||
+      (atIndex !== undefined && !validIndex(atIndex))
+    )
+      return {
+        command: null,
+        diagnostics: [
+          editDiagnostic(
+            'Added points require strength 0..100, anchor 0/1, and an optional ' +
+              'valid insertion index.',
+            'point'
+          )
+        ]
+      };
     const decimal = normalizeDecimal(value.toFixed(6));
-    const point: ControlPoint = Object.freeze({ strength: Number(decimal), strengthDecimal: decimal, strengthRaw: decimal, anchor, sourceSpan: sourceSpan('', 0, 0) });
-    return { command: { kind: 'add-point', sectionIndex: section, point, atIndex: atIndex as number | undefined }, diagnostics: [] };
+    const point: ControlPoint = Object.freeze({
+      strength: Number(decimal),
+      strengthDecimal: decimal,
+      strengthRaw: decimal,
+      anchor,
+      sourceSpan: sourceSpan('', 0, 0)
+    });
+    return {
+      command: {
+        kind: 'add-point',
+        sectionIndex: section,
+        point,
+        atIndex: atIndex as number | undefined
+      },
+      diagnostics: []
+    };
   }
   return { command: null, diagnostics: [editDiagnostic('Unsupported edit command.', 'kind')] };
 }
@@ -1525,20 +2173,28 @@ function adapterDiagnostic(code: string, message: string): Diagnostic {
 }
 
 function rejectedInput(message: string): OperationResult<never> {
-  return operationResult('request', 'rejected', null, [makeDiagnostic(DIAGNOSTIC_CODES.TASK_INPUT_LIMIT, 'error', 'resource', message, location('$'))]);
+  return operationResult('request', 'rejected', null, [
+    makeDiagnostic(DIAGNOSTIC_CODES.TASK_INPUT_LIMIT, 'error', 'resource', message, location('$'))
+  ]);
 }
 
 function requestCancelled(signal?: AbortSignal): OperationResult<never> {
   if (signal !== undefined && timedOutSignals.has(signal)) {
     return operationResult('request', 'failed', null, [timeoutDiagnostic()]);
   }
-  return operationResult('request', 'cancelled', null, [
-    cancelDiagnostic()
-  ]);
+  return operationResult('request', 'cancelled', null, [cancelDiagnostic()]);
 }
 
 function artifactMissing(): OperationResult<never> {
-  return operationResult('artifact', 'rejected', null, [makeDiagnostic(DIAGNOSTIC_CODES.ADAPTER_READ, 'error', 'adapter', 'Artifact is missing or expired.', location('$'))]);
+  return operationResult('artifact', 'rejected', null, [
+    makeDiagnostic(
+      DIAGNOSTIC_CODES.ADAPTER_READ,
+      'error',
+      'adapter',
+      'Artifact is missing or expired.',
+      location('$')
+    )
+  ]);
 }
 
 async function stageBatchExports(
@@ -1576,31 +2232,41 @@ async function stageBatchExports(
           return requestCancelled(signal) as OperationResult<BatchData<ExportData>>;
         }
         stagedIds.push(artifact.id);
-        items.push(Object.freeze({
-          ...item,
-          data: Object.freeze({
-            ...item.data,
-            downloadId: artifact.id,
-            contentType: 'text/plain'
+        items.push(
+          Object.freeze({
+            ...item,
+            data: Object.freeze({
+              ...item.data,
+              downloadId: artifact.id,
+              contentType: 'text/plain'
+            })
           })
-        }));
+        );
       } catch {
         stageFailures += 1;
-        items.push(Object.freeze({
-          ...item,
-          status: 'failed' as const,
-          diagnostics: [
-            ...item.diagnostics,
-            adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Batch export artifact could not be staged.')
-          ],
-          data: null
-        }));
+        items.push(
+          Object.freeze({
+            ...item,
+            status: 'failed' as const,
+            diagnostics: [
+              ...item.diagnostics,
+              adapterDiagnostic(
+                DIAGNOSTIC_CODES.ADAPTER_WRITE,
+                'Batch export artifact could not be staged.'
+              )
+            ],
+            data: null
+          })
+        );
       }
     }
   } catch {
     await removeStaged();
     return operationResult('batch', 'failed', null, [
-      adapterDiagnostic(DIAGNOSTIC_CODES.ADAPTER_WRITE, 'Batch export artifacts could not be staged.')
+      adapterDiagnostic(
+        DIAGNOSTIC_CODES.ADAPTER_WRITE,
+        'Batch export artifacts could not be staged.'
+      )
     ]);
   }
   // The request may disconnect immediately after the final put. Do not return
@@ -1613,7 +2279,9 @@ async function stageBatchExports(
   const rejected = items.filter((item) => item.status === 'rejected').length;
   const failed = items.filter((item) => item.status === 'failed').length;
   const cancelled = items.some((item) => item.status === 'cancelled');
-  const warningFiles = items.filter((item) => item.diagnostics.some((diagnostic) => diagnostic.severity === 'warning')).length;
+  const warningFiles = items.filter((item) =>
+    item.diagnostics.some((diagnostic) => diagnostic.severity === 'warning')
+  ).length;
   const status = cancelled
     ? 'cancelled'
     : succeeded > 0
@@ -1635,7 +2303,12 @@ async function stageBatchExports(
     cancelled,
     items: Object.freeze(items)
   };
-  return operationResult('batch', status, status === 'success' ? resultData : null, sortDiagnostics(items.flatMap((item) => item.diagnostics)));
+  return operationResult(
+    'batch',
+    status,
+    status === 'success' ? resultData : null,
+    sortDiagnostics(items.flatMap((item) => item.diagnostics))
+  );
 }
 
 async function putRequestArtifact(
@@ -1671,9 +2344,7 @@ async function putRequestArtifact(
   if (artifact === null) {
     // A store implementation may not support AbortSignal. Keep the request
     // responsive, then remove a late artifact when that operation completes.
-    void pending
-      .then((lateArtifact) => store.remove(lateArtifact.id))
-      .catch(() => undefined);
+    void pending.then((lateArtifact) => store.remove(lateArtifact.id)).catch(() => undefined);
     return null;
   }
   if (signal.aborted) {
@@ -1703,18 +2374,33 @@ async function putRequestArtifact(
 
 function sendEnvelope(reply: FastifyReply, result: OperationResult<unknown>): FastifyReply {
   const envelope = toOperationDto(result);
-  const timedOut = result.diagnostics.some((diagnostic) => diagnostic.code === DIAGNOSTIC_CODES.TASK_TIMEOUT);
-  const code = timedOut ? 408 : result.status === 'success' ? 200 : result.status === 'rejected' ? 422 : result.status === 'cancelled' ? 499 : 500;
+  const timedOut = result.diagnostics.some(
+    (diagnostic) => diagnostic.code === DIAGNOSTIC_CODES.TASK_TIMEOUT
+  );
+  const code = timedOut
+    ? 408
+    : result.status === 'success'
+      ? 200
+      : result.status === 'rejected'
+        ? 422
+        : result.status === 'cancelled'
+          ? 499
+          : 500;
   return reply.code(code).type('application/json').send(envelope);
 }
 
 function asciiDisplayName(displayName: string): string {
-  return sanitizeDisplayName(basename(displayName)).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 180) || 'pulse-output';
+  return (
+    sanitizeDisplayName(basename(displayName))
+      .replace(/[^A-Za-z0-9._-]/g, '_')
+      .slice(0, 180) || 'pulse-output'
+  );
 }
 
 function encodeDispositionFileName(displayName: string): string {
-  return encodeURIComponent(displayName).replace(/['()*]/g, (character) =>
-    '%' + character.charCodeAt(0).toString(16).toUpperCase()
+  return encodeURIComponent(displayName).replace(
+    /['()*]/g,
+    (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase()
   );
 }
 
@@ -1722,12 +2408,20 @@ function contentDisposition(displayName: string): string {
   const safeName = sanitizeDisplayName(basename(displayName));
   const fallback = asciiDisplayName(safeName);
   if (safeName === fallback) return 'attachment; filename="' + fallback + '"';
-  return 'attachment; filename="' + fallback + '"; filename*=UTF-8\'\'' + encodeDispositionFileName(safeName);
+  return (
+    'attachment; filename="' +
+    fallback +
+    "\"; filename*=UTF-8''" +
+    encodeDispositionFileName(safeName)
+  );
 }
 
-export async function startServer(options: ApiOptions & { readonly port?: number; readonly host?: string } = {}): Promise<FastifyInstance> {
+export async function startServer(
+  options: ApiOptions & { readonly port?: number; readonly host?: string } = {}
+): Promise<FastifyInstance> {
   const port = options.port ?? Number(process.env.PULSE_API_PORT ?? 8787);
-  if (!validPositiveSafeInteger(port) || port > 65_535) throw new RangeError('API port must be between 1 and 65535.');
+  if (!validPositiveSafeInteger(port) || port > 65_535)
+    throw new RangeError('API port must be between 1 and 65535.');
   const app = buildServer(options);
   try {
     await app.listen({ port, host: options.host ?? process.env.PULSE_API_HOST ?? '127.0.0.1' });
@@ -1740,13 +2434,15 @@ export async function startServer(options: ApiOptions & { readonly port?: number
 
 const entryPath = process.argv[1] === undefined ? null : resolve(process.argv[1]);
 const modulePath = resolve(fileURLToPath(import.meta.url));
-const isMainModule = entryPath !== null && (() => {
-  try {
-    return realpathSync(entryPath) === realpathSync(modulePath);
-  } catch {
-    return entryPath === modulePath;
-  }
-})();
+const isMainModule =
+  entryPath !== null &&
+  (() => {
+    try {
+      return realpathSync(entryPath) === realpathSync(modulePath);
+    } catch {
+      return entryPath === modulePath;
+    }
+  })();
 if (isMainModule) {
   const run = async (): Promise<void> => {
     const server = await startServer({ logger: true });
@@ -1761,8 +2457,12 @@ if (isMainModule) {
         process.exitCode = 1;
       }
     };
-    process.once('SIGTERM', () => { void shutdown(); });
-    process.once('SIGINT', () => { void shutdown(); });
+    process.once('SIGTERM', () => {
+      void shutdown();
+    });
+    process.once('SIGINT', () => {
+      void shutdown();
+    });
   };
   run().catch(() => {
     process.stderr.write('Unable to start API server.\n');

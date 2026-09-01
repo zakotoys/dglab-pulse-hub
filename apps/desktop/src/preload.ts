@@ -73,37 +73,43 @@ export interface DesktopBatchExportRequest {
   readonly overwrite?: boolean;
 }
 
-contextBridge.exposeInMainWorld('pulseDesktop', Object.freeze({
-  open: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:open'),
-  inspectCurrent: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:inspect-current'),
-  decodeQr: (payload: DesktopQrRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:decode-qr', payload),
-  edit: (payload: DesktopEditRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:edit', payload),
-  assist: (payload: DesktopAssistRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:assist', payload),
-  diff: (payload: DesktopDiffRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:diff', payload),
-  undo: (payload: DesktopHistoryRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:undo', payload),
-  redo: (payload: DesktopHistoryRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:redo', payload),
-  onHistoryReset: (listener: DesktopHistoryResetListener): (() => void) => {
-    const handler = (_event: unknown, value: unknown): void => {
-      listener(value as OperationEnvelopeDto);
-    };
-    ipcRenderer.on('pulse:history-reset', handler);
-    return () => ipcRenderer.removeListener('pulse:history-reset', handler);
-  },
-  batchInspect: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:batch-inspect'),
-  batchExport: (payload: DesktopBatchExportRequest = {}): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:batch-export', payload),
-  renderPreview: (payload: DesktopPreviewRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:render-preview', payload),
-  export: (payload: DesktopExportRequest): Promise<OperationEnvelopeDto | DesktopExportResponse> =>
-    ipcRenderer.invoke('pulse:export', payload),
-  saveArtifact: (payload: DesktopSaveArtifactRequest): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:save-artifact', payload),
-  markDirty: (dirty: boolean): Promise<OperationEnvelopeDto> =>
-    ipcRenderer.invoke('pulse:mark-dirty', { dirty })
-}));
+contextBridge.exposeInMainWorld(
+  'pulseDesktop',
+  Object.freeze({
+    open: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:open'),
+    inspectCurrent: (): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:inspect-current'),
+    decodeQr: (payload: DesktopQrRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:decode-qr', payload),
+    edit: (payload: DesktopEditRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:edit', payload),
+    assist: (payload: DesktopAssistRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:assist', payload),
+    diff: (payload: DesktopDiffRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:diff', payload),
+    undo: (payload: DesktopHistoryRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:undo', payload),
+    redo: (payload: DesktopHistoryRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:redo', payload),
+    onHistoryReset: (listener: DesktopHistoryResetListener): (() => void) => {
+      const handler = (_event: unknown, value: unknown): void => {
+        listener(value as OperationEnvelopeDto);
+      };
+      ipcRenderer.on('pulse:history-reset', handler);
+      return () => ipcRenderer.removeListener('pulse:history-reset', handler);
+    },
+    batchInspect: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:batch-inspect'),
+    batchExport: (payload: DesktopBatchExportRequest = {}): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:batch-export', payload),
+    renderPreview: (payload: DesktopPreviewRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:render-preview', payload),
+    export: (
+      payload: DesktopExportRequest
+    ): Promise<OperationEnvelopeDto | DesktopExportResponse> =>
+      ipcRenderer.invoke('pulse:export', payload),
+    saveArtifact: (payload: DesktopSaveArtifactRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:save-artifact', payload),
+    markDirty: (dirty: boolean): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:mark-dirty', { dirty })
+  })
+);

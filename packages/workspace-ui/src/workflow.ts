@@ -43,14 +43,16 @@ export function qrImageActionFailureMessage(
   action: QrImageAction
 ): string {
   const prefix = action === 'preview' ? 'QR image preview unavailable.' : 'QR image export failed.';
-  const diagnostic = envelope.diagnostics.find((item) => item.severity === 'error') ?? envelope.diagnostics[0];
+  const diagnostic =
+    envelope.diagnostics.find((item) => item.severity === 'error') ?? envelope.diagnostics[0];
   return diagnostic === undefined ? prefix : prefix + ' ' + diagnostic.message;
 }
 
 export function fileExportActionFailureMessage(envelope: OperationEnvelope): string {
   if (envelope.status === 'cancelled') return 'Pulse file export cancelled.';
   const prefix = 'Pulse file export failed.';
-  const diagnostic = envelope.diagnostics.find((item) => item.severity === 'error') ?? envelope.diagnostics[0];
+  const diagnostic =
+    envelope.diagnostics.find((item) => item.severity === 'error') ?? envelope.diagnostics[0];
   return diagnostic === undefined ? prefix : prefix + ' ' + diagnostic.message;
 }
 
@@ -60,7 +62,11 @@ export async function finalizeQrImageAction(
   saveArtifact: WorkspaceClient['saveArtifact'],
   signal?: AbortSignal
 ): Promise<QrImageActionResult> {
-  if (action === 'preview' || operation.envelope.status !== 'success' || operation.artifact === undefined) {
+  if (
+    action === 'preview' ||
+    operation.envelope.status !== 'success' ||
+    operation.artifact === undefined
+  ) {
     return { operation };
   }
   const saveEnvelope = await saveArtifact(

@@ -37,5 +37,6 @@ COPY --from=build /workspace/packages/application/package.json ./packages/applic
 COPY --from=build /workspace/packages/application/dist ./packages/application/dist
 
 EXPOSE 8787
-HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:8787/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD node -e \
+  "fetch('http://127.0.0.1:8787/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "apps/api/dist/server.js"]

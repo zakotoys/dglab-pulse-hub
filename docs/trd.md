@@ -2,14 +2,14 @@
 
 ## 文档信息
 
-| 项目 | 内容 |
-| --- | --- |
-| 文档状态 | Draft / 技术约束基线 |
-| 目标运行时 | TypeScript、Node.js、npm |
-| 目标客户端 | Electron、Web 浏览器 |
-| 目标部署 | Docker Compose、Nginx、Node.js API |
-| 核心格式 | DG-LAB 4 App `.pulse` |
-| 关联文档 | [PRD](prd.md)、[Glossary](glossary.md)、[格式研究](research/dglab-pulse-format.md)、[交付计划](plan/README.md)、[ADR](adr/README.md) |
+| 项目       | 内容                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 文档状态   | Draft / 技术约束基线                                                                                                                 |
+| 目标运行时 | TypeScript、Node.js、npm                                                                                                             |
+| 目标客户端 | Electron、Web 浏览器                                                                                                                 |
+| 目标部署   | Docker Compose、Nginx、Node.js API                                                                                                   |
+| 核心格式   | DG-LAB 4 App `.pulse`                                                                                                                |
+| 关联文档   | [PRD](prd.md)、[Glossary](glossary.md)、[格式研究](research/dglab-pulse-format.md)、[交付计划](plan/README.md)、[ADR](adr/README.md) |
 
 本文规定系统必须提供的技术能力、边界和可验证约束，不规定具体目录结构、UI 框架或第三方库。实现应优先复用项目已有依赖和成熟能力，并保持核心逻辑不依赖 Electron、DOM、Nginx 或具体传输协议。
 
@@ -114,7 +114,8 @@ metadata 展示可以按客户端裁剪，但不能改变字段含义或把诊�
 ### 5.3 版本升级
 
 - 升级是显式用例，不是导入时的透明兼容层。
-- 文件不含可验证版本标识时不得仅凭文件名或 App 名称推断版本；使用明确的 format profile 和 rule version。
+- 文件不含可验证版本标识时不得仅凭文件名或 App 名称推断版本；使用明确的 format profile 和 rule
+  version。
 - 升级输入、目标版本、规则版本、变更项和输出诊断必须可追踪。
 - 不覆盖原始文件；输出路径或替换动作由上层应用明确控制。
 - 不为已移除的旧路径增加 fallback 或迁移层；不支持的版本应明确拒绝或要求用户执行适用升级。
@@ -176,7 +177,8 @@ f(x) = 1 - (1 - x) ** 2
 
 ### 9.3 一致性
 
-同一规则版本、同一 `.pulse` 内容和同一操作参数，在 Electron、本地 Node 和 Web API 中应产生等价的 Pulse、WaveformStream、诊断和导出结果。允许存在展示差异，不允许存在未经说明的领域语义差异。
+同一规则版本、同一 `.pulse` 内容和同一操作参数，在 Electron、本地 Node 和 Web
+API 中应产生等价的 Pulse、WaveformStream、诊断和导出结果。允许存在展示差异，不允许存在未经说明的领域语义差异。
 
 ## 10. 预览与导出要求
 
@@ -215,11 +217,16 @@ f(x) = 1 - (1 - x) ** 2
 
 ## 14. 技术决策待定项
 
-- HTTP schema 库和图像编码库的具体选择；必须按 [ADR-0003](adr/0003-versioned-boundary-contracts.md) 的边界验证官方类型和运行环境。
+- HTTP schema 库和图像编码库的具体选择；必须按 [ADR-0003](adr/0003-versioned-boundary-contracts.md)
+  的边界验证官方类型和运行环境。
 - 频率索引映射、播放速度影响和物理单位展示策略。
 - 满足证据门槛后的具体升级规则表。
 - 真实设备 adapter 的协议、权限和安全评审结果。
 
 这些决策不得改变本文已确定的格式边界、核心层独立性和诊断可追踪性要求。
 
-已决架构：workspace 与运行时见 [ADR-0001](adr/0001-workspace-and-runtime-architecture.md)，处理 pipeline 见 [ADR-0002](adr/0002-pulse-processing-pipeline.md)，跨端 schema/adapter 见 [ADR-0003](adr/0003-versioned-boundary-contracts.md)。Web 文件默认不持久化，见 [PDR-0003](pdr/0003-file-lifecycle-and-source-safety.md)。
+已决架构：workspace 与运行时见
+[ADR-0001](adr/0001-workspace-and-runtime-architecture.md)，处理 pipeline 见
+[ADR-0002](adr/0002-pulse-processing-pipeline.md)，跨端 schema/adapter 见
+[ADR-0003](adr/0003-versioned-boundary-contracts.md)。Web 文件默认不持久化，见
+[PDR-0003](pdr/0003-file-lifecycle-and-source-safety.md)。

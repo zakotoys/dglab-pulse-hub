@@ -29,11 +29,7 @@ import {
 } from '@dglab-pulse-hub/core';
 import { decodeQr, encodeQr } from './qr.js';
 import { renderQrImage } from './images.js';
-import {
-  operationResult,
-  statusFromDiagnostics,
-  type OperationResult
-} from './result.js';
+import { operationResult, statusFromDiagnostics, type OperationResult } from './result.js';
 
 export interface InputDescriptor {
   readonly displayName?: string;
@@ -98,12 +94,10 @@ function resolvePulseInput(
   maxBytes?: number
 ): { readonly pulse: Pulse | null; readonly diagnostics: readonly Diagnostic[] } {
   if (input !== null && typeof input === 'object' && !(input instanceof Uint8Array)) {
-    const rules = maxBytes === undefined
-      ? DEFAULT_RULE_SET
-      : { ...DEFAULT_RULE_SET, maxBytes };
+    const rules = maxBytes === undefined ? DEFAULT_RULE_SET : { ...DEFAULT_RULE_SET, maxBytes };
     const validation = validatePulse(input as Pulse, rules);
     return {
-      pulse: validation.valid ? input as Pulse : null,
+      pulse: validation.valid ? (input as Pulse) : null,
       diagnostics: validation.diagnostics
     };
   }
@@ -116,23 +110,31 @@ function qrLimitsFor(maxBytes: number | undefined): Parameters<typeof decodeQr>[
   // Apply the same byte budget to compressed and decoded QR payloads. The hex
   // budget is expressed in characters, so allow two characters per byte while
   // guarding arithmetic overflow for untrusted runtime options.
-  const maxHexCharacters = Number.isSafeInteger(maxBytes) && maxBytes > 0
-    ? Math.min(Number.MAX_SAFE_INTEGER, maxBytes > (Number.MAX_SAFE_INTEGER - 32) / 2
-      ? Number.MAX_SAFE_INTEGER
-      : maxBytes * 2 + 32)
-    : maxBytes;
+  const maxHexCharacters =
+    Number.isSafeInteger(maxBytes) && maxBytes > 0
+      ? Math.min(
+          Number.MAX_SAFE_INTEGER,
+          maxBytes > (Number.MAX_SAFE_INTEGER - 32) / 2
+            ? Number.MAX_SAFE_INTEGER
+            : maxBytes * 2 + 32
+        )
+      : maxBytes;
   // The gzip member contains Base64, whose representation is at most 4/3 the
   // decoded UTF-8 size (plus padding). Leave that framing headroom so the
   // nested pulse parser, rather than the intermediary encoding, enforces the
   // caller's actual source-text budget.
-  const maxDecompressedBytes = Number.isSafeInteger(maxBytes) && maxBytes > 0
-    ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(
-        64 * 1024,
-        maxBytes > (Number.MAX_SAFE_INTEGER - 8) * 3 / 4
-          ? Number.MAX_SAFE_INTEGER
-          : Math.ceil(maxBytes * 4 / 3) + 4
-      ))
-    : maxBytes;
+  const maxDecompressedBytes =
+    Number.isSafeInteger(maxBytes) && maxBytes > 0
+      ? Math.min(
+          Number.MAX_SAFE_INTEGER,
+          Math.max(
+            64 * 1024,
+            maxBytes > ((Number.MAX_SAFE_INTEGER - 8) * 3) / 4
+              ? Number.MAX_SAFE_INTEGER
+              : Math.ceil((maxBytes * 4) / 3) + 4
+          )
+        )
+      : maxBytes;
   return {
     maxHexCharacters,
     maxCompressedBytes: maxBytes,
@@ -141,10 +143,7 @@ function qrLimitsFor(maxBytes: number | undefined): Parameters<typeof decodeQr>[
   };
 }
 
-function parseInput(
-  input: string | Uint8Array,
-  maxBytes?: number
-): ParsedInput {
+function parseInput(input: string | Uint8Array, maxBytes?: number): ParsedInput {
   const parseOptions = maxBytes === undefined ? {} : { maxBytes };
   const initial = parsePulse(input, parseOptions);
   if (initial.recognition.format !== 'qr-envelope') {
@@ -168,7 +167,11 @@ function parseInput(
         evidence: Object.freeze(['community-inferred'])
       }
     },
-    diagnostics: sortDiagnostics([...initial.diagnostics, ...decoded.diagnostics, ...nested.diagnostics])
+    diagnostics: sortDiagnostics([
+      ...initial.diagnostics,
+      ...decoded.diagnostics,
+      ...nested.diagnostics
+    ])
   };
 }
 
@@ -279,7 +282,12 @@ export function diffPulses(
       afterDigest: after.source.digest,
       diff
     };
-    return operationResult('diff', status, status === 'success' ? data : null, sortDiagnostics(diagnostics));
+    return operationResult(
+      'diff',
+      status,
+      status === 'success' ? data : null,
+      sortDiagnostics(diagnostics)
+    );
   } catch {
     return operationResult('diff', 'failed', null, [
       makeDiagnostic(
@@ -382,18 +390,19 @@ export interface EditData {
   readonly contentType?: string;
 }
 
-function rejectedExport(
-  diagnostics: readonly Diagnostic[]
-): OperationResult<ExportData> {
-  const effective = diagnostics.length > 0
-    ? diagnostics
-    : [makeDiagnostic(
-        DIAGNOSTIC_CODES.EXPORT_BLOCKED,
-        'error',
-        'export',
-        'Pulse could not be exported.',
-        location('$')
-      )];
+function rejectedExport(diagnostics: readonly Diagnostic[]): OperationResult<ExportData> {
+  const effective =
+    diagnostics.length > 0
+      ? diagnostics
+      : [
+          makeDiagnostic(
+            DIAGNOSTIC_CODES.EXPORT_BLOCKED,
+            'error',
+            'export',
+            'Pulse could not be exported.',
+            location('$')
+          )
+        ];
   const seen = new Set<string>();
   const unique = effective.filter((diagnostic) => {
     const identity = diagnostic.code + '\0' + JSON.stringify(diagnostic.location);
@@ -443,7 +452,11 @@ export function exportPulse(
     return operationResult('export', 'cancelled', null, [cancellationDiagnostic()]);
   }
   const requestedFormat: unknown = options.format;
-  if (requestedFormat !== undefined && requestedFormat !== 'pulse-text' && requestedFormat !== 'qr-envelope') {
+  if (
+    requestedFormat !== undefined &&
+    requestedFormat !== 'pulse-text' &&
+    requestedFormat !== 'qr-envelope'
+  ) {
     return rejectedExport([unsupportedExportOption('format', requestedFormat)]);
   }
   const requestedMode: unknown = options.mode;
@@ -451,13 +464,15 @@ export function exportPulse(
     return rejectedExport([unsupportedExportOption('mode', requestedMode)]);
   }
   if (requestedFormat === 'qr-envelope' && requestedMode === 'source') {
-    return rejectedExport([makeDiagnostic(
-      DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_MODE,
-      'error',
-      'export',
-      'Source mode is only supported for pulse-text export.',
-      location('mode')
-    )]);
+    return rejectedExport([
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EXPORT_UNSUPPORTED_MODE,
+        'error',
+        'export',
+        'Source mode is only supported for pulse-text export.',
+        location('mode')
+      )
+    ]);
   }
   let pulse: Pulse | null;
   let parseDiagnostics: readonly Diagnostic[] = [];
@@ -491,17 +506,22 @@ export function exportPulse(
       return rejectedExport([...diagnostics, exportFailure(error)]);
     }
     const bytes = image.bytes;
-    return operationResult('export', 'success', {
-      format,
-      displayName: qrDisplayName(options.displayName),
-      text: encoded.content,
-      bytes,
-      byteSize: bytes.byteLength,
-      mode: 'canonical',
-      sourceDigest: pulse.source.digest,
-      roundTripVerified: true,
-      contentType: image.mimeType
-    }, diagnostics);
+    return operationResult(
+      'export',
+      'success',
+      {
+        format,
+        displayName: qrDisplayName(options.displayName),
+        text: encoded.content,
+        bytes,
+        byteSize: bytes.byteLength,
+        mode: 'canonical',
+        sourceDigest: pulse.source.digest,
+        roundTripVerified: true,
+        contentType: image.mimeType
+      },
+      diagnostics
+    );
   }
   let serialized: ReturnType<typeof serializePulse>;
   try {
@@ -537,28 +557,36 @@ export function exportPulse(
     );
   }
   if (hasBlockingErrors(diagnostics)) return rejectedExport(diagnostics);
-  return operationResult('export', 'success', {
-    format,
-    displayName: options.displayName ?? 'pulse.pulse',
-    text: serialized.text,
-    bytes: serialized.bytes,
-    byteSize: serialized.bytes.byteLength,
-    mode: serialized.mode,
-    sourceDigest: pulse.source.digest,
-    roundTripVerified: verified
-  }, sortDiagnostics(diagnostics));
+  return operationResult(
+    'export',
+    'success',
+    {
+      format,
+      displayName: options.displayName ?? 'pulse.pulse',
+      text: serialized.text,
+      bytes: serialized.bytes,
+      byteSize: serialized.bytes.byteLength,
+      mode: serialized.mode,
+      sourceDigest: pulse.source.digest,
+      roundTripVerified: verified
+    },
+    sortDiagnostics(diagnostics)
+  );
 }
 
 function editFailure(diagnostics: readonly Diagnostic[]): OperationResult<EditData> {
-  const effective = diagnostics.length > 0
-    ? diagnostics
-    : [makeDiagnostic(
-        DIAGNOSTIC_CODES.EDIT_VALUE,
-        'error',
-        'semantic',
-        'Pulse edit could not be applied.',
-        location('$')
-      )];
+  const effective =
+    diagnostics.length > 0
+      ? diagnostics
+      : [
+          makeDiagnostic(
+            DIAGNOSTIC_CODES.EDIT_VALUE,
+            'error',
+            'semantic',
+            'Pulse edit could not be applied.',
+            location('$')
+          )
+        ];
   return operationResult('edit', 'rejected', null, sortDiagnostics(effective));
 }
 
@@ -575,48 +603,56 @@ function finalizeEdit(
 ): OperationResult<EditData> {
   const diagnostics = [...parseDiagnostics, ...edited.diagnostics];
   if (edited.pulse === null || hasBlockingErrors(diagnostics)) return editFailure(diagnostics);
-  if (cancelled(signal)) return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
+  if (cancelled(signal))
+    return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
   let serialized: ReturnType<typeof serializePulse>;
   try {
     serialized = serializePulse(edited.pulse, { mode: 'canonical' });
   } catch {
-    return editFailure([...diagnostics, makeDiagnostic(
-      DIAGNOSTIC_CODES.EXPORT_BLOCKED,
-      'error',
-      'export',
-      'Edited Pulse could not be serialized.',
-      location('$')
-    )]);
+    return editFailure([
+      ...diagnostics,
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EXPORT_BLOCKED,
+        'error',
+        'export',
+        'Edited Pulse could not be serialized.',
+        location('$')
+      )
+    ]);
   }
   diagnostics.push(...serialized.diagnostics);
-  const roundTrip = parsePulse(
-    serialized.bytes,
-    maxBytes === undefined ? {} : { maxBytes }
-  );
+  const roundTrip = parsePulse(serialized.bytes, maxBytes === undefined ? {} : { maxBytes });
   diagnostics.push(...roundTrip.diagnostics);
   const verified = roundTrip.pulse !== null && semanticallyEqual(edited.pulse, roundTrip.pulse);
   if (!verified) {
-    diagnostics.push(makeDiagnostic(
-      DIAGNOSTIC_CODES.EXPORT_ROUNDTRIP_MISMATCH,
-      'error',
-      'export',
-      'Edited output did not round-trip to equivalent pulse semantics.',
-      location('$')
-    ));
+    diagnostics.push(
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EXPORT_ROUNDTRIP_MISMATCH,
+        'error',
+        'export',
+        'Edited output did not round-trip to equivalent pulse semantics.',
+        location('$')
+      )
+    );
   }
   if (hasBlockingErrors(diagnostics)) return editFailure(diagnostics);
   const bytes = new Uint8Array(serialized.bytes);
-  return operationResult('edit', 'success', {
-    format: 'pulse-text',
-    mode: 'canonical',
-    text: serialized.text,
-    bytes,
-    byteSize: bytes.byteLength,
-    sourceDigest: sourcePulse.source.digest,
-    roundTripVerified: verified,
-    changeRecords: Object.freeze([...edited.changeRecords]),
-    contentType: 'text/plain'
-  }, sortDiagnostics(diagnostics));
+  return operationResult(
+    'edit',
+    'success',
+    {
+      format: 'pulse-text',
+      mode: 'canonical',
+      text: serialized.text,
+      bytes,
+      byteSize: bytes.byteLength,
+      sourceDigest: sourcePulse.source.digest,
+      roundTripVerified: verified,
+      changeRecords: Object.freeze([...edited.changeRecords]),
+      contentType: 'text/plain'
+    },
+    sortDiagnostics(diagnostics)
+  );
 }
 
 /** Apply one explicit domain edit and return a canonical, revalidated result.
@@ -626,15 +662,22 @@ export function applyPulseEdit(
   input: Pulse | string | Uint8Array,
   options: EditOptions
 ): OperationResult<EditData> {
-  if (options === null || typeof options !== 'object' ||
-      !('command' in options) || options.command === null || typeof options.command !== 'object') {
-    return editFailure([makeDiagnostic(
-      DIAGNOSTIC_CODES.EDIT_VALUE,
-      'error',
-      'semantic',
-      'An edit command is required.',
-      location('command')
-    )]);
+  if (
+    options === null ||
+    typeof options !== 'object' ||
+    !('command' in options) ||
+    options.command === null ||
+    typeof options.command !== 'object'
+  ) {
+    return editFailure([
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EDIT_VALUE,
+        'error',
+        'semantic',
+        'An edit command is required.',
+        location('command')
+      )
+    ]);
   }
   if (cancelled(options.signal)) {
     return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
@@ -646,16 +689,19 @@ export function applyPulseEdit(
     pulse = parsed.pulse;
     parseDiagnostics = parsed.diagnostics;
   } catch {
-    return editFailure([makeDiagnostic(
-      DIAGNOSTIC_CODES.EDIT_VALUE,
-      'error',
-      'semantic',
-      'Pulse input could not be parsed.',
-      location('$')
-    )]);
+    return editFailure([
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EDIT_VALUE,
+        'error',
+        'semantic',
+        'Pulse input could not be parsed.',
+        location('$')
+      )
+    ]);
   }
   if (pulse === null) return editFailure(parseDiagnostics);
-  if (cancelled(options.signal)) return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
+  if (cancelled(options.signal))
+    return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
 
   let edited: ReturnType<typeof setControlPointStrength>;
   try {
@@ -685,11 +731,7 @@ export function applyPulseEdit(
         );
         break;
       case 'duration':
-        edited = setSectionDuration(
-          pulse,
-          options.command.sectionIndex,
-          options.command.value
-        );
+        edited = setSectionDuration(pulse, options.command.sectionIndex, options.command.value);
         break;
       case 'add-point':
         edited = addControlPoint(
@@ -707,22 +749,26 @@ export function applyPulseEdit(
         );
         break;
       default:
-        return editFailure([makeDiagnostic(
-          DIAGNOSTIC_CODES.EDIT_VALUE,
-          'error',
-          'semantic',
-          'Unsupported edit command.',
-          location('command')
-        )]);
+        return editFailure([
+          makeDiagnostic(
+            DIAGNOSTIC_CODES.EDIT_VALUE,
+            'error',
+            'semantic',
+            'Unsupported edit command.',
+            location('command')
+          )
+        ]);
     }
   } catch {
-    return editFailure([makeDiagnostic(
-      DIAGNOSTIC_CODES.EDIT_VALUE,
-      'error',
-      'semantic',
-      'Pulse edit could not be applied.',
-      location('command')
-    )]);
+    return editFailure([
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EDIT_VALUE,
+        'error',
+        'semantic',
+        'Pulse edit could not be applied.',
+        location('command')
+      )
+    ]);
   }
   return finalizeEdit(pulse, edited, parseDiagnostics, options.signal, options.maxBytes);
 }
@@ -734,15 +780,18 @@ export function applyPulseAssist(
   options: AssistOptions
 ): OperationResult<EditData> {
   if (options === null || typeof options !== 'object') {
-    return editFailure([makeDiagnostic(
-      DIAGNOSTIC_CODES.EDIT_NOT_REVIEWED,
-      'error',
-      'semantic',
-      'A reviewed quadratic assist command is required.',
-      location('command')
-    )]);
+    return editFailure([
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EDIT_NOT_REVIEWED,
+        'error',
+        'semantic',
+        'A reviewed quadratic assist command is required.',
+        location('command')
+      )
+    ]);
   }
-  if (cancelled(options.signal)) return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
+  if (cancelled(options.signal))
+    return operationResult('edit', 'cancelled', null, [cancellationDiagnostic()]);
   let pulse: Pulse | null;
   let parseDiagnostics: readonly Diagnostic[] = [];
   try {
@@ -750,13 +799,15 @@ export function applyPulseAssist(
     pulse = parsed.pulse;
     parseDiagnostics = parsed.diagnostics;
   } catch {
-    return editFailure([makeDiagnostic(
-      DIAGNOSTIC_CODES.EDIT_VALUE,
-      'error',
-      'semantic',
-      'Pulse input could not be parsed.',
-      location('$')
-    )]);
+    return editFailure([
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.EDIT_VALUE,
+        'error',
+        'semantic',
+        'Pulse input could not be parsed.',
+        location('$')
+      )
+    ]);
   }
   if (pulse === null) return editFailure(parseDiagnostics);
   const edited = applyReviewedQuadraticAssist(pulse, {

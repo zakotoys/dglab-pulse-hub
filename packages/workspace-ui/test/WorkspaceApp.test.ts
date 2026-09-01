@@ -14,4 +14,15 @@ describe('WorkspaceApp QR image controls', () => {
     expect(previewIndex).toBeGreaterThan(-1);
     expect(exportIndex).toBeGreaterThan(previewIndex);
   });
+
+  it('renders the requested locale and preference controls', () => {
+    const client = { fileMode: 'browser' } as WorkspaceClient;
+    const markup = renderToStaticMarkup(
+      createElement(WorkspaceApp, { client, initialLocale: 'ja-JP', initialTheme: 'dark' })
+    );
+
+    expect(markup).toContain('パルスドキュメントを開く');
+    expect(markup).toContain('aria-label="言語"');
+    expect(markup).toContain('data-theme="dark"');
+  });
 });

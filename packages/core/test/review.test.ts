@@ -22,8 +22,12 @@ describe('reviewed assist identity', () => {
     expect(isAssistProposalValid(proposal)).toBe(true);
     expect(isAssistProposalValid({ ...proposal, startStrength: -0.01 })).toBe(false);
     expect(isAssistProposalValid({ ...proposal, endStrength: 100.01 })).toBe(false);
-    expect(isAssistProposalValid({ ...proposal, endPointIndex: proposal.sectionPointCount })).toBe(false);
-    expect(isAssistProposalValid({ ...proposal, endPointIndex: proposal.startPointIndex })).toBe(false);
+    expect(isAssistProposalValid({ ...proposal, endPointIndex: proposal.sectionPointCount })).toBe(
+      false
+    );
+    expect(isAssistProposalValid({ ...proposal, endPointIndex: proposal.startPointIndex })).toBe(
+      false
+    );
   });
 
   it('accepts only the exact source and proposal that was reviewed', () => {

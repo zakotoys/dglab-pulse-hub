@@ -68,10 +68,13 @@ export function toInspectDto(data: InspectData): InspectResultDto {
       changeCount: data.pulse.changeRecords.length
     },
     metadata,
-    stream: data.stream === null ? null : {
-      ...data.stream,
-      warnings: data.stream.warnings.map(projectDiagnostic)
-    },
+    stream:
+      data.stream === null
+        ? null
+        : {
+            ...data.stream,
+            warnings: data.stream.warnings.map(projectDiagnostic)
+          },
     sourceDigest: data.sourceDigest
   });
 }
@@ -146,7 +149,11 @@ function projectQrDecodePayload(value: unknown): unknown {
   // The decoded plaintext is deliberately reduced to a content descriptor.
   if (isRecord(value) && typeof value.pulseText === 'string') {
     if (!value.pulseText.startsWith(PULSE_PREFIX)) return null;
-    if ('downloadId' in value && (typeof value.downloadId !== 'string' || !/^[A-Za-z0-9._~-]{1,128}$/.test(value.downloadId))) return null;
+    if (
+      'downloadId' in value &&
+      (typeof value.downloadId !== 'string' || !/^[A-Za-z0-9._~-]{1,128}$/.test(value.downloadId))
+    )
+      return null;
     const bytes = encodeUtf8(value.pulseText);
     const downloadId = typeof value.downloadId === 'string' ? value.downloadId : undefined;
     const parsed = qrDecodeDataSchema.safeParse({
@@ -169,9 +176,14 @@ function projectEditPayload(value: unknown): unknown {
   const text = typeof value.text === 'string' ? value.text : null;
   const bytes = value.bytes instanceof Uint8Array ? value.bytes : null;
   if (text === null && bytes === null) return null;
-  if (text !== null && bytes !== null && encodeUtf8(text).byteLength !== bytes.byteLength) return null;
+  if (text !== null && bytes !== null && encodeUtf8(text).byteLength !== bytes.byteLength)
+    return null;
   if (value.roundTripVerified !== true) return null;
-  if ('downloadId' in value && (typeof value.downloadId !== 'string' || !/^[A-Za-z0-9._~-]{1,128}$/.test(value.downloadId))) return null;
+  if (
+    'downloadId' in value &&
+    (typeof value.downloadId !== 'string' || !/^[A-Za-z0-9._~-]{1,128}$/.test(value.downloadId))
+  )
+    return null;
   const sourceDigest = typeof value.sourceDigest === 'string' ? value.sourceDigest : '';
   const rawChangeRecords = Array.isArray(value.changeRecords) ? value.changeRecords : [];
   const changeRecords = rawChangeRecords.map(projectChangeRecord);
@@ -191,10 +203,20 @@ function projectEditPayload(value: unknown): unknown {
 }
 
 function projectChangeRecord(value: unknown): Record<string, unknown> | null {
-  if (!isRecord(value) || typeof value.id !== 'string' ||
-      value.id.length === 0 || value.id.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(value.id) ||
-      (value.kind !== 'edit' && value.kind !== 'interpolation' && value.kind !== 'format-normalization' && value.kind !== 'upgrade') ||
-      typeof value.description !== 'string' || typeof value.path !== 'string') return null;
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    value.id.length === 0 ||
+    value.id.length > 128 ||
+    !/^[A-Za-z0-9._~-]+$/.test(value.id) ||
+    (value.kind !== 'edit' &&
+      value.kind !== 'interpolation' &&
+      value.kind !== 'format-normalization' &&
+      value.kind !== 'upgrade') ||
+    typeof value.description !== 'string' ||
+    typeof value.path !== 'string'
+  )
+    return null;
   if (!/^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(value.path) || value.path.includes('..')) return null;
   const before = projectChangeValue(value.before);
   const after = projectChangeValue(value.after);
@@ -239,7 +261,11 @@ function projectRenderPayload(value: unknown): unknown {
     height: value.height,
     streamDigest: value.streamDigest
   };
-  if ('downloadId' in value && (typeof value.downloadId !== 'string' || !/^[A-Za-z0-9._~-]{1,128}$/.test(value.downloadId))) return null;
+  if (
+    'downloadId' in value &&
+    (typeof value.downloadId !== 'string' || !/^[A-Za-z0-9._~-]{1,128}$/.test(value.downloadId))
+  )
+    return null;
   if (typeof value.downloadId === 'string') candidate.downloadId = value.downloadId;
   if (typeof value.contentType === 'string') candidate.contentType = value.contentType;
   const parsed = renderDataSchema.safeParse(candidate);
@@ -250,64 +276,110 @@ function projectDiagnostic(value: unknown): Diagnostic {
   if (isRecord(value)) {
     const rawLocation = isRecord(value.location) ? value.location : {};
     const rawPath = typeof rawLocation.path === 'string' ? rawLocation.path : '$';
-    const path = /^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(rawPath) && !rawPath.includes('..')
-      ? rawPath
-      : '$';
-    const stage = typeof value.stage === 'string' &&
-      ['recognize', 'syntax', 'range', 'semantic', 'resource', 'export', 'qr', 'adapter', 'task'].includes(value.stage)
-      ? value.stage as Diagnostic['stage']
-      : 'task';
-    const severity = value.severity === 'warning' || value.severity === 'info'
-      ? value.severity
-      : 'error';
-    const code = typeof value.code === 'string' && /^PULSE_[A-Z0-9_]+$/.test(value.code)
-      ? value.code
-      : 'PULSE_TASK_INVALID_TRANSITION';
-    const rawMessage = typeof value.message === 'string' && value.message.length > 0
-      ? value.message.slice(0, 2000)
-      : 'The operation could not be completed.';
+    const path =
+      /^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(rawPath) && !rawPath.includes('..') ? rawPath : '$';
+    const stage =
+      typeof value.stage === 'string' &&
+      [
+        'recognize',
+        'syntax',
+        'range',
+        'semantic',
+        'resource',
+        'export',
+        'qr',
+        'adapter',
+        'task'
+      ].includes(value.stage)
+        ? (value.stage as Diagnostic['stage'])
+        : 'task';
+    const severity =
+      value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error';
+    const code =
+      typeof value.code === 'string' && /^PULSE_[A-Z0-9_]+$/.test(value.code)
+        ? value.code
+        : 'PULSE_TASK_INVALID_TRANSITION';
+    const rawMessage =
+      typeof value.message === 'string' && value.message.length > 0
+        ? value.message.slice(0, 2000)
+        : 'The operation could not be completed.';
     const message = sanitizePublicText(rawMessage);
     const rawSpan = isRecord(rawLocation.span) ? rawLocation.span : null;
-    const span = rawSpan !== null &&
-      typeof rawSpan.start === 'number' && typeof rawSpan.end === 'number' &&
-      typeof rawSpan.line === 'number' && typeof rawSpan.column === 'number' &&
-      Number.isSafeInteger(rawSpan.start) && Number.isSafeInteger(rawSpan.end) &&
-      Number.isSafeInteger(rawSpan.line) && Number.isSafeInteger(rawSpan.column) &&
-      rawSpan.start >= 0 && rawSpan.end >= rawSpan.start && rawSpan.line >= 1 && rawSpan.column >= 1
-      ? {
-          start: rawSpan.start,
-          end: rawSpan.end,
-          line: rawSpan.line,
-          column: rawSpan.column
-        }
-      : undefined;
-    const extra: { sectionIndex?: number; pointIndex?: number; field?: string; span?: typeof span } = {};
-    if (typeof rawLocation.sectionIndex === 'number' && Number.isSafeInteger(rawLocation.sectionIndex) && rawLocation.sectionIndex >= 0) {
+    const span =
+      rawSpan !== null &&
+      typeof rawSpan.start === 'number' &&
+      typeof rawSpan.end === 'number' &&
+      typeof rawSpan.line === 'number' &&
+      typeof rawSpan.column === 'number' &&
+      Number.isSafeInteger(rawSpan.start) &&
+      Number.isSafeInteger(rawSpan.end) &&
+      Number.isSafeInteger(rawSpan.line) &&
+      Number.isSafeInteger(rawSpan.column) &&
+      rawSpan.start >= 0 &&
+      rawSpan.end >= rawSpan.start &&
+      rawSpan.line >= 1 &&
+      rawSpan.column >= 1
+        ? {
+            start: rawSpan.start,
+            end: rawSpan.end,
+            line: rawSpan.line,
+            column: rawSpan.column
+          }
+        : undefined;
+    const extra: {
+      sectionIndex?: number;
+      pointIndex?: number;
+      field?: string;
+      span?: typeof span;
+    } = {};
+    if (
+      typeof rawLocation.sectionIndex === 'number' &&
+      Number.isSafeInteger(rawLocation.sectionIndex) &&
+      rawLocation.sectionIndex >= 0
+    ) {
       extra.sectionIndex = rawLocation.sectionIndex;
     }
-    if (typeof rawLocation.pointIndex === 'number' && Number.isSafeInteger(rawLocation.pointIndex) && rawLocation.pointIndex >= 0) {
+    if (
+      typeof rawLocation.pointIndex === 'number' &&
+      Number.isSafeInteger(rawLocation.pointIndex) &&
+      rawLocation.pointIndex >= 0
+    ) {
       extra.pointIndex = rawLocation.pointIndex;
     }
-    if (typeof rawLocation.field === 'string' && /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(rawLocation.field)) extra.field = rawLocation.field;
+    if (
+      typeof rawLocation.field === 'string' &&
+      /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(rawLocation.field)
+    )
+      extra.field = rawLocation.field;
     if (span !== undefined) extra.span = span;
-    const suggestion = typeof value.suggestion === 'string' && value.suggestion.length > 0
-      ? sanitizePublicText(value.suggestion.slice(0, 2000))
-      : undefined;
+    const suggestion =
+      typeof value.suggestion === 'string' && value.suggestion.length > 0
+        ? sanitizePublicText(value.suggestion.slice(0, 2000))
+        : undefined;
     const rawParameters = isRecord(value.parameters) ? value.parameters : null;
     const parameters: Record<string, string | number | boolean> = {};
     if (rawParameters !== null) {
       for (const [key, parameter] of Object.entries(rawParameters)) {
         if (!/^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(key)) continue;
         if (/(?:source|content|bytes|payload|text|path)/i.test(key)) continue;
-        if (typeof parameter === 'string') parameters[key] = sanitizePublicText(parameter.slice(0, 200));
+        if (typeof parameter === 'string')
+          parameters[key] = sanitizePublicText(parameter.slice(0, 200));
         else if (typeof parameter === 'boolean') parameters[key] = parameter;
-        else if (typeof parameter === 'number' && Number.isFinite(parameter)) parameters[key] = parameter;
+        else if (typeof parameter === 'number' && Number.isFinite(parameter))
+          parameters[key] = parameter;
       }
     }
-    return makeDiagnostic(code, severity, stage, message, { path, ...extra }, {
-      ...(suggestion === undefined ? {} : { suggestion }),
-      ...(Object.keys(parameters).length === 0 ? {} : { parameters })
-    });
+    return makeDiagnostic(
+      code,
+      severity,
+      stage,
+      message,
+      { path, ...extra },
+      {
+        ...(suggestion === undefined ? {} : { suggestion }),
+        ...(Object.keys(parameters).length === 0 ? {} : { parameters })
+      }
+    );
   }
   return makeDiagnostic(
     'PULSE_TASK_INVALID_TRANSITION',
@@ -322,8 +394,11 @@ function sanitizePublicText(value: string): string {
   if (value.includes(PULSE_PREFIX)) return 'The operation could not be completed.';
   // Diagnostics are allowed to describe structural fields, but never local
   // filesystem locations or source payloads.
-  if (/(?:^|[\s([{"'])\/(?:[^\s/]+\/)+[^\s)]*/.test(value) ||
-      /\b[A-Za-z]:[\\/][^\s)]+/.test(value) || value.includes('\\\\')) {
+  if (
+    /(?:^|[\s([{"'])\/(?:[^\s/]+\/)+[^\s)]*/.test(value) ||
+    /\b[A-Za-z]:[\\/][^\s)]+/.test(value) ||
+    value.includes('\\\\')
+  ) {
     return value.replace(/(?:[A-Za-z]:[\\/]|\/)[^\s)]+/g, '$');
   }
   return value;
@@ -332,14 +407,15 @@ function sanitizePublicText(value: string): string {
 function toBatchDto(data: unknown): unknown {
   if (!isRecord(data) || !Array.isArray(data.items)) throw new Error('Invalid batch payload.');
   const items = data.items.map((item) => {
-    if (!isRecord(item)) return {
-      id: 'item-invalid',
-      index: 0,
-      displayName: 'pulse',
-      status: 'failed',
-      diagnostics: [projectDiagnostic(null)],
-      result: null
-    };
+    if (!isRecord(item))
+      return {
+        id: 'item-invalid',
+        index: 0,
+        displayName: 'pulse',
+        status: 'failed',
+        diagnostics: [projectDiagnostic(null)],
+        result: null
+      };
     const status = item.status;
     const projected = status === 'success' ? projectBatchPayload(item.data) : null;
     if (status === 'success' && projected === null) {
@@ -348,7 +424,8 @@ function toBatchDto(data: unknown): unknown {
     return {
       id: item.id,
       index: item.index,
-      displayName: typeof item.displayName === 'string' ? sanitizeDisplayName(item.displayName) : 'pulse',
+      displayName:
+        typeof item.displayName === 'string' ? sanitizeDisplayName(item.displayName) : 'pulse',
       status,
       diagnostics: Array.isArray(item.diagnostics)
         ? item.diagnostics.map(projectDiagnostic)
@@ -368,37 +445,36 @@ function toBatchDto(data: unknown): unknown {
   });
 }
 
-export function toOperationDto<T>(
-  result: OperationResult<T>
-): OperationEnvelopeDto {
+export function toOperationDto<T>(result: OperationResult<T>): OperationEnvelopeDto {
   try {
     return toOperationDtoUnsafe(result);
   } catch {
     // A private adapter payload must never turn into an exception carrying
     // source bytes or a local path. Return a contract-valid failure envelope.
-    const operation = typeof result?.operation === 'string' && /^[a-z][a-z0-9-]{0,79}$/.test(result.operation)
-      ? result.operation
-      : 'task';
+    const operation =
+      typeof result?.operation === 'string' && /^[a-z][a-z0-9-]{0,79}$/.test(result.operation)
+        ? result.operation
+        : 'task';
     return operationEnvelopeSchema.parse({
       schemaVersion: 'pulse-contract-v1',
       ruleVersion: 'pulse-rules-v1',
       operation,
       status: 'failed',
       result: null,
-      diagnostics: [makeDiagnostic(
-        'PULSE_TASK_INVALID_TRANSITION',
-        'error',
-        'task',
-        'The operation result was invalid.',
-        { path: '$' }
-      )]
+      diagnostics: [
+        makeDiagnostic(
+          'PULSE_TASK_INVALID_TRANSITION',
+          'error',
+          'task',
+          'The operation result was invalid.',
+          { path: '$' }
+        )
+      ]
     });
   }
 }
 
-function toOperationDtoUnsafe<T>(
-  result: OperationResult<T>
-): OperationEnvelopeDto {
+function toOperationDtoUnsafe<T>(result: OperationResult<T>): OperationEnvelopeDto {
   let payload: unknown = null;
   if (result.status === 'success' && result.data !== null) {
     if (result.operation === 'inspect') {
@@ -409,10 +485,16 @@ function toOperationDtoUnsafe<T>(
       payload = toBatchDto(result.data);
     } else if (result.operation === 'read-file') {
       const data = result.data as FileReadData;
-      if (!isRecord(data) || typeof data.displayName !== 'string' ||
-          !Number.isSafeInteger(data.byteSize) || data.byteSize < 0 ||
-          typeof data.digest !== 'string' || data.digest.length === 0 ||
-          !(data.content instanceof Uint8Array) || data.content.byteLength !== data.byteSize) {
+      if (
+        !isRecord(data) ||
+        typeof data.displayName !== 'string' ||
+        !Number.isSafeInteger(data.byteSize) ||
+        data.byteSize < 0 ||
+        typeof data.digest !== 'string' ||
+        data.digest.length === 0 ||
+        !(data.content instanceof Uint8Array) ||
+        data.content.byteLength !== data.byteSize
+      ) {
         throw new Error('Invalid read-file payload.');
       }
       payload = {
@@ -422,8 +504,12 @@ function toOperationDtoUnsafe<T>(
       };
     } else if (result.operation === 'write-file') {
       const data = result.data as FileWriteData;
-      if (!isRecord(data) || typeof data.displayName !== 'string' ||
-          !Number.isSafeInteger(data.byteSize) || data.byteSize < 0) {
+      if (
+        !isRecord(data) ||
+        typeof data.displayName !== 'string' ||
+        !Number.isSafeInteger(data.byteSize) ||
+        data.byteSize < 0
+      ) {
         throw new Error('Invalid write-file payload.');
       }
       payload = {
@@ -436,18 +522,21 @@ function toOperationDtoUnsafe<T>(
       payload = projectQrDecodePayload(result.data);
     } else if (result.operation === 'edit') {
       payload = projectEditPayload(result.data);
-  } else if (result.operation === 'render') {
+    } else if (result.operation === 'render') {
       payload = projectRenderPayload(result.data);
     } else if (result.operation === 'diff') {
       payload = projectDiffPayload(result.data);
     } else {
       // Unknown operation payloads are private by default. Primitive values
       // are safe summaries; objects may contain bytes, paths or source text.
-      payload = typeof result.data === 'string'
-        ? (result.data.startsWith(PULSE_PREFIX) ? {} : result.data)
-        : typeof result.data === 'number' || typeof result.data === 'boolean'
-          ? result.data
-          : {};
+      payload =
+        typeof result.data === 'string'
+          ? result.data.startsWith(PULSE_PREFIX)
+            ? {}
+            : result.data
+          : typeof result.data === 'number' || typeof result.data === 'boolean'
+            ? result.data
+            : {};
     }
   }
   const envelope: {
@@ -498,8 +587,13 @@ function projectDiffPayload(value: unknown): unknown {
 }
 
 function projectDiffEntry(value: unknown): Record<string, unknown> | null {
-  if (!isRecord(value) || typeof value.path !== 'string' ||
-      !/^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(value.path) || value.path.includes('..')) return null;
+  if (
+    !isRecord(value) ||
+    typeof value.path !== 'string' ||
+    !/^[A-Za-z_$][A-Za-z0-9_$.[\]]*$/.test(value.path) ||
+    value.path.includes('..')
+  )
+    return null;
   const before = projectDiffValue(value.before);
   const after = projectDiffValue(value.after);
   if (before === undefined || after === undefined) return null;

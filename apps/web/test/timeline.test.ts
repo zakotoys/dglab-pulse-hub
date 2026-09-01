@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { nearestTimelinePointIndex, timelineIndexForKey, timelineSectionForPoint, timelineTimeAtClientX } from '../src/timeline.js';
+import {
+  nearestTimelinePointIndex,
+  timelineIndexForKey,
+  timelineSectionForPoint,
+  timelineTimeAtClientX
+} from '../src/timeline.js';
 
 const points = [{ timeMs: 0 }, { timeMs: 100 }, { timeMs: 300 }];
 const sectionedPoints = [

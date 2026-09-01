@@ -7,8 +7,7 @@ import { operationEnvelopeSchema, type OperationEnvelopeDto } from '@dglab-pulse
 import { runCli } from '../apps/cli/src/index.js';
 import { buildServer } from '../apps/api/src/server.js';
 
-const VALID_TEXT =
-  'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
+const VALID_TEXT = 'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
 const INVALID_TEXT = 'not-a-pulse';
 
 const electronMock = vi.hoisted(() => {
@@ -33,9 +32,11 @@ const electronMock = vi.hoisted(() => {
     handlers,
     dialog,
     ipcMain: {
-      handle: vi.fn((channel: string, handler: (event: unknown, payload?: unknown) => Promise<unknown>) => {
-        handlers.set(channel, handler);
-      })
+      handle: vi.fn(
+        (channel: string, handler: (event: unknown, payload?: unknown) => Promise<unknown>) => {
+          handlers.set(channel, handler);
+        }
+      )
     },
     BrowserWindow: MockBrowserWindow,
     app: {
@@ -59,7 +60,11 @@ const trustedSenderUrl = new URL('../apps/desktop/src/index.html', import.meta.u
 async function cliEnvelope(path: string, expectedExitCode: number): Promise<OperationEnvelopeDto> {
   let output = '';
   const code = await runCli(['inspect', path, '--json'], {
-    stdout: { write: (value: string) => { output += value; } },
+    stdout: {
+      write: (value: string) => {
+        output += value;
+      }
+    },
     stderr: { write: () => undefined }
   });
   expect(code).toBe(expectedExitCode);
@@ -97,9 +102,11 @@ async function ipcEnvelope(path: string): Promise<OperationEnvelopeDto> {
 }
 
 function directEnvelope(text: string, displayName: string): OperationEnvelopeDto {
-  const result = toOperationDto(inspectPulse(text, {
-    input: { displayName, bytes: Buffer.byteLength(text, 'utf8') }
-  }));
+  const result = toOperationDto(
+    inspectPulse(text, {
+      input: { displayName, bytes: Buffer.byteLength(text, 'utf8') }
+    })
+  );
   expect(operationEnvelopeSchema.safeParse(result).success).toBe(true);
   return result;
 }
@@ -120,20 +127,23 @@ describe('cross-end operation contract', () => {
   it.each([
     ['accepted pulse', VALID_TEXT, 0, 200],
     ['rejected pulse', INVALID_TEXT, 2, 422]
-  ])('produces the same %s envelope through every entry point', async (_label, text, expectedExitCode, expectedHttpStatus) => {
-    const directory = await mkdtemp(join(tmpdir(), 'pulse-contract-'));
-    temporaryDirectories.push(directory);
-    const path = join(directory, 'sample.pulse');
-    await writeFile(path, text, 'utf8');
+  ])(
+    'produces the same %s envelope through every entry point',
+    async (_label, text, expectedExitCode, expectedHttpStatus) => {
+      const directory = await mkdtemp(join(tmpdir(), 'pulse-contract-'));
+      temporaryDirectories.push(directory);
+      const path = join(directory, 'sample.pulse');
+      await writeFile(path, text, 'utf8');
 
-    const direct = directEnvelope(text, 'sample.pulse');
-    const cli = await cliEnvelope(path, expectedExitCode);
-    const http = await httpEnvelope(text, 'sample.pulse');
-    expect(http.status === 'success' ? 200 : 422).toBe(expectedHttpStatus);
-    const ipc = await ipcEnvelope(path);
+      const direct = directEnvelope(text, 'sample.pulse');
+      const cli = await cliEnvelope(path, expectedExitCode);
+      const http = await httpEnvelope(text, 'sample.pulse');
+      expect(http.status === 'success' ? 200 : 422).toBe(expectedHttpStatus);
+      const ipc = await ipcEnvelope(path);
 
-    expect(cli).toEqual(direct);
-    expect(http).toEqual(direct);
-    expect(ipc).toEqual(direct);
-  });
+      expect(cli).toEqual(direct);
+      expect(http).toEqual(direct);
+      expect(ipc).toEqual(direct);
+    }
+  );
 });

@@ -1,9 +1,4 @@
-import {
-  DIAGNOSTIC_CODES,
-  location,
-  makeDiagnostic,
-  sortDiagnostics
-} from './diagnostics.js';
+import { DIAGNOSTIC_CODES, location, makeDiagnostic, sortDiagnostics } from './diagnostics.js';
 import { encodeUtf8, normalizeDecimal, stableDigest } from './numbers.js';
 import {
   previewQuadraticAssist,
@@ -40,16 +35,21 @@ function change(
   after: ChangeRecord['after'],
   affectedPointIndices?: readonly number[]
 ): ChangeRecord {
-  const affected = affectedPointIndices === undefined
-    ? []
-    : [...affectedPointIndices];
-  const id = kind + '-' + stableDigest(encodeUtf8(JSON.stringify({
-    kind,
-    path,
-    before,
-    after,
-    affected
-  })));
+  const affected = affectedPointIndices === undefined ? [] : [...affectedPointIndices];
+  const id =
+    kind +
+    '-' +
+    stableDigest(
+      encodeUtf8(
+        JSON.stringify({
+          kind,
+          path,
+          before,
+          after,
+          affected
+        })
+      )
+    );
   const record: {
     id: string;
     kind: ChangeRecord['kind'];
@@ -85,20 +85,19 @@ function editPulse(
   });
 }
 
-function invalid(message: string, path: string, code: string = DIAGNOSTIC_CODES.EDIT_VALUE): EditResult {
+function invalid(
+  message: string,
+  path: string,
+  code: string = DIAGNOSTIC_CODES.EDIT_VALUE
+): EditResult {
   return Object.freeze({
     pulse: null,
     changeRecords: Object.freeze([]),
-    diagnostics: Object.freeze([
-      makeDiagnostic(code, 'error', 'semantic', message, location(path))
-    ])
+    diagnostics: Object.freeze([makeDiagnostic(code, 'error', 'semantic', message, location(path))])
   });
 }
 
-function editablePulse(
-  pulse: Pulse,
-  rules: RuleSet
-): EditResult | null {
+function editablePulse(pulse: Pulse, rules: RuleSet): EditResult | null {
   const validation = validatePulse(pulse, rules);
   return validation.valid
     ? null
@@ -118,14 +117,19 @@ function normalizedRules(value: RuleSet): RuleSet {
 }
 
 function validControlPoint(value: unknown): value is ControlPoint {
-  return typeof value === 'object' && value !== null &&
+  return (
+    typeof value === 'object' &&
+    value !== null &&
     typeof (value as ControlPoint).strength === 'number' &&
     Number.isFinite((value as ControlPoint).strength) &&
-    (value as ControlPoint).strength >= 0 && (value as ControlPoint).strength <= 100 &&
+    (value as ControlPoint).strength >= 0 &&
+    (value as ControlPoint).strength <= 100 &&
     typeof (value as ControlPoint).strengthDecimal === 'string' &&
-    normalizeDecimal((value as ControlPoint).strengthDecimal) === (value as ControlPoint).strengthDecimal &&
+    normalizeDecimal((value as ControlPoint).strengthDecimal) ===
+      (value as ControlPoint).strengthDecimal &&
     typeof (value as ControlPoint).strengthRaw === 'string' &&
-    ((value as ControlPoint).anchor === 0 || (value as ControlPoint).anchor === 1);
+    ((value as ControlPoint).anchor === 0 || (value as ControlPoint).anchor === 1)
+  );
 }
 
 function updatePoint(
@@ -137,9 +141,19 @@ function updatePoint(
   rules: RuleSet
 ): EditResult {
   const section = pulse.sections[sectionIndex];
-  if (section === undefined) return invalid('Section does not exist.', 'sections[' + sectionIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+  if (section === undefined)
+    return invalid(
+      'Section does not exist.',
+      'sections[' + sectionIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   const point = section.pulseElement.points[pointIndex];
-  if (point === undefined) return invalid('Control point does not exist.', 'sections[' + sectionIndex + '].points[' + pointIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+  if (point === undefined)
+    return invalid(
+      'Control point does not exist.',
+      'sections[' + sectionIndex + '].points[' + pointIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   const points = section.pulseElement.points.map((item, index) =>
     index === pointIndex ? updater(item) : item
   );
@@ -183,14 +197,16 @@ function recomputeAutomaticRange(
     ) {
       return point;
     }
-    records.push(change(
-      'interpolation',
-      pathPrefix + '[' + index + '].strength',
-      'Recomputed automatic point between edited anchors.',
-      point.strengthDecimal,
-      value.decimal,
-      [index]
-    ));
+    records.push(
+      change(
+        'interpolation',
+        pathPrefix + '[' + index + '].strength',
+        'Recomputed automatic point between edited anchors.',
+        point.strengthDecimal,
+        value.decimal,
+        [index]
+      )
+    );
     return Object.freeze({
       ...point,
       // The decimal lexeme is the semantic authority. Keep the numeric
@@ -233,12 +249,19 @@ export function setControlPointStrength(
     return invalid('Section and point indexes must be non-negative safe integers.', 'sections');
   }
   if (!Number.isFinite(strength) || strength < 0 || strength > 100) {
-    return invalid('Strength must be between 0 and 100.', 'sections[' + sectionIndex + '].points[' + pointIndex + '].strength');
+    return invalid(
+      'Strength must be between 0 and 100.',
+      'sections[' + sectionIndex + '].points[' + pointIndex + '].strength'
+    );
   }
   const section = pulse.sections[sectionIndex];
   const point = section?.pulseElement.points[pointIndex];
   if (section === undefined || point === undefined) {
-    return invalid('Control point does not exist.', 'sections[' + sectionIndex + '].points[' + pointIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+    return invalid(
+      'Control point does not exist.',
+      'sections[' + sectionIndex + '].points[' + pointIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   }
   const decimal = normalizeDecimal(strength.toFixed(6));
   const normalizedStrength = Number(decimal);
@@ -263,14 +286,16 @@ export function setControlPointStrength(
   );
   const records: ChangeRecord[] = [primary];
   if (promoted) {
-    records.push(change(
-      'edit',
-      'sections[' + sectionIndex + '].points[' + pointIndex + '].anchor',
-      'Promoted an automatic point to an anchor because its strength was edited.',
-      point.anchor,
-      1,
-      [pointIndex]
-    ));
+    records.push(
+      change(
+        'edit',
+        'sections[' + sectionIndex + '].points[' + pointIndex + '].anchor',
+        'Promoted an automatic point to an anchor because its strength was edited.',
+        point.anchor,
+        1,
+        [pointIndex]
+      )
+    );
   }
   const recomputed = recomputeAroundPoint(
     points,
@@ -285,7 +310,7 @@ export function setControlPointStrength(
   });
   const next = editPulse(
     pulse,
-    pulse.sections.map((item, index) => index === sectionIndex ? nextSection : item),
+    pulse.sections.map((item, index) => (index === sectionIndex ? nextSection : item)),
     records
   );
   const validation = validatePulse(next, rules);
@@ -314,27 +339,37 @@ export function applyReviewedQuadraticAssist(
   }
   const initial = editablePulse(pulse, rules);
   if (initial !== null) return initial;
-  const {
-    sectionIndex,
-    startPointIndex,
-    endPointIndex,
-    startStrength,
-    endStrength
-  } = options;
+  const { sectionIndex, startPointIndex, endPointIndex, startStrength, endStrength } = options;
   if (![sectionIndex, startPointIndex, endPointIndex].every(validIndex)) {
     return invalid('Section and point indexes must be non-negative safe integers.', 'command');
   }
   if (startPointIndex >= endPointIndex) {
     return invalid('The quadratic assist requires a start point before the end point.', 'command');
   }
-  if (![startStrength, endStrength].every((value) => Number.isFinite(value) && value >= 0 && value <= 100)) {
-    return invalid('Assist endpoint strengths must be finite numbers between 0 and 100.', 'command');
+  if (
+    ![startStrength, endStrength].every(
+      (value) => Number.isFinite(value) && value >= 0 && value <= 100
+    )
+  ) {
+    return invalid(
+      'Assist endpoint strengths must be finite numbers between 0 and 100.',
+      'command'
+    );
   }
   const section = pulse.sections[sectionIndex];
-  if (section === undefined) return invalid('Section does not exist.', 'sections[' + sectionIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+  if (section === undefined)
+    return invalid(
+      'Section does not exist.',
+      'sections[' + sectionIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   const points = section.pulseElement.points;
   if (endPointIndex >= points.length) {
-    return invalid('Assist endpoint is outside the point list.', 'sections[' + sectionIndex + '].points', DIAGNOSTIC_CODES.EDIT_PATH);
+    return invalid(
+      'Assist endpoint is outside the point list.',
+      'sections[' + sectionIndex + '].points',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   }
   const nextPoints = points.map((point, index) => {
     if (index < startPointIndex || index > endPointIndex) return point;
@@ -343,7 +378,12 @@ export function applyReviewedQuadraticAssist(
     // points by a proposal.
     const endpoint = index === startPointIndex || index === endPointIndex;
     if (!endpoint && point.anchor === 1) return point;
-    const strength = index === startPointIndex ? startStrength : index === endPointIndex ? endStrength : point.strength;
+    const strength =
+      index === startPointIndex
+        ? startStrength
+        : index === endPointIndex
+          ? endStrength
+          : point.strength;
     const decimal = normalizeDecimal(strength.toFixed(6));
     return Object.freeze({
       ...point,
@@ -360,24 +400,28 @@ export function applyReviewedQuadraticAssist(
     const next = nextPoints[startPointIndex];
     if (next !== undefined) {
       if (start.strengthDecimal !== next.strengthDecimal) {
-        records.push(change(
-          'edit',
-          'sections[' + sectionIndex + '].points[' + startPointIndex + '].strength',
-          'Set reviewed quadratic assist start strength.',
-          start.strengthDecimal,
-          next.strengthDecimal,
-          [startPointIndex]
-        ));
+        records.push(
+          change(
+            'edit',
+            'sections[' + sectionIndex + '].points[' + startPointIndex + '].strength',
+            'Set reviewed quadratic assist start strength.',
+            start.strengthDecimal,
+            next.strengthDecimal,
+            [startPointIndex]
+          )
+        );
       }
       if (start.anchor !== next.anchor) {
-        records.push(change(
-          'edit',
-          'sections[' + sectionIndex + '].points[' + startPointIndex + '].anchor',
-          'Set reviewed quadratic assist start anchor.',
-          start.anchor,
-          next.anchor,
-          [startPointIndex]
-        ));
+        records.push(
+          change(
+            'edit',
+            'sections[' + sectionIndex + '].points[' + startPointIndex + '].anchor',
+            'Set reviewed quadratic assist start anchor.',
+            start.anchor,
+            next.anchor,
+            [startPointIndex]
+          )
+        );
       }
     }
   }
@@ -385,24 +429,28 @@ export function applyReviewedQuadraticAssist(
     const next = nextPoints[endPointIndex];
     if (next !== undefined) {
       if (end.strengthDecimal !== next.strengthDecimal) {
-        records.push(change(
-          'edit',
-          'sections[' + sectionIndex + '].points[' + endPointIndex + '].strength',
-          'Set reviewed quadratic assist end strength.',
-          end.strengthDecimal,
-          next.strengthDecimal,
-          [endPointIndex]
-        ));
+        records.push(
+          change(
+            'edit',
+            'sections[' + sectionIndex + '].points[' + endPointIndex + '].strength',
+            'Set reviewed quadratic assist end strength.',
+            end.strengthDecimal,
+            next.strengthDecimal,
+            [endPointIndex]
+          )
+        );
       }
       if (end.anchor !== next.anchor) {
-        records.push(change(
-          'edit',
-          'sections[' + sectionIndex + '].points[' + endPointIndex + '].anchor',
-          'Set reviewed quadratic assist end anchor.',
-          end.anchor,
-          next.anchor,
-          [endPointIndex]
-        ));
+        records.push(
+          change(
+            'edit',
+            'sections[' + sectionIndex + '].points[' + endPointIndex + '].anchor',
+            'Set reviewed quadratic assist end anchor.',
+            end.anchor,
+            next.anchor,
+            [endPointIndex]
+          )
+        );
       }
     }
   }
@@ -423,14 +471,16 @@ export function applyReviewedQuadraticAssist(
     if (point === undefined || point.anchor === 1 || value === undefined) continue;
     const decimal = normalizeDecimal(value.toFixed(6));
     if (point.strengthDecimal === decimal) continue;
-    records.push(change(
-      'interpolation',
-      'sections[' + sectionIndex + '].points[' + index + '].strength',
-      'Applied reviewed quadratic interpolation.',
-      point.strengthDecimal,
-      decimal,
-      [index]
-    ));
+    records.push(
+      change(
+        'interpolation',
+        'sections[' + sectionIndex + '].points[' + index + '].strength',
+        'Applied reviewed quadratic interpolation.',
+        point.strengthDecimal,
+        decimal,
+        [index]
+      )
+    );
     interpolated[index] = Object.freeze({
       ...point,
       strength: Number(decimal),
@@ -444,7 +494,7 @@ export function applyReviewedQuadraticAssist(
   });
   const next = editPulse(
     pulse,
-    pulse.sections.map((item, index) => index === sectionIndex ? nextSection : item),
+    pulse.sections.map((item, index) => (index === sectionIndex ? nextSection : item)),
     records
   );
   const validation = validatePulse(next, rules);
@@ -478,7 +528,11 @@ export function setControlPointAnchor(
   const section = pulse.sections[sectionIndex];
   const point = section?.pulseElement.points[pointIndex];
   if (section === undefined || point === undefined) {
-    return invalid('Control point does not exist.', 'sections[' + sectionIndex + '].points[' + pointIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+    return invalid(
+      'Control point does not exist.',
+      'sections[' + sectionIndex + '].points[' + pointIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   }
   const record = change(
     'edit',
@@ -515,7 +569,7 @@ export function setControlPointAnchor(
   });
   const next = editPulse(
     pulse,
-    pulse.sections.map((item, index) => index === sectionIndex ? nextSection : item),
+    pulse.sections.map((item, index) => (index === sectionIndex ? nextSection : item)),
     records
   );
   const validation = validatePulse(next, rules);
@@ -536,15 +590,40 @@ export function setSectionFrequency(
   rules = normalizedRules(rules);
   const initial = editablePulse(pulse, rules);
   if (initial !== null) return initial;
-  if (!validIndex(sectionIndex)) return invalid('Section index must be a non-negative safe integer.', 'sections');
+  if (!validIndex(sectionIndex))
+    return invalid('Section index must be a non-negative safe integer.', 'sections');
   const section = pulse.sections[sectionIndex];
-  if (section === undefined) return invalid('Section does not exist.', 'sections[' + sectionIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
-  if (![startIndex, endIndex].every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 83)) {
-    return invalid('Frequency indexes must be integers between 0 and 83.', 'sections[' + sectionIndex + '].frequency');
+  if (section === undefined)
+    return invalid(
+      'Section does not exist.',
+      'sections[' + sectionIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
+  if (
+    ![startIndex, endIndex].every(
+      (value) => Number.isSafeInteger(value) && value >= 0 && value <= 83
+    )
+  ) {
+    return invalid(
+      'Frequency indexes must be integers between 0 and 83.',
+      'sections[' + sectionIndex + '].frequency'
+    );
   }
   const records = [
-    change('edit', 'sections[' + sectionIndex + '].frequencyStartIndex', 'Set frequency start index.', section.frequencyStartIndex, startIndex),
-    change('edit', 'sections[' + sectionIndex + '].frequencyEndIndex', 'Set frequency end index.', section.frequencyEndIndex, endIndex)
+    change(
+      'edit',
+      'sections[' + sectionIndex + '].frequencyStartIndex',
+      'Set frequency start index.',
+      section.frequencyStartIndex,
+      startIndex
+    ),
+    change(
+      'edit',
+      'sections[' + sectionIndex + '].frequencyEndIndex',
+      'Set frequency end index.',
+      section.frequencyEndIndex,
+      endIndex
+    )
   ];
   const nextSection: PulseSection = Object.freeze({
     ...section,
@@ -553,11 +632,15 @@ export function setSectionFrequency(
   });
   const next = editPulse(
     pulse,
-    pulse.sections.map((item, index) => index === sectionIndex ? nextSection : item),
+    pulse.sections.map((item, index) => (index === sectionIndex ? nextSection : item)),
     records
   );
   const validation = validatePulse(next, rules);
-  return Object.freeze({ pulse: validation.valid ? next : null, changeRecords: Object.freeze(records), diagnostics: validation.diagnostics });
+  return Object.freeze({
+    pulse: validation.valid ? next : null,
+    changeRecords: Object.freeze(records),
+    diagnostics: validation.diagnostics
+  });
 }
 
 export function setSectionDuration(
@@ -569,17 +652,40 @@ export function setSectionDuration(
   rules = normalizedRules(rules);
   const initial = editablePulse(pulse, rules);
   if (initial !== null) return initial;
-  if (!validIndex(sectionIndex)) return invalid('Section index must be a non-negative safe integer.', 'sections');
+  if (!validIndex(sectionIndex))
+    return invalid('Section index must be a non-negative safe integer.', 'sections');
   const section = pulse.sections[sectionIndex];
-  if (section === undefined) return invalid('Section does not exist.', 'sections[' + sectionIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+  if (section === undefined)
+    return invalid(
+      'Section does not exist.',
+      'sections[' + sectionIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   if (!Number.isSafeInteger(durationIndex) || durationIndex < 0 || durationIndex > 99) {
-    return invalid('Duration index must be an integer between 0 and 99.', 'sections[' + sectionIndex + '].durationIndex');
+    return invalid(
+      'Duration index must be an integer between 0 and 99.',
+      'sections[' + sectionIndex + '].durationIndex'
+    );
   }
-  const record = change('edit', 'sections[' + sectionIndex + '].durationIndex', 'Set section duration index.', section.durationIndex, durationIndex);
+  const record = change(
+    'edit',
+    'sections[' + sectionIndex + '].durationIndex',
+    'Set section duration index.',
+    section.durationIndex,
+    durationIndex
+  );
   const nextSection: PulseSection = Object.freeze({ ...section, durationIndex });
-  const next = editPulse(pulse, pulse.sections.map((item, index) => index === sectionIndex ? nextSection : item), [record]);
+  const next = editPulse(
+    pulse,
+    pulse.sections.map((item, index) => (index === sectionIndex ? nextSection : item)),
+    [record]
+  );
   const validation = validatePulse(next, rules);
-  return Object.freeze({ pulse: validation.valid ? next : null, changeRecords: Object.freeze([record]), diagnostics: validation.diagnostics });
+  return Object.freeze({
+    pulse: validation.valid ? next : null,
+    changeRecords: Object.freeze([record]),
+    diagnostics: validation.diagnostics
+  });
 }
 
 export function addControlPoint(
@@ -592,30 +698,53 @@ export function addControlPoint(
   rules = normalizedRules(rules);
   const initial = editablePulse(pulse, rules);
   if (initial !== null) return initial;
-  if (!validIndex(sectionIndex)) return invalid('Section index must be a non-negative safe integer.', 'sections');
+  if (!validIndex(sectionIndex))
+    return invalid('Section index must be a non-negative safe integer.', 'sections');
   if (!validControlPoint(point)) return invalid('Control point is malformed.', 'point');
   const section = pulse.sections[sectionIndex];
-  if (section === undefined) return invalid('Section does not exist.', 'sections[' + sectionIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+  if (section === undefined)
+    return invalid(
+      'Section does not exist.',
+      'sections[' + sectionIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   const index = atIndex ?? section.pulseElement.points.length;
   if (!Number.isSafeInteger(index) || index < 0 || index > section.pulseElement.points.length) {
-    return invalid('Insertion index is outside the point list.', 'sections[' + sectionIndex + '].points');
+    return invalid(
+      'Insertion index is outside the point list.',
+      'sections[' + sectionIndex + '].points'
+    );
   }
   const points = [...section.pulseElement.points];
   points.splice(index, 0, Object.freeze({ ...point }));
-  const record = change('edit', 'sections[' + sectionIndex + '].points', 'Insert control point.', null, point.strengthDecimal, [index]);
-  const recomputed = recomputeAroundPoint(
-    points,
-    index,
-    'sections[' + sectionIndex + '].points'
+  const record = change(
+    'edit',
+    'sections[' + sectionIndex + '].points',
+    'Insert control point.',
+    null,
+    point.strengthDecimal,
+    [index]
   );
+  const recomputed = recomputeAroundPoint(points, index, 'sections[' + sectionIndex + '].points');
   const records: ChangeRecord[] = [record, ...recomputed.records];
   const nextSection: PulseSection = Object.freeze({
     ...section,
-    pulseElement: Object.freeze({ points: recomputed.points, durationMs: points.length * rules.pointDurationMs })
+    pulseElement: Object.freeze({
+      points: recomputed.points,
+      durationMs: points.length * rules.pointDurationMs
+    })
   });
-  const next = editPulse(pulse, pulse.sections.map((item, i) => i === sectionIndex ? nextSection : item), records);
+  const next = editPulse(
+    pulse,
+    pulse.sections.map((item, i) => (i === sectionIndex ? nextSection : item)),
+    records
+  );
   const validation = validatePulse(next, rules);
-  return Object.freeze({ pulse: validation.valid ? next : null, changeRecords: Object.freeze(records), diagnostics: validation.diagnostics });
+  return Object.freeze({
+    pulse: validation.valid ? next : null,
+    changeRecords: Object.freeze(records),
+    diagnostics: validation.diagnostics
+  });
 }
 
 export function removeControlPoint(
@@ -631,16 +760,36 @@ export function removeControlPoint(
     return invalid('Section and point indexes must be non-negative safe integers.', 'sections');
   }
   const section = pulse.sections[sectionIndex];
-  if (section === undefined) return invalid('Section does not exist.', 'sections[' + sectionIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+  if (section === undefined)
+    return invalid(
+      'Section does not exist.',
+      'sections[' + sectionIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   if (pointIndex < 0 || pointIndex >= section.pulseElement.points.length) {
-    return invalid('Control point does not exist.', 'sections[' + sectionIndex + '].points[' + pointIndex + ']', DIAGNOSTIC_CODES.EDIT_PATH);
+    return invalid(
+      'Control point does not exist.',
+      'sections[' + sectionIndex + '].points[' + pointIndex + ']',
+      DIAGNOSTIC_CODES.EDIT_PATH
+    );
   }
   if (section.pulseElement.points.length <= 2) {
-    return invalid('A pulse element must retain at least two control points.', 'sections[' + sectionIndex + '].points', DIAGNOSTIC_CODES.EDIT_EMPTY_POINTS);
+    return invalid(
+      'A pulse element must retain at least two control points.',
+      'sections[' + sectionIndex + '].points',
+      DIAGNOSTIC_CODES.EDIT_EMPTY_POINTS
+    );
   }
   const removed = section.pulseElement.points[pointIndex];
   const points = section.pulseElement.points.filter((_, index) => index !== pointIndex);
-  const record = change('edit', 'sections[' + sectionIndex + '].points[' + pointIndex + ']', 'Remove control point.', removed?.strengthDecimal ?? null, null, [pointIndex]);
+  const record = change(
+    'edit',
+    'sections[' + sectionIndex + '].points[' + pointIndex + ']',
+    'Remove control point.',
+    removed?.strengthDecimal ?? null,
+    null,
+    [pointIndex]
+  );
   const recomputed = recomputeAroundPoint(
     points,
     Math.min(pointIndex, points.length - 1),
@@ -649,11 +798,22 @@ export function removeControlPoint(
   const records: ChangeRecord[] = [record, ...recomputed.records];
   const nextSection: PulseSection = Object.freeze({
     ...section,
-    pulseElement: Object.freeze({ points: recomputed.points, durationMs: points.length * rules.pointDurationMs })
+    pulseElement: Object.freeze({
+      points: recomputed.points,
+      durationMs: points.length * rules.pointDurationMs
+    })
   });
-  const next = editPulse(pulse, pulse.sections.map((item, i) => i === sectionIndex ? nextSection : item), records);
+  const next = editPulse(
+    pulse,
+    pulse.sections.map((item, i) => (i === sectionIndex ? nextSection : item)),
+    records
+  );
   const validation = validatePulse(next, rules);
-  return Object.freeze({ pulse: validation.valid ? next : null, changeRecords: Object.freeze(records), diagnostics: validation.diagnostics });
+  return Object.freeze({
+    pulse: validation.valid ? next : null,
+    changeRecords: Object.freeze(records),
+    diagnostics: validation.diagnostics
+  });
 }
 
 export class PulseHistory {

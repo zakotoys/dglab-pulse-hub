@@ -1,14 +1,18 @@
 # ADR-0002：`.pulse` 两阶段解析与派生模型
 
-| 项目 | 内容 |
-| --- | --- |
-| 状态 | Accepted |
-| 日期 | 2026-08-30 |
+| 项目 | 内容                  |
+| ---- | --------------------- |
+| 状态 | Accepted              |
+| 日期 | 2026-08-30            |
 | 关联 | TRD 4-7、13；PDR-0001 |
 
 ## 背景
 
-`.pulse` 是带自定义分隔符的文本格式。样例包含有效零值、小数、启用/禁用 section 和多层位置。将字符串直接 `split` 后塞入最终领域对象，容易把缺失值当默认值、在解析时取整、丢弃禁用 section，并让错误无法定位。另一方面，为小语法引入通用 parser generator 会增加不必要复杂度。
+`.pulse`
+是带自定义分隔符的文本格式。样例包含有效零值、小数、启用/禁用 section 和多层位置。将字符串直接
+`split`
+后塞入最终领域对象，容易把缺失值当默认值、在解析时取整、丢弃禁用 section，并让错误无法定位。另一方面，为小语法引入通用 parser
+generator 会增加不必要复杂度。
 
 ## 决策
 
@@ -74,4 +78,3 @@ SourceDocument
 - [DG-LAB 官方自定义波形帮助](https://www.dungeon-lab.cn/instructions-cn.html)
 - [本地语料分析](../research/pulse-corpus.md)
 - [格式研究](../research/dglab-pulse-format.md)
-

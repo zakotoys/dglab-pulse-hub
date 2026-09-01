@@ -2,12 +2,7 @@
 import { readdir, readFile, access } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  parsePulse,
-  stableDigest,
-  type Diagnostic,
-  type ParseResult
-} from '@dglab-pulse-hub/core';
+import { parsePulse, stableDigest, type Diagnostic, type ParseResult } from '@dglab-pulse-hub/core';
 
 type FixtureExpectation = 'accepted' | 'rejected';
 
@@ -75,28 +70,41 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function readManifest(): Promise<Manifest> {
-  if (!(await exists(manifestPath))) return { schemaVersion: 'pulse-corpus-manifest-v1', fixtures: [] };
+  if (!(await exists(manifestPath)))
+    return { schemaVersion: 'pulse-corpus-manifest-v1', fixtures: [] };
   const value: unknown = JSON.parse(await readFile(manifestPath, 'utf8'));
-  if (typeof value !== 'object' || value === null) throw new Error('Corpus manifest must be an object.');
+  if (typeof value !== 'object' || value === null)
+    throw new Error('Corpus manifest must be an object.');
   const record = value as Record<string, unknown>;
   const fixtures = Array.isArray(record.fixtures) ? record.fixtures : [];
   return {
-    schemaVersion: typeof record.schemaVersion === 'string' ? record.schemaVersion : 'pulse-corpus-manifest-v1',
-    fixtures: fixtures.filter((item): item is ManifestFixture => {
-      if (typeof item !== 'object' || item === null) return false;
-      const entry = item as Record<string, unknown>;
-      return typeof entry.name === 'string' && typeof entry.path === 'string' &&
-        (entry.expectation === 'accepted' || entry.expectation === 'rejected') &&
-        typeof entry.description === 'string' &&
-        (entry.encoding === undefined || entry.encoding === 'utf8' || entry.encoding === 'hex');
-    }).sort((left, right) => left.name.localeCompare(right.name))
+    schemaVersion:
+      typeof record.schemaVersion === 'string' ? record.schemaVersion : 'pulse-corpus-manifest-v1',
+    fixtures: fixtures
+      .filter((item): item is ManifestFixture => {
+        if (typeof item !== 'object' || item === null) return false;
+        const entry = item as Record<string, unknown>;
+        return (
+          typeof entry.name === 'string' &&
+          typeof entry.path === 'string' &&
+          (entry.expectation === 'accepted' || entry.expectation === 'rejected') &&
+          typeof entry.description === 'string' &&
+          (entry.encoding === undefined || entry.encoding === 'utf8' || entry.encoding === 'hex')
+        );
+      })
+      .sort((left, right) => left.name.localeCompare(right.name))
   };
 }
 
 async function sourceFiles(): Promise<{
   readonly source: CorpusReport['source'];
   readonly directory: string;
-  readonly files: readonly { readonly name: string; readonly path: string; readonly expected: FixtureExpectation | 'unknown'; readonly encoding: 'utf8' | 'hex' }[];
+  readonly files: readonly {
+    readonly name: string;
+    readonly path: string;
+    readonly expected: FixtureExpectation | 'unknown';
+    readonly encoding: 'utf8' | 'hex';
+  }[];
 }> {
   if (await exists(exampleDirectory)) {
     const names = (await readdir(exampleDirectory, { withFileTypes: true }))
@@ -106,19 +114,24 @@ async function sourceFiles(): Promise<{
     return {
       source: 'example',
       directory: '.example',
-      files: names.map((name) => ({ name, path: join(exampleDirectory, name), expected: 'unknown', encoding: 'utf8' }))
+      files: names.map((name) => ({
+        name,
+        path: join(exampleDirectory, name),
+        expected: 'unknown',
+        encoding: 'utf8'
+      }))
     };
   }
   const manifest = await readManifest();
   return {
     source: 'synthetic-fixtures',
     directory: 'tests/fixtures',
-      files: manifest.fixtures.map((fixture) => ({
-        name: fixture.name,
-        path: join(root, 'tests', 'fixtures', fixture.path),
-        expected: fixture.expectation,
-        encoding: fixture.encoding ?? 'utf8'
-      }))
+    files: manifest.fixtures.map((fixture) => ({
+      name: fixture.name,
+      path: join(root, 'tests', 'fixtures', fixture.path),
+      expected: fixture.expectation,
+      encoding: fixture.encoding ?? 'utf8'
+    }))
   };
 }
 
@@ -135,7 +148,10 @@ function pointStats(parsed: ParseResult): {
   const sections = parsed.pulse?.sections ?? [];
   const points = sections.flatMap((section) => section.pulseElement.points);
   const intensities = points.map((point) => point.strength);
-  const frequencies = sections.flatMap((section) => [section.frequencyStartIndex, section.frequencyEndIndex]);
+  const frequencies = sections.flatMap((section) => [
+    section.frequencyStartIndex,
+    section.frequencyEndIndex
+  ]);
   const durations = sections.map((section) => section.durationIndex);
   const range = (values: readonly number[]): readonly [number, number] | null =>
     values.length === 0 ? null : [Math.min(...values), Math.max(...values)];
@@ -192,7 +208,10 @@ function reportFile(
   };
 }
 
-async function fixtureBytes(file: { readonly path: string; readonly encoding: 'utf8' | 'hex' }): Promise<Uint8Array> {
+async function fixtureBytes(file: {
+  readonly path: string;
+  readonly encoding: 'utf8' | 'hex';
+}): Promise<Uint8Array> {
   const raw = await readFile(file.path);
   if (file.encoding !== 'hex') return new Uint8Array(raw);
   const text = raw.toString('utf8').replace(/\s+/g, '');
@@ -260,7 +279,9 @@ export async function buildReport(): Promise<CorpusReport> {
     totalPoints,
     automaticPoints,
     observed: {
-      sectionCounts: [...new Set(parsedStats.map((file) => file.sectionCount))].sort((a, b) => a - b),
+      sectionCounts: [...new Set(parsedStats.map((file) => file.sectionCount))].sort(
+        (a, b) => a - b
+      ),
       pointCounts: [...new Set(parsedStats.map((file) => file.pointCount))].sort((a, b) => a - b),
       intensityRange: ranges(intensityValues),
       frequencyIndexRange: ranges(frequencyValues),
@@ -268,8 +289,9 @@ export async function buildReport(): Promise<CorpusReport> {
       modes: [...new Set(parsedStats.flatMap((file) => file.modes))].sort((a, b) => a - b)
     },
     files: reports,
-    expectationMismatches: reports.filter((file) => file.expected !== 'unknown' &&
-      ((file.expected === 'accepted') !== file.accepted)).length
+    expectationMismatches: reports.filter(
+      (file) => file.expected !== 'unknown' && (file.expected === 'accepted') !== file.accepted
+    ).length
   };
 }
 
@@ -288,8 +310,19 @@ export function textReport(report: CorpusReport): string {
     'files:'
   ];
   for (const file of report.files) {
-    lines.push('  ' + file.name + ' [' + (file.accepted ? 'accepted' : 'rejected') + '] ' +
-      file.bytes + ' bytes, ' + file.sectionCount + ' sections, ' + file.pointCount + ' points');
+    lines.push(
+      '  ' +
+        file.name +
+        ' [' +
+        (file.accepted ? 'accepted' : 'rejected') +
+        '] ' +
+        file.bytes +
+        ' bytes, ' +
+        file.sectionCount +
+        ' sections, ' +
+        file.pointCount +
+        ' points'
+    );
   }
   return lines.join('\n') + '\n';
 }

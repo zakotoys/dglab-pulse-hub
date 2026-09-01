@@ -20,7 +20,7 @@ export interface PlaybackScheduler {
 }
 
 const defaultClock: PlaybackClock = Object.freeze({
-  now: () => (globalThis.performance?.now() ?? Date.now())
+  now: () => globalThis.performance?.now() ?? Date.now()
 });
 
 const defaultScheduler: PlaybackScheduler = Object.freeze({
@@ -49,8 +49,10 @@ export class PreviewPlaybackController {
       readonly playbackRate?: number;
     } = {}
   ) {
-    if (options.playbackRate !== undefined &&
-        (!Number.isFinite(options.playbackRate) || options.playbackRate <= 0)) {
+    if (
+      options.playbackRate !== undefined &&
+      (!Number.isFinite(options.playbackRate) || options.playbackRate <= 0)
+    ) {
       throw new RangeError('Playback rate must be a finite positive number.');
     }
     this.stream = stream;

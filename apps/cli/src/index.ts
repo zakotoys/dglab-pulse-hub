@@ -20,26 +20,17 @@ import {
   type OperationResult,
   type OperationStatus
 } from '@dglab-pulse-hub/application';
-import {
-  DIAGNOSTIC_CODES,
-  location,
-  makeDiagnostic
-} from '@dglab-pulse-hub/core';
+import { DIAGNOSTIC_CODES, location, makeDiagnostic } from '@dglab-pulse-hub/core';
 
 export interface CliIo {
   readonly stdout?: { write: (text: string) => void };
   readonly stderr?: { write: (text: string) => void };
 }
 
-const stdout = (io: CliIo): { write: (text: string) => void } =>
-  io.stdout ?? process.stdout;
-const stderr = (io: CliIo): { write: (text: string) => void } =>
-  io.stderr ?? process.stderr;
+const stdout = (io: CliIo): { write: (text: string) => void } => io.stdout ?? process.stdout;
+const stderr = (io: CliIo): { write: (text: string) => void } => io.stderr ?? process.stderr;
 
-export async function runCli(
-  argv: readonly string[],
-  io: CliIo = {}
-): Promise<number> {
+export async function runCli(argv: readonly string[], io: CliIo = {}): Promise<number> {
   const command = argv[0];
   if (command === undefined || command === '--help' || command === '-h') {
     stdout(io).write(helpText());
@@ -99,7 +90,14 @@ async function inspectCommand(args: readonly string[], io: CliIo): Promise<numbe
 
 async function exportCommand(args: readonly string[], io: CliIo): Promise<number> {
   const parsed = flags(args);
-  if (!checkFlags(parsed, io, 'Usage: pulse export <input> <output> [--json] [--overwrite] [--source|--canonical] [--qr]\n')) return 2;
+  if (
+    !checkFlags(
+      parsed,
+      io,
+      'Usage: pulse export <input> <output> [--json] [--overwrite] [--source|--canonical] [--qr]\n'
+    )
+  )
+    return 2;
   if (parsed.qr && parsed.mode !== undefined) {
     const result = operationResult('export', 'rejected', null, [
       makeDiagnostic(
@@ -116,7 +114,9 @@ async function exportCommand(args: readonly string[], io: CliIo): Promise<number
   const inputPath = parsed.positionals[0];
   const outputPath = parsed.positionals[1];
   if (inputPath === undefined || outputPath === undefined || parsed.positionals.length !== 2) {
-    stderr(io).write('Usage: pulse export <input> <output> [--json] [--overwrite] [--source|--canonical] [--qr]\n');
+    stderr(io).write(
+      'Usage: pulse export <input> <output> [--json] [--overwrite] [--source|--canonical] [--qr]\n'
+    );
     return 2;
   }
   const read = await readInputFile(inputPath);
@@ -148,7 +148,8 @@ async function exportCommand(args: readonly string[], io: CliIo): Promise<number
 
 async function batchInspectCommand(args: readonly string[], io: CliIo): Promise<number> {
   const parsed = flags(args);
-  if (!checkFlags(parsed, io, 'Usage: pulse batch-inspect <files...> [--json] [--concurrency N]\n')) return 2;
+  if (!checkFlags(parsed, io, 'Usage: pulse batch-inspect <files...> [--json] [--concurrency N]\n'))
+    return 2;
   const inputs = await readBatchInputs(parsed.positionals, io);
   if (inputs === null) return 2;
   const result = await inspectBatch(inputs, { concurrency: parsed.concurrency });
@@ -158,10 +159,21 @@ async function batchInspectCommand(args: readonly string[], io: CliIo): Promise<
 
 async function batchExportCommand(args: readonly string[], io: CliIo): Promise<number> {
   const parsed = flags(args);
-  if (!checkFlags(parsed, io, 'Usage: pulse batch-export <files...> --out-dir <directory> [--overwrite] [--source|--canonical] [--json]\n')) return 2;
+  if (
+    !checkFlags(
+      parsed,
+      io,
+      'Usage: pulse batch-export <files...> --out-dir <directory> ' +
+        '[--overwrite] [--source|--canonical] [--json]\n'
+    )
+  )
+    return 2;
   const outputDirectory = parsed.outputDirectory;
   if (outputDirectory === undefined) {
-    stderr(io).write('Usage: pulse batch-export <files...> --out-dir <directory> [--overwrite] [--source|--canonical]\n');
+    stderr(io).write(
+      'Usage: pulse batch-export <files...> --out-dir <directory> ' +
+        '[--overwrite] [--source|--canonical]\n'
+    );
     return 2;
   }
   const inputs = await readBatchInputs(parsed.positionals, io);
@@ -187,7 +199,9 @@ async function batchExportCommand(args: readonly string[], io: CliIo): Promise<n
         if (writeDiagnostics === undefined) return item;
         return Object.freeze({
           ...item,
-          status: writeDiagnostics.some((diagnostic) => diagnostic.severity === 'error') ? 'failed' as const : item.status,
+          status: writeDiagnostics.some((diagnostic) => diagnostic.severity === 'error')
+            ? ('failed' as const)
+            : item.status,
           diagnostics: [...item.diagnostics, ...writeDiagnostics],
           data: null
         });
@@ -215,7 +229,8 @@ async function batchExportCommand(args: readonly string[], io: CliIo): Promise<n
 
 async function renderCommand(args: readonly string[], io: CliIo): Promise<number> {
   const parsed = flags(args);
-  if (!checkFlags(parsed, io, 'Usage: pulse render <input> <output> [--format svg|png|jpg]\n')) return 2;
+  if (!checkFlags(parsed, io, 'Usage: pulse render <input> <output> [--format svg|png|jpg]\n'))
+    return 2;
   const inputPath = parsed.positionals[0];
   const outputPath = parsed.positionals[1];
   if (inputPath === undefined || outputPath === undefined || parsed.positionals.length !== 2) {
@@ -243,7 +258,11 @@ async function renderCommand(args: readonly string[], io: CliIo): Promise<number
   const inspected = inspectPulse(read.data.content, {
     input: { displayName: read.data.displayName, bytes: read.data.byteSize }
   });
-  if (inspected.status !== 'success' || inspected.data?.stream === null || inspected.data?.stream === undefined) {
+  if (
+    inspected.status !== 'success' ||
+    inspected.data?.stream === null ||
+    inspected.data?.stream === undefined
+  ) {
     printResult(inspected, parsed.json, io);
     return exitCode(inspected.status);
   }
@@ -269,14 +288,17 @@ async function renderCommand(args: readonly string[], io: CliIo): Promise<number
     ...inspected,
     operation: 'render',
     status: (write.status === 'success' ? 'success' : write.status) as OperationStatus,
-    data: write.status === 'success' ? {
-      displayName: basename(outputPath),
-      format: image.format,
-      byteSize: image.bytes.byteLength,
-      width: image.width,
-      height: image.height,
-      streamDigest: image.streamDigest
-    } : null,
+    data:
+      write.status === 'success'
+        ? {
+            displayName: basename(outputPath),
+            format: image.format,
+            byteSize: image.bytes.byteLength,
+            width: image.width,
+            height: image.height,
+            streamDigest: image.streamDigest
+          }
+        : null,
     diagnostics: [...inspected.diagnostics, ...write.diagnostics]
   };
   printResult(result as OperationResult<unknown>, parsed.json, io);
@@ -320,7 +342,8 @@ async function qrEncodeCommand(args: readonly string[], io: CliIo): Promise<numb
     encoded.diagnostics
   );
   if (parsed.json) printResult(result, true, io);
-  else if (result.status === 'success' && result.data !== null) stdout(io).write(result.data.content + '\n');
+  else if (result.status === 'success' && result.data !== null)
+    stdout(io).write(result.data.content + '\n');
   else printResult(result, false, io);
   return exitCode(result.status);
 }
@@ -372,15 +395,13 @@ async function qrDecodeCommand(args: readonly string[], io: CliIo): Promise<numb
     decoded.diagnostics
   );
   if (parsed.json) printResult(result, true, io);
-  else if (result.status === 'success' && result.data !== null) stdout(io).write(result.data.pulseText + '\n');
+  else if (result.status === 'success' && result.data !== null)
+    stdout(io).write(result.data.pulseText + '\n');
   else printResult(result, false, io);
   return exitCode(result.status);
 }
 
-async function readBatchInputs(
-  paths: readonly string[],
-  io: CliIo
-): Promise<BatchInput[] | null> {
+async function readBatchInputs(paths: readonly string[], io: CliIo): Promise<BatchInput[] | null> {
   if (paths.length === 0) {
     stderr(io).write('At least one input file is required.\n');
     return null;
@@ -432,34 +453,43 @@ function flags(args: readonly string[]): ParsedFlags {
     else if (arg === '--no-stream') noStream = true;
     else if (arg === '--overwrite') overwrite = true;
     else if (arg === '--source') {
-      if (mode !== undefined && mode !== 'source') errors.push('--source and --canonical cannot be combined.');
+      if (mode !== undefined && mode !== 'source')
+        errors.push('--source and --canonical cannot be combined.');
       else mode = 'source';
-    }
-    else if (arg === '--canonical') {
-      if (mode !== undefined && mode !== 'canonical') errors.push('--source and --canonical cannot be combined.');
+    } else if (arg === '--canonical') {
+      if (mode !== undefined && mode !== 'canonical')
+        errors.push('--source and --canonical cannot be combined.');
       else mode = 'canonical';
-    }
-    else if (arg === '--qr') qr = true;
+    } else if (arg === '--qr') qr = true;
     else if (arg === '--format') {
       const value = args[++index];
       if (value === undefined || value.startsWith('-')) errors.push('--format requires a value.');
       else format = value;
-    }
-    else if (arg === '--out-dir') {
+    } else if (arg === '--out-dir') {
       const value = args[++index];
       if (value === undefined || value.startsWith('-')) errors.push('--out-dir requires a value.');
       else outputDirectory = value;
-    }
-    else if (arg === '--concurrency') {
+    } else if (arg === '--concurrency') {
       const value = args[++index];
       const numeric = value === undefined ? NaN : Number(value);
-      if (!Number.isSafeInteger(numeric) || numeric < 1) errors.push('--concurrency must be a positive integer.');
+      if (!Number.isSafeInteger(numeric) || numeric < 1)
+        errors.push('--concurrency must be a positive integer.');
       else concurrency = numeric;
-    }
-    else if (arg.startsWith('-')) errors.push('Unknown option: ' + arg);
+    } else if (arg.startsWith('-')) errors.push('Unknown option: ' + arg);
     else if (!arg.startsWith('-')) positionals.push(arg);
   }
-  return { positionals, json, noStream, overwrite, mode, qr, format, outputDirectory, concurrency, errors };
+  return {
+    positionals,
+    json,
+    noStream,
+    overwrite,
+    mode,
+    qr,
+    format,
+    outputDirectory,
+    concurrency,
+    errors
+  };
 }
 
 function checkFlags(parsed: ParsedFlags, io: CliIo, usage: string): boolean {
@@ -478,10 +508,15 @@ function printResult(result: OperationResult<unknown>, asJson: boolean, io: CliI
   if (result.data !== null && typeof result.data === 'object') {
     const data = result.data as Record<string, unknown>;
     if ('metadata' in data) {
-      const metadata = data.metadata as { pulse?: { sectionCount: number }; stream?: { stats: { pointCount: number; totalDurationMs: number } } };
+      const metadata = data.metadata as {
+        pulse?: { sectionCount: number };
+        stream?: { stats: { pointCount: number; totalDurationMs: number } };
+      };
       stdout(io).write('sections: ' + String(metadata.pulse?.sectionCount ?? 0) + '\n');
       stdout(io).write('stream points: ' + String(metadata.stream?.stats.pointCount ?? 0) + '\n');
-      stdout(io).write('duration: ' + String(metadata.stream?.stats.totalDurationMs ?? 0) + ' ms\n');
+      stdout(io).write(
+        'duration: ' + String(metadata.stream?.stats.totalDurationMs ?? 0) + ' ms\n'
+      );
     }
     if ('displayName' in data) stdout(io).write('output: ' + String(data.displayName) + '\n');
   }
@@ -489,11 +524,26 @@ function printResult(result: OperationResult<unknown>, asJson: boolean, io: CliI
 }
 
 function printDiagnostics(
-  diagnostics: readonly { code: string; severity: string; message: string; location: { path: string } }[],
+  diagnostics: readonly {
+    code: string;
+    severity: string;
+    message: string;
+    location: { path: string };
+  }[],
   io: CliIo
 ): void {
   for (const diagnostic of diagnostics) {
-    stdout(io).write('[' + diagnostic.severity + '] ' + diagnostic.code + ' ' + diagnostic.location.path + ': ' + diagnostic.message + '\n');
+    stdout(io).write(
+      '[' +
+        diagnostic.severity +
+        '] ' +
+        diagnostic.code +
+        ' ' +
+        diagnostic.location.path +
+        ': ' +
+        diagnostic.message +
+        '\n'
+    );
   }
 }
 
@@ -519,20 +569,24 @@ function helpText(): string {
 
 const entryPath = process.argv[1] === undefined ? null : resolve(process.argv[1]);
 const modulePath = resolve(fileURLToPath(import.meta.url));
-const isMainModule = entryPath !== null && (() => {
-  try {
-    return realpathSync(entryPath) === realpathSync(modulePath);
-  } catch {
-    return entryPath === modulePath;
-  }
-})();
+const isMainModule =
+  entryPath !== null &&
+  (() => {
+    try {
+      return realpathSync(entryPath) === realpathSync(modulePath);
+    } catch {
+      return entryPath === modulePath;
+    }
+  })();
 if (isMainModule) {
-  runCli(process.argv.slice(2)).then((code) => {
-    process.exitCode = code;
-  }).catch(() => {
-    // Keep unexpected runtime details out of stderr; command failures already
-    // have stable diagnostics at the application boundary.
-    process.stderr.write('Unexpected CLI failure.\n');
-    process.exitCode = 1;
-  });
+  runCli(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch(() => {
+      // Keep unexpected runtime details out of stderr; command failures already
+      // have stable diagnostics at the application boundary.
+      process.stderr.write('Unexpected CLI failure.\n');
+      process.exitCode = 1;
+    });
 }

@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import { buildServer } from '../src/server.js';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
-import { encodeQr, TempArtifactStore, type ArtifactDescriptor, type ArtifactPutOptions } from '@dglab-pulse-hub/application';
+import {
+  encodeQr,
+  TempArtifactStore,
+  type ArtifactDescriptor,
+  type ArtifactPutOptions
+} from '@dglab-pulse-hub/application';
 
-const VALID_TEXT =
-  'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
+const VALID_TEXT = 'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
 
 const apps: Array<Awaited<ReturnType<typeof buildServer>>> = [];
 const stores: TempArtifactStore[] = [];
@@ -24,7 +28,8 @@ class SelectiveArtifactStore extends TempArtifactStore {
     options: ArtifactPutOptions = {}
   ): Promise<ArtifactDescriptor> {
     this.puts += 1;
-    if (this.failAt === 0 || this.puts === this.failAt) throw new Error('injected artifact staging failure');
+    if (this.failAt === 0 || this.puts === this.failAt)
+      throw new Error('injected artifact staging failure');
     const descriptor = await super.put(displayName, content, options);
     this.staged.push(descriptor);
     return descriptor;
@@ -40,8 +45,12 @@ class DelayedArtifactStore extends TempArtifactStore {
 
   public constructor() {
     super(10_000, 10_000);
-    this.entered = new Promise<void>((resolve) => { this.resolveEntered = resolve; });
-    this.gate = new Promise<void>((resolve) => { this.releaseGate = resolve; });
+    this.entered = new Promise<void>((resolve) => {
+      this.resolveEntered = resolve;
+    });
+    this.gate = new Promise<void>((resolve) => {
+      this.releaseGate = resolve;
+    });
   }
 
   public release(): void {
@@ -69,15 +78,22 @@ afterEach(async () => {
 });
 
 describe('HTTP adapter', () => {
-  function multipartPayload(parts: readonly { name: string; filename?: string; contentType?: string; value: string }[]): { body: string; contentType: string } {
+  function multipartPayload(
+    parts: readonly { name: string; filename?: string; contentType?: string; value: string }[]
+  ): { body: string; contentType: string } {
     const boundary = 'pulse-test-boundary';
-    const body = parts.map((part) => {
-      const disposition = part.filename === undefined
-        ? `Content-Disposition: form-data; name="${part.name}"`
-        : `Content-Disposition: form-data; name="${part.name}"; filename="${part.filename}"`;
-      const type = part.contentType === undefined ? '' : `\r\nContent-Type: ${part.contentType}`;
-      return `--${boundary}\r\n${disposition}${type}\r\n\r\n${part.value}\r\n`;
-    }).join('') + `--${boundary}--\r\n`;
+    const body =
+      parts
+        .map((part) => {
+          const disposition =
+            part.filename === undefined
+              ? `Content-Disposition: form-data; name="${part.name}"`
+              : `Content-Disposition: form-data; name="${part.name}"; filename="${part.filename}"`;
+          const type =
+            part.contentType === undefined ? '' : `\r\nContent-Type: ${part.contentType}`;
+          return `--${boundary}\r\n${disposition}${type}\r\n\r\n${part.value}\r\n`;
+        })
+        .join('') + `--${boundary}--\r\n`;
     return { body, contentType: `multipart/form-data; boundary=${boundary}` };
   }
 
@@ -107,7 +123,11 @@ describe('HTTP adapter', () => {
     });
     expect(response.statusCode).toBe(422);
     const body = response.json();
-    expect(body.diagnostics.some((item: { code: string }) => item.code === 'PULSE_RECOGNIZE_INVALID_ENCODING')).toBe(true);
+    expect(
+      body.diagnostics.some(
+        (item: { code: string }) => item.code === 'PULSE_RECOGNIZE_INVALID_ENCODING'
+      )
+    ).toBe(true);
   });
 
   it('rejects empty, null, and array JSON bodies as contract errors', async () => {
@@ -128,61 +148,113 @@ describe('HTTP adapter', () => {
     }
   });
 
-  it('keeps malformed, unknown-field, and wrong-type JSON failures contract-safe across routes', async () => {
-    const app = buildServer();
-    apps.push(app);
-    await app.ready();
-    const routeCases: readonly { readonly url: string; readonly valid: Record<string, unknown>; readonly wrongField: string }[] = [
-      { url: '/api/v1/pulses/inspect', valid: { text: VALID_TEXT }, wrongField: 'displayName' },
-      { url: '/api/v1/pulses/export', valid: { text: VALID_TEXT }, wrongField: 'format' },
-      { url: '/api/v1/pulses/qr/encode', valid: { text: VALID_TEXT }, wrongField: 'text' },
-      { url: '/api/v1/pulses/qr/decode', valid: { text: 'not-a-qr' }, wrongField: 'text' },
-      { url: '/api/v1/pulses/edit', valid: { text: VALID_TEXT, kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 42 }, wrongField: 'value' },
-      { url: '/api/v1/pulses/assist', valid: { text: VALID_TEXT, sectionIndex: 0, startPointIndex: 0, endPointIndex: 2, startStrength: 10, endStrength: 90, reviewed: true }, wrongField: 'reviewed' },
-      { url: '/api/v1/pulses/preview', valid: { text: VALID_TEXT, format: 'svg' }, wrongField: 'format' },
-      { url: '/api/v1/pulses/diff', valid: { before: VALID_TEXT, after: VALID_TEXT }, wrongField: 'before' },
-      { url: '/api/v1/pulses/batch/inspect', valid: { items: [{ displayName: 'one.pulse', text: VALID_TEXT }] }, wrongField: 'items' },
-      { url: '/api/v1/pulses/batch/export', valid: { items: [{ displayName: 'one.pulse', text: VALID_TEXT }] }, wrongField: 'items' }
-    ];
-    for (const route of routeCases) {
-      const unknown = await app.inject({
-        method: 'POST',
-        url: route.url,
-        headers: { 'content-type': 'application/json' },
-        payload: { ...route.valid, unexpected: true }
-      });
-      expect(unknown.statusCode, route.url + ' unknown').toBe(422);
-      expect(operationEnvelopeSchema.safeParse(unknown.json()).success, route.url + ' unknown schema').toBe(true);
-      expect(unknown.json().result, route.url + ' unknown result').toBeNull();
+  it(
+    'keeps malformed, unknown-field, and wrong-type JSON failures ' + 'contract-safe across routes',
+    async () => {
+      const app = buildServer();
+      apps.push(app);
+      await app.ready();
+      const routeCases: readonly {
+        readonly url: string;
+        readonly valid: Record<string, unknown>;
+        readonly wrongField: string;
+      }[] = [
+        { url: '/api/v1/pulses/inspect', valid: { text: VALID_TEXT }, wrongField: 'displayName' },
+        { url: '/api/v1/pulses/export', valid: { text: VALID_TEXT }, wrongField: 'format' },
+        { url: '/api/v1/pulses/qr/encode', valid: { text: VALID_TEXT }, wrongField: 'text' },
+        { url: '/api/v1/pulses/qr/decode', valid: { text: 'not-a-qr' }, wrongField: 'text' },
+        {
+          url: '/api/v1/pulses/edit',
+          valid: { text: VALID_TEXT, kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 42 },
+          wrongField: 'value'
+        },
+        {
+          url: '/api/v1/pulses/assist',
+          valid: {
+            text: VALID_TEXT,
+            sectionIndex: 0,
+            startPointIndex: 0,
+            endPointIndex: 2,
+            startStrength: 10,
+            endStrength: 90,
+            reviewed: true
+          },
+          wrongField: 'reviewed'
+        },
+        {
+          url: '/api/v1/pulses/preview',
+          valid: { text: VALID_TEXT, format: 'svg' },
+          wrongField: 'format'
+        },
+        {
+          url: '/api/v1/pulses/diff',
+          valid: { before: VALID_TEXT, after: VALID_TEXT },
+          wrongField: 'before'
+        },
+        {
+          url: '/api/v1/pulses/batch/inspect',
+          valid: { items: [{ displayName: 'one.pulse', text: VALID_TEXT }] },
+          wrongField: 'items'
+        },
+        {
+          url: '/api/v1/pulses/batch/export',
+          valid: { items: [{ displayName: 'one.pulse', text: VALID_TEXT }] },
+          wrongField: 'items'
+        }
+      ];
+      for (const route of routeCases) {
+        const unknown = await app.inject({
+          method: 'POST',
+          url: route.url,
+          headers: { 'content-type': 'application/json' },
+          payload: { ...route.valid, unexpected: true }
+        });
+        expect(unknown.statusCode, route.url + ' unknown').toBe(422);
+        expect(
+          operationEnvelopeSchema.safeParse(unknown.json()).success,
+          route.url + ' unknown schema'
+        ).toBe(true);
+        expect(unknown.json().result, route.url + ' unknown result').toBeNull();
 
-      const wrong = {
-        ...route.valid,
-        [route.wrongField]: route.wrongField === 'reviewed' ? 'yes' :
-          route.wrongField === 'text' || route.wrongField === 'format' || route.wrongField === 'displayName'
-            ? 1
-            : 'wrong-type'
-      };
-      const wrongResponse = await app.inject({
-        method: 'POST',
-        url: route.url,
-        headers: { 'content-type': 'application/json' },
-        payload: wrong
-      });
-      expect(wrongResponse.statusCode, route.url + ' wrong type').toBe(422);
-      expect(operationEnvelopeSchema.safeParse(wrongResponse.json()).success, route.url + ' wrong schema').toBe(true);
-      expect(wrongResponse.json().result, route.url + ' wrong result').toBeNull();
+        const wrong = {
+          ...route.valid,
+          [route.wrongField]:
+            route.wrongField === 'reviewed'
+              ? 'yes'
+              : route.wrongField === 'text' ||
+                  route.wrongField === 'format' ||
+                  route.wrongField === 'displayName'
+                ? 1
+                : 'wrong-type'
+        };
+        const wrongResponse = await app.inject({
+          method: 'POST',
+          url: route.url,
+          headers: { 'content-type': 'application/json' },
+          payload: wrong
+        });
+        expect(wrongResponse.statusCode, route.url + ' wrong type').toBe(422);
+        expect(
+          operationEnvelopeSchema.safeParse(wrongResponse.json()).success,
+          route.url + ' wrong schema'
+        ).toBe(true);
+        expect(wrongResponse.json().result, route.url + ' wrong result').toBeNull();
 
-      const malformed = await app.inject({
-        method: 'POST',
-        url: route.url,
-        headers: { 'content-type': 'application/json' },
-        payload: '{"text":'
-      });
-      expect(malformed.statusCode, route.url + ' malformed').toBe(422);
-      expect(operationEnvelopeSchema.safeParse(malformed.json()).success, route.url + ' malformed schema').toBe(true);
-      expect(malformed.json().result, route.url + ' malformed result').toBeNull();
+        const malformed = await app.inject({
+          method: 'POST',
+          url: route.url,
+          headers: { 'content-type': 'application/json' },
+          payload: '{"text":'
+        });
+        expect(malformed.statusCode, route.url + ' malformed').toBe(422);
+        expect(
+          operationEnvelopeSchema.safeParse(malformed.json()).success,
+          route.url + ' malformed schema'
+        ).toBe(true);
+        expect(malformed.json().result, route.url + ' malformed result').toBeNull();
+      }
     }
-  });
+  );
 
   it('rejects unsupported export options instead of canonical fallback', async () => {
     const app = buildServer();
@@ -234,32 +306,42 @@ describe('HTTP adapter', () => {
     apps.push(app);
     await app.listen({ port: 0, host: '127.0.0.1' });
     const address = app.server.address();
-    if (address === null || typeof address === 'string') throw new Error('API test server did not expose an address.');
+    if (address === null || typeof address === 'string')
+      throw new Error('API test server did not expose an address.');
     const payload = JSON.stringify({
       text: VALID_TEXT,
       format: 'qr-envelope',
       displayName: '132-漂浮之羽.pulse'
     });
-    const response = await new Promise<{ statusCode: number; headers: IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
-      const request = httpRequest({
-        host: '127.0.0.1',
-        port: address.port,
-        path: '/api/v1/pulses/export',
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'content-length': Buffer.byteLength(payload)
+    const response = await new Promise<{
+      statusCode: number;
+      headers: IncomingHttpHeaders;
+      body: Buffer;
+    }>((resolve, reject) => {
+      const request = httpRequest(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/api/v1/pulses/export',
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(payload)
+          }
+        },
+        (incoming) => {
+          const chunks: Buffer[] = [];
+          incoming.on('data', (chunk: Buffer) => chunks.push(chunk));
+          incoming.on('end', () =>
+            resolve({
+              statusCode: incoming.statusCode ?? 0,
+              headers: incoming.headers,
+              body: Buffer.concat(chunks)
+            })
+          );
+          incoming.on('error', reject);
         }
-      }, (incoming) => {
-        const chunks: Buffer[] = [];
-        incoming.on('data', (chunk: Buffer) => chunks.push(chunk));
-        incoming.on('end', () => resolve({
-          statusCode: incoming.statusCode ?? 0,
-          headers: incoming.headers,
-          body: Buffer.concat(chunks)
-        }));
-        incoming.on('error', reject);
-      });
+      );
       request.on('error', reject);
       request.end(payload);
     });
@@ -267,7 +349,8 @@ describe('HTTP adapter', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('image/jpeg');
     expect(response.headers['content-disposition']).toBe(
-      'attachment; filename="132-____.qr.jpg"; filename*=UTF-8\'\'132-%E6%BC%82%E6%B5%AE%E4%B9%8B%E7%BE%BD.qr.jpg'
+      'attachment; filename="132-____.qr.jpg"; filename*=UTF-8\'\'' +
+        '132-%E6%BC%82%E6%B5%AE%E4%B9%8B%E7%BE%BD.qr.jpg'
     );
     expect(response.body.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
     expect(JSON.parse(String(response.headers['x-pulse-result']))).toMatchObject({
@@ -289,7 +372,14 @@ describe('HTTP adapter', () => {
       payload: VALID_TEXT
     });
     expect(response.statusCode).toBe(422);
-    expect(response.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
+    expect(
+      response
+        .json()
+        .diagnostics.some(
+          (item: { code: string }) =>
+            item.code === 'PULSE_RECOGNIZE_SIZE_LIMIT' || item.code === 'PULSE_TASK_INPUT_LIMIT'
+        )
+    ).toBe(true);
   });
 
   it('accepts raw octet-stream input and applies security headers', async () => {
@@ -368,7 +458,7 @@ describe('HTTP adapter', () => {
     const success = first.statusCode === 200 ? first : second;
     expect(success.body).toBe(
       'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1+' +
-      'section+0,20,20,1,0/0-1,100-1+section+0,20,20,1,0/0-1,100-1'
+        'section+0,20,20,1,0/0-1,100-1+section+0,20,20,1,0/0-1,100-1'
     );
   });
 
@@ -391,7 +481,10 @@ describe('HTTP adapter', () => {
     expect(edited.statusCode).toBe(200);
     const editResult = edited.json().result as { downloadId: string; byteSize: number };
     expect(editResult.downloadId).toMatch(/^[A-Za-z0-9._~-]+$/);
-    const artifact = await app.inject({ method: 'GET', url: '/api/v1/artifacts/' + editResult.downloadId });
+    const artifact = await app.inject({
+      method: 'GET',
+      url: '/api/v1/artifacts/' + editResult.downloadId
+    });
     expect(artifact.statusCode).toBe(200);
     expect(artifact.body).toContain('42-1');
 
@@ -408,7 +501,14 @@ describe('HTTP adapter', () => {
       method: 'POST',
       url: '/api/v1/pulses/edit',
       headers: { 'content-type': 'application/json' },
-      payload: { text: VALID_TEXT, kind: 'strength', sectionIndex: 0, pointIndex: 1, value: 42, anchor: 1 }
+      payload: {
+        text: VALID_TEXT,
+        kind: 'strength',
+        sectionIndex: 0,
+        pointIndex: 1,
+        value: 42,
+        anchor: 1
+      }
     });
     expect(mixedCommand.statusCode).toBe(422);
     expect(mixedCommand.json().result).toBeNull();
@@ -426,7 +526,9 @@ describe('HTTP adapter', () => {
         payload: { text: VALID_TEXT, format }
       });
       expect(response.statusCode).toBe(200);
-      expect(response.headers['content-type']).toContain(format === 'svg' ? 'image/svg+xml' : format === 'png' ? 'image/png' : 'image/jpeg');
+      expect(response.headers['content-type']).toContain(
+        format === 'svg' ? 'image/svg+xml' : format === 'png' ? 'image/png' : 'image/jpeg'
+      );
       expect(JSON.parse(response.headers['x-pulse-result'] ?? 'null')).toMatchObject({
         format,
         displayName: 'pulse-preview.' + format,
@@ -444,7 +546,7 @@ describe('HTTP adapter', () => {
     expect(unsupported.json().result).toBeNull();
   });
 
-  it('supports injected artifact stores without taking ownership and expires downloads', async () => {
+  it('expires injected artifact stores without taking ownership', async () => {
     const store = new TempArtifactStore(5, 5);
     const app = buildServer({ artifactStore: store });
     apps.push(app);
@@ -515,13 +617,23 @@ describe('HTTP adapter', () => {
       url: '/api/v1/pulses/batch/export',
       headers: { 'content-type': 'application/json' },
       payload: {
-        items: [{ id: 'good', displayName: 'good.pulse', outputDisplayName: 'copy.pulse', text: VALID_TEXT }]
+        items: [
+          {
+            id: 'good',
+            displayName: 'good.pulse',
+            outputDisplayName: 'copy.pulse',
+            text: VALID_TEXT
+          }
+        ]
       }
     });
     expect(exported.statusCode).toBe(200);
     const exportResult = exported.json().result.items[0].result;
     expect(exportResult.downloadId).toMatch(/^[A-Za-z0-9._~-]+$/);
-    const artifact = await app.inject({ method: 'GET', url: '/api/v1/artifacts/' + exportResult.downloadId });
+    const artifact = await app.inject({
+      method: 'GET',
+      url: '/api/v1/artifacts/' + exportResult.downloadId
+    });
     expect(artifact.statusCode).toBe(200);
     expect(artifact.body).toBe(VALID_TEXT);
   });
@@ -553,7 +665,10 @@ describe('HTTP adapter', () => {
     expect(first.result.downloadId).toBe(store.staged[0]?.id);
     expect(second.status).toBe('failed');
     expect(second.result).toBeNull();
-    const downloaded = await app.inject({ method: 'GET', url: '/api/v1/artifacts/' + first.result.downloadId });
+    const downloaded = await app.inject({
+      method: 'GET',
+      url: '/api/v1/artifacts/' + first.result.downloadId
+    });
     expect(downloaded.statusCode).toBe(200);
     expect(downloaded.body).toContain('Dungeonlab+pulse:');
   });
@@ -587,24 +702,28 @@ describe('HTTP adapter', () => {
     apps.push(app);
     await app.listen({ port: 0, host: '127.0.0.1' });
     const address = app.server.address();
-    if (address === null || typeof address === 'string') throw new Error('API test server did not expose an address.');
+    if (address === null || typeof address === 'string')
+      throw new Error('API test server did not expose an address.');
     const payload = JSON.stringify({
       items: [{ id: 'disconnect', displayName: 'disconnect.pulse', text: VALID_TEXT }]
     });
     let clientRequest: ReturnType<typeof httpRequest> | null = null;
     const clientDone = new Promise<void>((resolve) => {
-      clientRequest = httpRequest({
-        host: '127.0.0.1',
-        port: address.port,
-        path: '/api/v1/pulses/batch/export',
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'content-length': Buffer.byteLength(payload)
+      clientRequest = httpRequest(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/api/v1/pulses/batch/export',
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(payload)
+          }
+        },
+        (_response: IncomingMessage) => {
+          resolve();
         }
-      }, (_response: IncomingMessage) => {
-        resolve();
-      });
+      );
       clientRequest.once('error', () => resolve());
       clientRequest.end(payload);
     });
@@ -613,7 +732,11 @@ describe('HTTP adapter', () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
     store.release();
     await clientDone;
-    for (let attempt = 0; attempt < 40 && store.staged.some((item) => store.descriptor(item.id) !== null); attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < 40 && store.staged.some((item) => store.descriptor(item.id) !== null);
+      attempt += 1
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(store.staged.length).toBeGreaterThan(0);
@@ -639,14 +762,21 @@ describe('HTTP adapter', () => {
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 100))
     ]);
     store.release();
-    if (responseOrTimeout === null) throw new Error('Timed-out staging request did not return while the store was blocked.');
+    if (responseOrTimeout === null)
+      throw new Error('Timed-out staging request did not return while the store was blocked.');
     const response = responseOrTimeout;
     expect(response.statusCode).toBe(408);
     const body = response.json();
     expect(body.status).toBe('failed');
     expect(body.result).toBeNull();
-    expect(body.diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_TIMEOUT')).toBe(true);
-    for (let attempt = 0; attempt < 40 && store.staged.some((item) => store.descriptor(item.id) !== null); attempt += 1) {
+    expect(
+      body.diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_TIMEOUT')
+    ).toBe(true);
+    for (
+      let attempt = 0;
+      attempt < 40 && store.staged.some((item) => store.descriptor(item.id) !== null);
+      attempt += 1
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(store.staged.every((item) => store.descriptor(item.id) === null)).toBe(true);
@@ -668,7 +798,9 @@ describe('HTTP adapter', () => {
       payload: payload.body
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().result.items.map((item: { displayName: string }) => item.displayName)).toEqual(['one.pulse', 'two.pulse']);
+    expect(
+      response.json().result.items.map((item: { displayName: string }) => item.displayName)
+    ).toEqual(['one.pulse', 'two.pulse']);
   });
 
   it('rejects duplicate multipart options and invalid manifests', async () => {
@@ -705,7 +837,7 @@ describe('HTTP adapter', () => {
     expect(manifestResponse.json().result).toBeNull();
   });
 
-  it('rejects multipart batch files with wrong fields, per-file limits, and aggregate limits', async () => {
+  it('rejects invalid multipart fields and size limits', async () => {
     const wrongFieldApp = buildServer();
     apps.push(wrongFieldApp);
     await wrongFieldApp.ready();
@@ -736,7 +868,11 @@ describe('HTTP adapter', () => {
     });
     expect(perFileResponse.statusCode).toBe(422);
     expect(perFileResponse.json().result).toBeNull();
-    expect(perFileResponse.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
+    expect(
+      perFileResponse
+        .json()
+        .diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')
+    ).toBe(true);
 
     const aggregateApp = buildServer({ maxBatchTotalBytes: 10 });
     apps.push(aggregateApp);
@@ -753,7 +889,11 @@ describe('HTTP adapter', () => {
     });
     expect(aggregateResponse.statusCode).toBe(422);
     expect(aggregateResponse.json().result).toBeNull();
-    expect(aggregateResponse.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
+    expect(
+      aggregateResponse
+        .json()
+        .diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')
+    ).toBe(true);
 
     const countApp = buildServer({ maxBatchFiles: 1 });
     apps.push(countApp);
@@ -770,7 +910,11 @@ describe('HTTP adapter', () => {
     });
     expect(countResponse.statusCode).toBe(422);
     expect(countResponse.json().result).toBeNull();
-    expect(countResponse.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
+    expect(
+      countResponse
+        .json()
+        .diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')
+    ).toBe(true);
   });
 
   it('returns semantic diff data and rejects source-bearing public values', async () => {
@@ -824,7 +968,12 @@ describe('HTTP adapter', () => {
 
     const named = multipartPayload([
       { name: 'before', filename: 'before.pulse', contentType: 'text/plain', value: VALID_TEXT },
-      { name: 'after', filename: 'after.pulse', contentType: 'text/plain', value: VALID_TEXT.replace('50-0', '42-0') }
+      {
+        name: 'after',
+        filename: 'after.pulse',
+        contentType: 'text/plain',
+        value: VALID_TEXT.replace('50-0', '42-0')
+      }
     ]);
     const namedResponse = await app.inject({
       method: 'POST',
@@ -850,7 +999,11 @@ describe('HTTP adapter', () => {
     });
     expect(limitedResponse.statusCode).toBe(422);
     expect(limitedResponse.json().result).toBeNull();
-    expect(limitedResponse.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
+    expect(
+      limitedResponse
+        .json()
+        .diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')
+    ).toBe(true);
   });
 
   it('enforces the batch byte limit before starting item work', async () => {
@@ -864,7 +1017,11 @@ describe('HTTP adapter', () => {
       payload: { items: [{ displayName: 'large.pulse', text: VALID_TEXT }] }
     });
     expect(response.statusCode).toBe(422);
-    expect(response.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')).toBe(true);
+    expect(
+      response
+        .json()
+        .diagnostics.some((item: { code: string }) => item.code === 'PULSE_TASK_INPUT_LIMIT')
+    ).toBe(true);
   });
 
   it('requires review and stages a deterministic quadratic assist', async () => {
@@ -886,7 +1043,11 @@ describe('HTTP adapter', () => {
       }
     });
     expect(unreviewed.statusCode).toBe(422);
-    expect(unreviewed.json().diagnostics.some((item: { code: string }) => item.code === 'PULSE_EDIT_NOT_REVIEWED')).toBe(true);
+    expect(
+      unreviewed
+        .json()
+        .diagnostics.some((item: { code: string }) => item.code === 'PULSE_EDIT_NOT_REVIEWED')
+    ).toBe(true);
     const reviewed = await app.inject({
       method: 'POST',
       url: '/api/v1/pulses/assist',
@@ -904,10 +1065,12 @@ describe('HTTP adapter', () => {
     expect(reviewed.statusCode).toBe(200);
     const result = reviewed.json().result;
     expect(result.downloadId).toMatch(/^[A-Za-z0-9._~-]+$/);
-    expect(result.changeRecords.some((record: { kind: string }) => record.kind === 'interpolation')).toBe(true);
+    expect(
+      result.changeRecords.some((record: { kind: string }) => record.kind === 'interpolation')
+    ).toBe(true);
   });
 
-  it('allows reviewed assist edits on disabled sections without adding playback points', async () => {
+  it('allows assist edits on disabled sections without playback points', async () => {
     const app = buildServer();
     apps.push(app);
     await app.ready();
@@ -927,7 +1090,10 @@ describe('HTTP adapter', () => {
       }
     });
     expect(reviewed.statusCode).toBe(200);
-    const result = reviewed.json().result as { downloadId: string; changeRecords: Array<{ path: string }> };
+    const result = reviewed.json().result as {
+      downloadId: string;
+      changeRecords: Array<{ path: string }>;
+    };
     expect(result.changeRecords.map((record) => record.path)).toEqual([
       'sections[0].points[0].strength',
       'sections[0].points[2].strength',
@@ -950,6 +1116,12 @@ describe('HTTP adapter', () => {
     expect(inspected.statusCode).toBe(200);
     expect(inspected.json().result.stream.points).toHaveLength(2);
     expect(inspected.json().result.metadata.sections[0].enabled).toBe(false);
-    expect(inspected.json().result.metadata.sections[0].sourcePoints.map((point: { strengthDecimal: string }) => point.strengthDecimal)).toEqual(['20', '65', '80']);
+    expect(
+      inspected
+        .json()
+        .result.metadata.sections[0].sourcePoints.map(
+          (point: { strengthDecimal: string }) => point.strengthDecimal
+        )
+    ).toEqual(['20', '65', '80']);
   });
 });

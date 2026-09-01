@@ -26,7 +26,12 @@ import {
   type QuadraticAssistPoint,
   type WaveformStream
 } from '@dglab-pulse-hub/core';
-import { nearestTimelinePointIndex, timelineIndexForKey, timelineSectionForPoint, timelineTimeAtClientX } from './timeline.js';
+import {
+  nearestTimelinePointIndex,
+  timelineIndexForKey,
+  timelineSectionForPoint,
+  timelineTimeAtClientX
+} from './timeline.js';
 import {
   type EditPayload,
   type WorkspaceArtifact,
@@ -37,15 +42,15 @@ import {
 } from './client.js';
 import {
   assistProposalFingerprint,
-  fileExportActionFailureMessage,
   finalizeQrImageAction,
   isAssistProposalValid,
-  qrImageActionFailureMessage,
   qrImageUnavailableMessage,
   reviewedAssistMatches,
   type AssistProposalFingerprintInput,
   type QrImageAction
 } from './workflow.js';
+import { createTranslator, detectLocale, type Locale } from './i18n.js';
+import { detectTheme, type Theme } from './preferences.js';
 
 type StreamPoint = NonNullable<InspectDataDto['stream']>['points'][number];
 
@@ -61,13 +66,15 @@ function failureEnvelope(
     operation: /^[a-z][a-z0-9-]{0,79}$/.test(operation) ? operation : 'request',
     status,
     result: null,
-    diagnostics: [{
-      code,
-      severity: status === 'cancelled' ? 'info' : 'error',
-      stage: status === 'cancelled' ? 'task' : 'adapter',
-      message,
-      location: { path: '$' }
-    }]
+    diagnostics: [
+      {
+        code,
+        severity: status === 'cancelled' ? 'info' : 'error',
+        stage: status === 'cancelled' ? 'task' : 'adapter',
+        message,
+        location: { path: '$' }
+      }
+    ]
   };
 }
 
@@ -102,7 +109,8 @@ function decodeUtf8(bytes: Uint8Array): string | null {
 
 function formatMs(value: number): string {
   if (!Number.isFinite(value)) return '--';
-  if (value >= 60_000) return Math.floor(value / 60_000) + 'm ' + Math.floor(value / 1_000) % 60 + 's';
+  if (value >= 60_000)
+    return Math.floor(value / 60_000) + 'm ' + (Math.floor(value / 1_000) % 60) + 's';
   return (value / 1_000).toFixed(value < 10_000 ? 2 : 1) + 's';
 }
 
@@ -131,9 +139,25 @@ function assistPointsForSection(
 
 export interface WorkspaceAppProps {
   readonly client: WorkspaceClient;
+  readonly initialLocale?: Locale;
+  readonly initialTheme?: Theme;
 }
 
-export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
+export function WorkspaceApp({
+  client,
+  initialLocale,
+  initialTheme
+}: WorkspaceAppProps): ReactElement {
+  const [locale, setLocale] = useState<Locale>(() => initialLocale ?? detectLocale());
+  const [theme, setTheme] = useState<Theme>(() => initialTheme ?? detectTheme());
+  const t = useMemo(() => createTranslator(locale), [locale]);
+  const statusLabel = (status: string): string => {
+    if (status === 'success') return t('statusSuccess');
+    if (status === 'failed') return t('statusFailed');
+    if (status === 'rejected') return t('statusRejected');
+    if (status === 'cancelled') return t('statusCancelled');
+    return status;
+  };
   const [fileName, setFileName] = useState('');
   const [workspaceDocument, setWorkspaceDocument] = useState<WorkspaceDocument | null>(null);
   const [envelope, setEnvelope] = useState<OperationEnvelope | null>(null);
@@ -175,6 +199,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   const [history, setHistory] = useState<readonly WorkspaceDocument[]>([]);
   const [historyCursor, setHistoryCursor] = useState(-1);
   const abortController = useRef<AbortController | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
   const interactionGeneration = useRef(0);
   const compareLoadGeneration = useRef(0);
   const batchDownloadGeneration = useRef(0);
@@ -182,6 +207,21 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   const cursorRef = useRef(-1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedPointRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    sidebarRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    window.localStorage.setItem('pulse-hub-locale', locale);
+  }, [locale]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem('pulse-hub-theme', theme);
+  }, [theme]);
 
   function updateSelectedPoint(index: number | null): void {
     selectedPointRef.current = index;
@@ -191,28 +231,26 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   // Contract parsing allocates fresh objects. Keep the parsed view model
   // stable between renders so effects that synchronize form fields do not
   // turn every render into another state update.
-  const result = useMemo(
-    () => envelope === null ? null : inspectResult(envelope),
-    [envelope]
-  );
+  const result = useMemo(() => (envelope === null ? null : inspectResult(envelope)), [envelope]);
   const stream = result?.stream ?? null;
   const diagnostics = envelope?.diagnostics ?? [];
   const sections = result?.metadata.sections ?? [];
   const section = sections[selectedSection] ?? sections[0];
-  const point = selectedPoint !== null && stream !== null ? stream.points[selectedPoint] : undefined;
-  const hoveredPoint = hoveredPointIndex !== null && stream !== null ? stream.points[hoveredPointIndex] : undefined;
+  const point =
+    selectedPoint !== null && stream !== null ? stream.points[selectedPoint] : undefined;
+  const hoveredPoint =
+    hoveredPointIndex !== null && stream !== null ? stream.points[hoveredPointIndex] : undefined;
   const dirty = workspaceDocument !== null && historyCursor > 0;
-  const qrImageUnavailable = result === null
-    ? null
-    : qrImageUnavailableMessage(result.metadata.pulse.sectionCount);
+  const qrImageUnavailable =
+    result !== null && qrImageUnavailableMessage(result.metadata.pulse.sectionCount) !== null;
   const canUndo = historyCursor > 0;
   const canRedo = historyCursor >= 0 && historyCursor < history.length - 1;
   const batch = useMemo(
-    () => batchEnvelope === null ? null : batchResult(batchEnvelope),
+    () => (batchEnvelope === null ? null : batchResult(batchEnvelope)),
     [batchEnvelope]
   );
   const diff = useMemo(
-    () => diffEnvelope === null ? null : diffResult(diffEnvelope),
+    () => (diffEnvelope === null ? null : diffResult(diffEnvelope)),
     [diffEnvelope]
   );
   const assistStart = Number(assistStartInput);
@@ -232,19 +270,27 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   const assistFingerprint = assistProposalFingerprint(assistFingerprintInput);
   const assistReviewed = reviewedAssistMatches(assistFingerprintInput, assistReviewedFingerprint);
   const assistPoints = useMemo(
-    () => section === undefined ? [] : assistPointsForSection(result?.metadata ?? null, section.sectionIndex),
+    () =>
+      section === undefined
+        ? []
+        : assistPointsForSection(result?.metadata ?? null, section.sectionIndex),
     [result?.metadata, section?.sectionIndex]
   );
   const playback = useMemo(() => {
     if (stream === null) return null;
-    return new PreviewPlaybackController(stream as unknown as WaveformStream, { playbackRate: 0.2 });
+    return new PreviewPlaybackController(stream as unknown as WaveformStream, {
+      playbackRate: 0.2
+    });
   }, [stream?.digest]);
-  useEffect(() => () => {
-    interactionGeneration.current += 1;
-    abortController.current?.abort();
-    abortController.current = null;
-    client.dispose?.();
-  }, []);
+  useEffect(
+    () => () => {
+      interactionGeneration.current += 1;
+      abortController.current?.abort();
+      abortController.current = null;
+      client.dispose?.();
+    },
+    []
+  );
 
   useEffect(() => {
     const unsubscribe = client.onHistoryReset?.((operation) => {
@@ -281,9 +327,11 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       return;
     }
     const bytes = qrArtifact.bytes.slice().buffer as ArrayBuffer;
-    const url = URL.createObjectURL(new Blob([bytes], {
-      type: qrArtifact.contentType ?? 'image/jpeg'
-    }));
+    const url = URL.createObjectURL(
+      new Blob([bytes], {
+        type: qrArtifact.contentType ?? 'image/jpeg'
+      })
+    );
     setQrPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [qrArtifact]);
@@ -300,7 +348,9 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     }
     if (point !== undefined && point.source.sectionIndex === selectedSection) {
       setAssistStartInput(String(Math.max(0, point.source.controlPointIndex - 1)));
-      setAssistEndInput(String(Math.min((section?.pointCount ?? 3) - 1, point.source.controlPointIndex + 1)));
+      setAssistEndInput(
+        String(Math.min((section?.pointCount ?? 3) - 1, point.source.controlPointIndex + 1))
+      );
       setAssistStartStrengthInput(point.intensityDecimal);
       setAssistEndStrengthInput(point.intensityDecimal);
     }
@@ -311,12 +361,14 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       setAssistPreview([]);
       return;
     }
-    setAssistPreview(previewQuadraticAssist(assistPoints, {
-      startPointIndex: assistStart,
-      endPointIndex: assistEnd,
-      startStrength: assistStartStrength,
-      endStrength: assistEndStrength
-    }) ?? []);
+    setAssistPreview(
+      previewQuadraticAssist(assistPoints, {
+        startPointIndex: assistStart,
+        endPointIndex: assistEnd,
+        startStrength: assistStartStrength,
+        endStrength: assistEndStrength
+      }) ?? []
+    );
   }, [section, assistPoints, assistStart, assistEnd, assistStartStrength, assistEndStrength]);
 
   function beginRequest(label: string): AbortController {
@@ -352,16 +404,18 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     const nextResult = inspectResult(nextEnvelope);
     setEnvelope(nextEnvelope);
     if (nextResult !== null) {
-      const nextPointIndex = nextResult.stream === null || nextResult.stream.points.length === 0
-        ? null
-        : selectedPointRef.current === null
-          ? 0
-          : Math.min(selectedPointRef.current, nextResult.stream.points.length - 1);
+      const nextPointIndex =
+        nextResult.stream === null || nextResult.stream.points.length === 0
+          ? null
+          : selectedPointRef.current === null
+            ? 0
+            : Math.min(selectedPointRef.current, nextResult.stream.points.length - 1);
       updateSelectedPoint(nextPointIndex);
       setSelectedSection((current) => {
-        const pointSection = nextPointIndex === null || nextResult.stream === null
-          ? null
-          : timelineSectionForPoint(nextResult.stream.points, nextPointIndex);
+        const pointSection =
+          nextPointIndex === null || nextResult.stream === null
+            ? null
+            : timelineSectionForPoint(nextResult.stream.points, nextPointIndex);
         return pointSection === null
           ? Math.min(current, Math.max(0, nextResult.metadata.sections.length - 1))
           : pointSection;
@@ -379,10 +433,14 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     applyInspectionView(operation.envelope);
     setQrArtifact(null);
     const nextResult = inspectResult(operation.envelope);
-    const nextDocument = operation.document ?? (nextResult === null ? null : {
-      displayName: nextResult.metadata.file.displayName,
-      digest: nextResult.sourceDigest
-    });
+    const nextDocument =
+      operation.document ??
+      (nextResult === null
+        ? null
+        : {
+            displayName: nextResult.metadata.file.displayName,
+            digest: nextResult.sourceDigest
+          });
     if (nextDocument !== null) {
       setWorkspaceDocument(nextDocument);
       setFileName(nextDocument.displayName);
@@ -431,13 +489,16 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   }
 
   async function importFile(file: File): Promise<void> {
-    const controller = beginRequest('Importing');
+    const controller = beginRequest(t('importing'));
     try {
-      const operation = await client.importFile({
-        name: file.name,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-        ...(file.type === '' ? {} : { type: file.type })
-      }, controller.signal);
+      const operation = await client.importFile(
+        {
+          name: file.name,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          ...(file.type === '' ? {} : { type: file.type })
+        },
+        controller.signal
+      );
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success' || operation.document === undefined) {
         clearDocumentState();
@@ -450,15 +511,18 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       clearDocumentState();
-      if (error instanceof DOMException && error.name === 'AbortError') setEnvelope(failureEnvelope('inspect', 'Import was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled'));
-      else setEnvelope(failureEnvelope('inspect', 'The selected file could not be imported.'));
+      if (error instanceof DOMException && error.name === 'AbortError')
+        setEnvelope(
+          failureEnvelope('inspect', t('importCancelled'), 'PULSE_TASK_CANCELLED', 'cancelled')
+        );
+      else setEnvelope(failureEnvelope('inspect', t('importFailed')));
     } finally {
       endRequest(controller);
     }
   }
 
   async function openNativeDocument(): Promise<void> {
-    const controller = beginRequest('Opening');
+    const controller = beginRequest(t('opening'));
     try {
       const operation = await client.open(controller.signal);
       if (!isCurrentRequest(controller)) return;
@@ -473,9 +537,11 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       clearDocumentState();
-      setEnvelope(error instanceof DOMException && error.name === 'AbortError'
-        ? failureEnvelope('inspect', 'Open was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled')
-        : failureEnvelope('inspect', 'The selected file could not be opened.'));
+      setEnvelope(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? failureEnvelope('inspect', t('openCancelled'), 'PULSE_TASK_CANCELLED', 'cancelled')
+          : failureEnvelope('inspect', t('openFailed'))
+      );
     } finally {
       endRequest(controller);
     }
@@ -530,7 +596,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   async function importQrText(): Promise<void> {
     if (qrInput.trim() === '') return;
-    const controller = beginRequest('Decoding QR');
+    const controller = beginRequest(t('decodingQr'));
     try {
       const operation = await client.decodeQr(qrInput, controller.signal);
       if (!isCurrentRequest(controller)) return;
@@ -545,8 +611,11 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       clearDocumentState();
-      if (error instanceof DOMException && error.name === 'AbortError') setEnvelope(failureEnvelope('qr-decode', 'QR decoding was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled'));
-      else setEnvelope(failureEnvelope('qr-decode', 'QR content could not be decoded.'));
+      if (error instanceof DOMException && error.name === 'AbortError')
+        setEnvelope(
+          failureEnvelope('qr-decode', t('qrCancelled'), 'PULSE_TASK_CANCELLED', 'cancelled')
+        );
+      else setEnvelope(failureEnvelope('qr-decode', t('qrFailed')));
     } finally {
       endRequest(controller);
     }
@@ -554,12 +623,17 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   async function exportCurrent(): Promise<void> {
     if (workspaceDocument === null) return;
-    const controller = beginRequest('Exporting');
+    const controller = beginRequest(t('exporting'));
     try {
-      const operation = await client.export(workspaceDocument, 'pulse-text', exportMode, controller.signal);
+      const operation = await client.export(
+        workspaceDocument,
+        'pulse-text',
+        exportMode,
+        controller.signal
+      );
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success') {
-        setMessage(fileExportActionFailureMessage(operation.envelope));
+        setMessage(t('exportFailed'));
         return;
       }
       if (operation.artifact !== undefined) {
@@ -569,54 +643,65 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
           controller.signal
         );
         if (saved.status !== 'success') {
-          setMessage(fileExportActionFailureMessage(saved));
+          setMessage(saved.status === 'cancelled' ? t('exportCancelled') : t('exportFailed'));
           return;
         }
       }
-      setMessage('Pulse file downloaded.');
+      setMessage(t('pulseDownloaded'));
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
-      if (error instanceof DOMException && error.name === 'AbortError') setMessage('Export cancelled.');
-      else setMessage('Export failed.');
+      if (error instanceof DOMException && error.name === 'AbortError')
+        setMessage(t('exportCancelled'));
+      else setMessage(t('exportFailed'));
     } finally {
       endRequest(controller);
     }
   }
 
   async function handleQrImage(action: QrImageAction): Promise<void> {
-    if (workspaceDocument === null || qrImageUnavailable !== null) return;
-    const controller = beginRequest(action === 'preview' ? 'Previewing QR image' : 'Exporting QR image');
+    if (workspaceDocument === null || qrImageUnavailable) return;
+    const controller = beginRequest(action === 'preview' ? t('previewingQr') : t('exportingQr'));
     try {
-      const operation = await client.export(workspaceDocument, 'qr-envelope', exportMode, controller.signal);
+      const operation = await client.export(
+        workspaceDocument,
+        'qr-envelope',
+        exportMode,
+        controller.signal
+      );
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success') {
-        setMessage(qrImageActionFailureMessage(operation.envelope, action));
+        setMessage(action === 'preview' ? t('qrPreviewFailed') : t('qrExportFailed'));
         return;
       }
       if (operation.artifact === undefined) {
-        setMessage(action === 'preview' ? 'QR image preview failed.' : 'QR image export failed.');
+        setMessage(action === 'preview' ? t('qrPreviewFailed') : t('qrExportFailed'));
         return;
       }
-      const result = await finalizeQrImageAction(operation, action, client.saveArtifact, controller.signal);
+      const result = await finalizeQrImageAction(
+        operation,
+        action,
+        client.saveArtifact,
+        controller.signal
+      );
       if (!isCurrentRequest(controller)) return;
       if (result.saveEnvelope !== undefined && result.saveEnvelope.status !== 'success') {
-        setMessage(result.saveEnvelope.status === 'cancelled'
-          ? 'QR image export cancelled.'
-          : qrImageActionFailureMessage(result.saveEnvelope, action));
+        setMessage(
+          result.saveEnvelope.status === 'cancelled' ? t('qrExportCancelled') : t('qrExportFailed')
+        );
         return;
       }
       if (action === 'preview') {
         setQrArtifact(operation.artifact);
-        setMessage('QR image preview ready.');
+        setMessage(t('qrReady'));
       } else {
-        setMessage('QR image downloaded.');
+        setMessage(t('qrDownloaded'));
       }
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       if (error instanceof DOMException && error.name === 'AbortError') {
-        setMessage(action === 'preview' ? 'QR image preview cancelled.' : 'QR image export cancelled.');
+        setMessage(action === 'preview' ? t('qrPreviewCancelled') : t('qrExportCancelled'));
       } else {
-        setMessage(action === 'preview' ? 'QR image preview failed.' : 'QR image export failed.');
+        setMessage(action === 'preview' ? t('qrPreviewFailed') : t('qrExportFailed'));
       }
     } finally {
       endRequest(controller);
@@ -625,26 +710,35 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   async function renderPreview(): Promise<void> {
     if (workspaceDocument === null) return;
-    const controller = beginRequest('Rendering preview');
+    const controller = beginRequest(t('renderingPreview'));
     try {
-      const operation = await client.renderPreview(workspaceDocument, previewFormat, controller.signal);
+      const operation = await client.renderPreview(
+        workspaceDocument,
+        previewFormat,
+        controller.signal
+      );
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success') {
         setEnvelope(operation.envelope);
         return;
       }
       if (operation.artifact !== undefined) {
-        const saved = await client.saveArtifact(operation.artifact, 'pulse-preview.' + previewFormat, controller.signal);
+        const saved = await client.saveArtifact(
+          operation.artifact,
+          'pulse-preview.' + previewFormat,
+          controller.signal
+        );
         if (saved.status !== 'success') {
           setEnvelope(saved);
           return;
         }
       }
-      setMessage(previewFormat.toUpperCase() + ' preview downloaded.');
+      setMessage(t('previewDownloaded', { format: previewFormat.toUpperCase() }));
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
-      if (error instanceof DOMException && error.name === 'AbortError') setMessage('Preview rendering cancelled.');
-      else setMessage('Preview rendering failed.');
+      if (error instanceof DOMException && error.name === 'AbortError')
+        setMessage(t('previewCancelled'));
+      else setMessage(t('previewFailed'));
     } finally {
       endRequest(controller);
     }
@@ -652,7 +746,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   async function applyEdit(command: EditPayload): Promise<void> {
     if (workspaceDocument === null) return;
-    const controller = beginRequest('Applying edit');
+    const controller = beginRequest(t('applyingEdit'));
     try {
       const operation = await client.edit(workspaceDocument, command, controller.signal);
       if (!isCurrentRequest(controller)) return;
@@ -663,11 +757,12 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       applyOperationView(operation);
       commitHistory(operation.document);
       setExportMode('canonical');
-      setMessage('Edit applied. The source snapshot remains available through undo.');
+      setMessage(t('editApplied'));
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
-      if (error instanceof DOMException && error.name === 'AbortError') setMessage('Edit cancelled.');
-      else setMessage('Edit failed.');
+      if (error instanceof DOMException && error.name === 'AbortError')
+        setMessage(t('editCancelled'));
+      else setMessage(t('editFailed'));
     } finally {
       endRequest(controller);
     }
@@ -679,9 +774,17 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const decoded = decodeUtf8(bytes);
-      if (generation !== compareLoadGeneration.current || !isCurrentInteraction(interaction)) return;
+      if (generation !== compareLoadGeneration.current || !isCurrentInteraction(interaction))
+        return;
       if (decoded === null) {
-        setDiffEnvelope(failureEnvelope('diff', 'The comparison file is not valid UTF-8.', 'PULSE_RECOGNIZE_INVALID_ENCODING', 'rejected'));
+        setDiffEnvelope(
+          failureEnvelope(
+            'diff',
+            t('invalidCompareEncoding'),
+            'PULSE_RECOGNIZE_INVALID_ENCODING',
+            'rejected'
+          )
+        );
         setCompareText('');
         return;
       }
@@ -689,29 +792,35 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       setCompareText(decoded);
       setCompareFile({ name: file.name, bytes, ...(file.type === '' ? {} : { type: file.type }) });
       setDiffEnvelope(null);
-      setMessage('Comparison file ready. Run diff to review semantic changes.');
+      setMessage(t('compareReady'));
     } catch {
-      if (generation !== compareLoadGeneration.current || !isCurrentInteraction(interaction)) return;
-      setDiffEnvelope(failureEnvelope('diff', 'The comparison file could not be read.', 'PULSE_ADAPTER_READ_FAILED', 'failed'));
+      if (generation !== compareLoadGeneration.current || !isCurrentInteraction(interaction))
+        return;
+      setDiffEnvelope(
+        failureEnvelope('diff', t('compareReadFailed'), 'PULSE_ADAPTER_READ_FAILED', 'failed')
+      );
     }
   }
 
   async function runDiff(): Promise<void> {
-    if (workspaceDocument === null || (client.fileMode === 'browser' && compareFile === null)) return;
-    const controller = beginRequest('Comparing documents');
+    if (workspaceDocument === null || (client.fileMode === 'browser' && compareFile === null))
+      return;
+    const controller = beginRequest(t('comparing'));
     try {
       const operation = await client.diff(
         workspaceDocument,
-        client.fileMode === 'browser' ? compareFile ?? undefined : undefined,
+        client.fileMode === 'browser' ? (compareFile ?? undefined) : undefined,
         controller.signal
       );
       if (!isCurrentRequest(controller)) return;
       setDiffEnvelope(operation.envelope);
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
-      setDiffEnvelope(error instanceof DOMException && error.name === 'AbortError'
-        ? failureEnvelope('diff', 'Comparison was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled')
-        : failureEnvelope('diff', 'The documents could not be compared.'));
+      setDiffEnvelope(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? failureEnvelope('diff', t('comparisonCancelled'), 'PULSE_TASK_CANCELLED', 'cancelled')
+          : failureEnvelope('diff', t('comparisonFailed'))
+      );
     } finally {
       endRequest(controller);
     }
@@ -720,7 +829,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   function previewAssist(): void {
     if (section === undefined || !isAssistProposalValid(assistFingerprintInput)) {
       setAssistPreview([]);
-      setMessage('Choose a valid point interval and endpoint strengths before previewing.');
+      setMessage(t('invalidCurve'));
       return;
     }
     const values = previewQuadraticAssist(assistPoints, {
@@ -731,29 +840,33 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     });
     if (values === null) {
       setAssistPreview([]);
-      setMessage('The selected section does not expose a previewable point range.');
+      setMessage(t('noCurveRange'));
       return;
     }
     setAssistPreview(values);
     setAssistReviewedFingerprint(null);
-    setMessage('Curve proposal refreshed. Review each value before applying it.');
+    setMessage(t('curveRefreshed'));
   }
 
   async function applyAssist(): Promise<void> {
     if (workspaceDocument === null || !assistReviewed || section === undefined) {
-      setMessage('Review the proposed curve and confirm it before applying.');
+      setMessage(t('reviewCurve'));
       return;
     }
-    const controller = beginRequest('Applying reviewed curve');
+    const controller = beginRequest(t('applyingCurve'));
     try {
-      const operation = await client.assist(workspaceDocument, {
+      const operation = await client.assist(
+        workspaceDocument,
+        {
           sectionIndex: section.sectionIndex,
           startPointIndex: assistStart,
           endPointIndex: assistEnd,
           startStrength: assistStartStrength,
           endStrength: assistEndStrength,
           reviewed: true
-        }, controller.signal);
+        },
+        controller.signal
+      );
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success' || operation.document === undefined) {
         setEnvelope(operation.envelope);
@@ -763,10 +876,14 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       commitHistory(operation.document);
       setExportMode('canonical');
       setAssistReviewedFingerprint(null);
-      setMessage('Reviewed curve applied.');
+      setMessage(t('curveApplied'));
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
-      setMessage(error instanceof DOMException && error.name === 'AbortError' ? 'Curve application cancelled.' : 'Curve application failed.');
+      setMessage(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? t('curveCancelled')
+          : t('curveFailed')
+      );
     } finally {
       endRequest(controller);
     }
@@ -774,24 +891,39 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   async function runBatch(): Promise<void> {
     if (client.fileMode === 'browser' && batchFiles.length === 0) return;
-    const controller = beginRequest(batchMode === 'inspect' ? 'Inspecting batch' : 'Exporting batch');
+    const controller = beginRequest(
+      batchMode === 'inspect' ? t('inspectingBatch') : t('exportingBatch')
+    );
     setBatchProgress({ completed: 0, total: batchFiles.length });
     try {
-      const operation = batchMode === 'inspect'
-        ? await client.batchInspect(client.fileMode === 'browser' ? batchFiles : undefined, controller.signal)
-        : await client.batchExport(client.fileMode === 'browser' ? batchFiles : undefined, exportMode, controller.signal);
+      const operation =
+        batchMode === 'inspect'
+          ? await client.batchInspect(
+              client.fileMode === 'browser' ? batchFiles : undefined,
+              controller.signal
+            )
+          : await client.batchExport(
+              client.fileMode === 'browser' ? batchFiles : undefined,
+              exportMode,
+              controller.signal
+            );
       if (!isCurrentRequest(controller)) return;
       setBatchEnvelope(operation.envelope);
       if (operation.envelope.status === 'success') {
         const completed = batchResult(operation.envelope)?.completed ?? batchFiles.length;
-        setBatchProgress({ completed, total: batchResult(operation.envelope)?.total ?? batchFiles.length });
+        setBatchProgress({
+          completed,
+          total: batchResult(operation.envelope)?.total ?? batchFiles.length
+        });
       }
-      setMessage(batchMode === 'inspect' ? 'Batch inspection complete.' : 'Batch export complete. Download successful items below.');
+      setMessage(batchMode === 'inspect' ? t('batchInspectionDone') : t('batchExportDone'));
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
-      setBatchEnvelope(error instanceof DOMException && error.name === 'AbortError'
-        ? failureEnvelope('batch', 'Batch task was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled')
-        : failureEnvelope('batch', 'The batch task could not be completed.'));
+      setBatchEnvelope(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? failureEnvelope('batch', t('batchCancelled'), 'PULSE_TASK_CANCELLED', 'cancelled')
+          : failureEnvelope('batch', t('batchFailed'))
+      );
     } finally {
       endRequest(controller);
     }
@@ -799,23 +931,38 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   async function downloadBatchItem(index: number): Promise<void> {
     const item = batch?.items[index];
-    if (item === undefined || item.status !== 'success' || typeof item.result !== 'object' || item.result === null) return;
-    const result = item.result as { readonly downloadId?: unknown; readonly displayName?: unknown; readonly contentType?: unknown };
+    if (
+      item === undefined ||
+      item.status !== 'success' ||
+      typeof item.result !== 'object' ||
+      item.result === null
+    )
+      return;
+    const result = item.result as {
+      readonly downloadId?: unknown;
+      readonly displayName?: unknown;
+      readonly contentType?: unknown;
+    };
     if (typeof result.downloadId !== 'string') return;
     const generation = ++batchDownloadGeneration.current;
     const interaction = ++interactionGeneration.current;
     try {
-      if (generation !== batchDownloadGeneration.current || !isCurrentInteraction(interaction)) return;
+      if (generation !== batchDownloadGeneration.current || !isCurrentInteraction(interaction))
+        return;
       const artifact = await client.downloadArtifact(result.downloadId);
       if (artifact === null) {
-        setMessage(item.displayName + ' is no longer available.');
+        setMessage(t('unavailable', { name: item.displayName }));
         return;
       }
-      const saved = await client.saveArtifact(artifact, typeof result.displayName === 'string' ? result.displayName : item.displayName);
-      if (saved.status !== 'success') setMessage(item.displayName + ' could not be downloaded.');
+      const saved = await client.saveArtifact(
+        artifact,
+        typeof result.displayName === 'string' ? result.displayName : item.displayName
+      );
+      if (saved.status !== 'success') setMessage(t('downloadFailed', { name: item.displayName }));
     } catch {
-      if (generation !== batchDownloadGeneration.current || !isCurrentInteraction(interaction)) return;
-      setMessage(item.displayName + ' could not be downloaded.');
+      if (generation !== batchDownloadGeneration.current || !isCurrentInteraction(interaction))
+        return;
+      setMessage(t('downloadFailed', { name: item.displayName }));
     }
   }
 
@@ -829,17 +976,23 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     const target = historyRef.current[nextCursor];
     const current = workspaceDocument;
     if (target === undefined || current === null) return;
-    const controller = beginRequest(direction < 0 ? 'Undoing' : 'Redoing');
+    const controller = beginRequest(direction < 0 ? t('undoing') : t('redoing'));
     try {
-      const operation = direction < 0
-        ? await client.undo(current, target, controller.signal)
-        : await client.redo(current, target, controller.signal);
-      if (!isCurrentRequest(controller) || operation.envelope.status !== 'success' || operation.document === undefined) return;
+      const operation =
+        direction < 0
+          ? await client.undo(current, target, controller.signal)
+          : await client.redo(current, target, controller.signal);
+      if (
+        !isCurrentRequest(controller) ||
+        operation.envelope.status !== 'success' ||
+        operation.document === undefined
+      )
+        return;
       applyOperationView(operation);
       cursorRef.current = nextCursor;
       setHistoryCursor(nextCursor);
       setExportMode(nextCursor === 0 ? 'source' : 'canonical');
-      setMessage(direction < 0 ? 'Undo applied.' : 'Redo applied.');
+      setMessage(direction < 0 ? t('undoApplied') : t('redoApplied'));
     } catch {
       // Keep the cursor at the last accepted snapshot if an adapter exception
       // escapes inspectText before the target has been committed.
@@ -848,10 +1001,18 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     }
   }
 
-  function timelinePointFromClientX(event: { readonly clientX: number }, element: SVGSVGElement): number | null {
+  function timelinePointFromClientX(
+    event: { readonly clientX: number },
+    element: SVGSVGElement
+  ): number | null {
     if (stream === null || stream.points.length === 0) return null;
     const rect = element.getBoundingClientRect();
-    const timeMs = timelineTimeAtClientX(event.clientX, rect.left, rect.width, stream.totalDurationMs);
+    const timeMs = timelineTimeAtClientX(
+      event.clientX,
+      rect.left,
+      rect.width,
+      stream.totalDurationMs
+    );
     return timeMs === null ? null : nearestTimelinePointIndex(stream.points, timeMs);
   }
 
@@ -879,7 +1040,11 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   }
 
   function moveTimelinePoint(direction: -1 | 1): void {
-    const next = timelineIndexForKey(direction < 0 ? 'ArrowLeft' : 'ArrowRight', selectedPoint, stream?.points.length ?? 0);
+    const next = timelineIndexForKey(
+      direction < 0 ? 'ArrowLeft' : 'ArrowRight',
+      selectedPoint,
+      stream?.points.length ?? 0
+    );
     if (next === null) return;
     selectStreamPoint(next);
     setHoveredPointIndex(next);
@@ -904,56 +1069,1136 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     const points = downsample(stream.points, 1_600);
     const width = 960;
     const height = 240;
-    const x = (item: StreamPoint) => item.timeMs / Math.max(1, stream.totalDurationMs) * width;
+    const x = (item: StreamPoint) => (item.timeMs / Math.max(1, stream.totalDurationMs)) * width;
     return {
-      intensity: points.map((item) => x(item).toFixed(2) + ',' + (height - item.intensity * 2.05).toFixed(2)).join(' '),
-      frequency: points.map((item) => x(item).toFixed(2) + ',' + (height - item.frequencyIndex / 83 * height).toFixed(2)).join(' ')
+      intensity: points
+        .map((item) => x(item).toFixed(2) + ',' + (height - item.intensity * 2.05).toFixed(2))
+        .join(' '),
+      frequency: points
+        .map(
+          (item) =>
+            x(item).toFixed(2) + ',' + (height - (item.frequencyIndex / 83) * height).toFixed(2)
+        )
+        .join(' ')
     };
   }, [stream]);
 
   return (
-    <main className="shell">
-      <header className="topbar"><div className="brand"><span className="brand-mark">PH</span><div><strong>Pulse Hub</strong><small>DG-LAB waveform workbench</small></div></div><div className="version">rules {result?.recognition.ruleVersion ?? RULE_VERSION}</div></header>
+    <main className="shell" data-theme={theme} lang={locale}>
+      <a className="skip-link" href="#workspace-content">
+        {t('workspace')}
+      </a>
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <div>
+            <strong>Pulse Hub</strong>
+            <small>{t('workbench')}</small>
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <span className="version">
+            {t('rules')} {result?.recognition.ruleVersion ?? RULE_VERSION}
+          </span>
+          <label className="preference-control">
+            <span>{t('language')}</span>
+            <select
+              aria-label={t('language')}
+              value={locale}
+              onChange={(event) => setLocale(event.target.value as Locale)}
+            >
+              <option value="en-US">{t('english')}</option>
+              <option value="zh-CN">{t('chinese')}</option>
+              <option value="ja-JP">{t('japanese')}</option>
+            </select>
+          </label>
+          <div className="theme-switch" role="group" aria-label={t('theme')}>
+            <button
+              type="button"
+              aria-label={t('light')}
+              aria-pressed={theme === 'light'}
+              data-active={theme === 'light'}
+              onClick={() => setTheme('light')}
+            >
+              <span aria-hidden="true">◐</span>
+            </button>
+            <button
+              type="button"
+              aria-label={t('dark')}
+              aria-pressed={theme === 'dark'}
+              data-active={theme === 'dark'}
+              onClick={() => setTheme('dark')}
+            >
+              <span aria-hidden="true">◑</span>
+            </button>
+          </div>
+        </div>
+      </header>
       <section className="workspace">
-        <aside className="sidebar" aria-label="Document controls">
-          <div className="section-heading"><span>Source</span><span className="status-dot" data-state={envelope?.status ?? 'idle'} /></div>
-          <label className={'dropzone' + (dragActive ? ' is-dragging' : '')} role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy} onClick={(event) => { if (client.fileMode === 'native') { event.preventDefault(); openDocument(); } }} onKeyDown={handleDropzoneKeyDown} onDragEnter={handleDropzoneDragEnter} onDragOver={handleDropzoneDragOver} onDragLeave={handleDropzoneDragLeave} onDrop={handleDropzoneDrop}>{client.fileMode === 'browser' && <input ref={fileInputRef} type="file" accept=".pulse,.txt,text/plain" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file !== undefined) void importFile(file); event.currentTarget.value = ''; }} />}<span className="upload-icon" aria-hidden="true">↑</span><b>{busy ? busyLabel : client.fileMode === 'native' ? 'Open pulse file' : 'Open pulse file'}</b><small>UTF-8 .pulse or QR text</small></label>
-          <div className="qr-import"><label htmlFor="qr-input">QR content or URL</label><textarea id="qr-input" rows={3} value={qrInput} onChange={(event) => setQrInput(event.target.value)} disabled={busy} /><button className="secondary" disabled={busy || qrInput.trim() === ''} onClick={() => void importQrText()}>Decode QR</button></div>
+        <aside ref={sidebarRef} className="sidebar" aria-label={t('documentControls')}>
+          <div className="section-heading">
+            <span>{t('source')}</span>
+            <span className="status-dot" data-state={envelope?.status ?? 'idle'} />
+          </div>
+          <label
+            className={'dropzone' + (dragActive ? ' is-dragging' : '')}
+            role="button"
+            tabIndex={busy ? -1 : 0}
+            aria-disabled={busy}
+            onClick={(event) => {
+              if (client.fileMode === 'native') {
+                event.preventDefault();
+                openDocument();
+              }
+            }}
+            onKeyDown={handleDropzoneKeyDown}
+            onDragEnter={handleDropzoneDragEnter}
+            onDragOver={handleDropzoneDragOver}
+            onDragLeave={handleDropzoneDragLeave}
+            onDrop={handleDropzoneDrop}
+          >
+            {client.fileMode === 'browser' && (
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pulse,.txt,text/plain"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file !== undefined) void importFile(file);
+                  event.currentTarget.value = '';
+                }}
+              />
+            )}
+            <span className="upload-icon" aria-hidden="true">
+              ↑
+            </span>
+            <b>{busy ? busyLabel : t('openPulseFile')}</b>
+            <small>{t('inputHint')}</small>
+          </label>
+          <div className="qr-import">
+            <label htmlFor="qr-input">{t('qrContent')}</label>
+            <textarea
+              id="qr-input"
+              rows={3}
+              value={qrInput}
+              onChange={(event) => setQrInput(event.target.value)}
+              disabled={busy}
+            />
+            <button
+              className="secondary"
+              disabled={busy || qrInput.trim() === ''}
+              onClick={() => void importQrText()}
+            >
+              {t('decodeQr')}
+            </button>
+          </div>
           <div className="sidebar-block compare-block">
-            <div className="section-heading"><span>Compare</span><span className="muted">semantic</span></div>
-            {client.fileMode === 'browser' && <label className="file-picker"><span>Select a second file</span><input type="file" accept=".pulse,.txt,text/plain" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file !== undefined) void loadCompareFile(file); event.currentTarget.value = ''; }} /></label>}
-            <small className="field-note">{client.fileMode === 'native' ? 'Choose a file when you run diff' : compareText === '' ? 'No comparison loaded' : compareName}</small>
-            <button className="secondary" disabled={busy || workspaceDocument === null || (client.fileMode === 'browser' && compareFile === null)} onClick={() => void runDiff()}>Run diff</button>
+            <div className="section-heading">
+              <span>{t('compare')}</span>
+              <span className="muted">{t('semantic')}</span>
+            </div>
+            {client.fileMode === 'browser' && (
+              <label className="file-picker">
+                <span>{t('selectSecondFile')}</span>
+                <input
+                  type="file"
+                  accept=".pulse,.txt,text/plain"
+                  disabled={busy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file !== undefined) void loadCompareFile(file);
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+            )}
+            <small className="field-note">
+              {client.fileMode === 'native'
+                ? t('chooseDiffFile')
+                : compareText === ''
+                  ? t('noComparison')
+                  : compareName}
+            </small>
+            <button
+              className="secondary"
+              disabled={
+                busy ||
+                workspaceDocument === null ||
+                (client.fileMode === 'browser' && compareFile === null)
+              }
+              onClick={() => void runDiff()}
+            >
+              {t('runDiff')}
+            </button>
           </div>
           <div className="sidebar-block batch-block">
-            <div className="section-heading"><span>Batch</span><span className="muted">{batchFiles.length || 'none'}</span></div>
-            {client.fileMode === 'browser' && <label className="file-picker"><span>Choose multiple files</span><input type="file" multiple accept=".pulse,.txt,text/plain" disabled={busy} onChange={(event) => { const selected = Array.from(event.target.files ?? []).slice(0, 100); void Promise.all(selected.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), ...(file.type === '' ? {} : { type: file.type }) }))).then((files) => { setBatchFiles(files); setBatchEnvelope(null); setBatchProgress({ completed: 0, total: files.length }); }); event.currentTarget.value = ''; }} /></label>}
-            <div className="segmented" role="group" aria-label="Batch operation"><button type="button" data-active={batchMode === 'inspect'} onClick={() => setBatchMode('inspect')} disabled={busy}>Inspect</button><button type="button" data-active={batchMode === 'export'} onClick={() => setBatchMode('export')} disabled={busy}>Export</button></div>
-            {batchProgress.total > 0 && <div className="batch-progress" aria-live="polite"><span style={{ width: (batchProgress.completed / batchProgress.total * 100) + '%' }} /><small>{batchProgress.completed}/{batchProgress.total} files read</small></div>}
-            <button className="secondary" disabled={busy || (client.fileMode === 'browser' && batchFiles.length === 0)} onClick={() => void runBatch()}>Run batch</button>
+            <div className="section-heading">
+              <span>{t('batch')}</span>
+              <span className="muted">{batchFiles.length || t('none')}</span>
+            </div>
+            {client.fileMode === 'browser' && (
+              <label className="file-picker">
+                <span>{t('chooseFiles')}</span>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pulse,.txt,text/plain"
+                  disabled={busy}
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.files ?? []).slice(0, 100);
+                    void Promise.all(
+                      selected.map(async (file) => ({
+                        name: file.name,
+                        bytes: new Uint8Array(await file.arrayBuffer()),
+                        ...(file.type === '' ? {} : { type: file.type })
+                      }))
+                    ).then((files) => {
+                      setBatchFiles(files);
+                      setBatchEnvelope(null);
+                      setBatchProgress({ completed: 0, total: files.length });
+                    });
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+            )}
+            <div className="segmented" role="group" aria-label={t('batchOperation')}>
+              <button
+                type="button"
+                data-active={batchMode === 'inspect'}
+                onClick={() => setBatchMode('inspect')}
+                disabled={busy}
+              >
+                {t('inspect')}
+              </button>
+              <button
+                type="button"
+                data-active={batchMode === 'export'}
+                onClick={() => setBatchMode('export')}
+                disabled={busy}
+              >
+                {t('export')}
+              </button>
+            </div>
+            {batchProgress.total > 0 && (
+              <div className="batch-progress" aria-live="polite">
+                <span
+                  style={{ width: (batchProgress.completed / batchProgress.total) * 100 + '%' }}
+                />
+                <small>{t('filesRead', batchProgress)}</small>
+              </div>
+            )}
+            <button
+              className="secondary"
+              disabled={busy || (client.fileMode === 'browser' && batchFiles.length === 0)}
+              onClick={() => void runBatch()}
+            >
+              {t('runBatch')}
+            </button>
           </div>
-          {fileName !== '' && <div className="file-chip"><span aria-hidden="true">◇</span><div><b title={fileName}>{fileName}</b><small>{result?.metadata.file.byteSize ?? 0} bytes{dirty ? ' · unsaved' : ''}</small></div></div>}
-          {result !== null && <div className="sidebar-block"><div className="section-heading"><span>Pulse</span><span className="muted">r{result.pulse.revision}</span></div><dl className="compact"><div><dt>Sections</dt><dd>{result.metadata.pulse.sectionCount}</dd></div><div><dt>Enabled</dt><dd>{result.metadata.pulse.enabledSectionCount}</dd></div><div><dt>Duration</dt><dd>{formatMs(result.metadata.pulse.effectiveDurationMs)}</dd></div><div><dt>Points</dt><dd>{result.metadata.stream.stats.pointCount}</dd></div></dl></div>}
-          <div className="sidebar-block"><div className="section-heading"><span>History</span><span className="muted">{history.length}</span></div><div className="history-actions"><button className="icon-button" aria-label="Undo" disabled={!canUndo || busy} onClick={() => void moveHistory(-1)}>↶</button><button className="icon-button" aria-label="Redo" disabled={!canRedo || busy} onClick={() => void moveHistory(1)}>↷</button></div></div>
-          <div className="sidebar-block"><div className="section-heading"><span>Export</span></div><label className="select-label">Text mode<select value={exportMode} onChange={(event) => setExportMode(event.target.value as 'source' | 'canonical')} disabled={busy}><option value="source" disabled={dirty}>Source snapshot</option><option value="canonical">Canonical</option></select></label><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent()}>↓ <span>Export .pulse</span></button><button className="action" disabled={workspaceDocument === null || busy || qrImageUnavailable !== null} onClick={() => void handleQrImage('preview')}>⌁ <span>Preview QR image</span></button><button className="action" disabled={workspaceDocument === null || busy || qrImageUnavailable !== null} onClick={() => void handleQrImage('download')}>↓ <span>Export QR image</span></button>{qrImageUnavailable !== null && <small className="field-note">{qrImageUnavailable}</small>}</div>
-          <div className="sidebar-block"><div className="section-heading"><span>Preview image</span></div><div className="preview-actions"><select aria-label="Preview format" value={previewFormat} onChange={(event) => setPreviewFormat(event.target.value as 'svg' | 'png' | 'jpg')} disabled={busy}><option value="svg">SVG</option><option value="png">PNG</option><option value="jpg">JPG</option></select><button className="secondary" disabled={workspaceDocument === null || busy} onClick={() => void renderPreview()}>↓ Download</button></div></div>
-          {busy && <button className="cancel" onClick={() => abortController.current?.abort()}>Cancel current task</button>}
-          {message !== '' && <p className="notice" role="status">{message}</p>}
+          {fileName !== '' && (
+            <div className="file-chip">
+              <span aria-hidden="true">◇</span>
+              <div>
+                <b title={fileName}>{fileName}</b>
+                <small>
+                  {result?.metadata.file.byteSize ?? 0} {t('bytes')}
+                  {dirty ? ' · ' + t('unsaved') : ''}
+                </small>
+              </div>
+            </div>
+          )}
+          {result !== null && (
+            <div className="sidebar-block">
+              <div className="section-heading">
+                <span>{t('pulse')}</span>
+                <span className="muted">r{result.pulse.revision}</span>
+              </div>
+              <dl className="compact">
+                <div>
+                  <dt>{t('sections')}</dt>
+                  <dd>{result.metadata.pulse.sectionCount}</dd>
+                </div>
+                <div>
+                  <dt>{t('enabled')}</dt>
+                  <dd>{result.metadata.pulse.enabledSectionCount}</dd>
+                </div>
+                <div>
+                  <dt>{t('duration')}</dt>
+                  <dd>{formatMs(result.metadata.pulse.effectiveDurationMs)}</dd>
+                </div>
+                <div>
+                  <dt>{t('points')}</dt>
+                  <dd>{result.metadata.stream.stats.pointCount}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+          <div className="sidebar-block">
+            <div className="section-heading">
+              <span>{t('history')}</span>
+              <span className="muted">{history.length}</span>
+            </div>
+            <div className="history-actions">
+              <button
+                className="icon-button"
+                aria-label={t('undo')}
+                title={t('undo')}
+                disabled={!canUndo || busy}
+                onClick={() => void moveHistory(-1)}
+              >
+                ↶
+              </button>
+              <button
+                className="icon-button"
+                aria-label={t('redo')}
+                title={t('redo')}
+                disabled={!canRedo || busy}
+                onClick={() => void moveHistory(1)}
+              >
+                ↷
+              </button>
+            </div>
+          </div>
+          <div className="sidebar-block">
+            <div className="section-heading">
+              <span>{t('export')}</span>
+            </div>
+            <label className="select-label">
+              {t('textMode')}
+              <select
+                value={exportMode}
+                onChange={(event) => setExportMode(event.target.value as 'source' | 'canonical')}
+                disabled={busy}
+              >
+                <option value="source" disabled={dirty}>
+                  {t('sourceSnapshot')}
+                </option>
+                <option value="canonical">{t('canonical')}</option>
+              </select>
+            </label>
+            <button
+              className="action"
+              disabled={workspaceDocument === null || busy}
+              onClick={() => void exportCurrent()}
+            >
+              <span className="action-icon" aria-hidden="true">
+                ↓
+              </span>
+              <span>{t('exportPulse')}</span>
+            </button>
+            <button
+              className="action"
+              disabled={workspaceDocument === null || busy || qrImageUnavailable}
+              onClick={() => void handleQrImage('preview')}
+            >
+              <span className="action-icon" aria-hidden="true">
+                ⌁
+              </span>
+              <span>{t('previewQr')}</span>
+            </button>
+            <button
+              className="action"
+              disabled={workspaceDocument === null || busy || qrImageUnavailable}
+              onClick={() => void handleQrImage('download')}
+            >
+              <span className="action-icon" aria-hidden="true">
+                ↓
+              </span>
+              <span>{t('exportQr')}</span>
+            </button>
+            {qrImageUnavailable && <small className="field-note">{t('qrUnavailable')}</small>}
+          </div>
+          <div className="sidebar-block">
+            <div className="section-heading">
+              <span>{t('previewImage')}</span>
+            </div>
+            <div className="preview-actions">
+              <select
+                aria-label={t('previewFormat')}
+                value={previewFormat}
+                onChange={(event) => setPreviewFormat(event.target.value as 'svg' | 'png' | 'jpg')}
+                disabled={busy}
+              >
+                <option value="svg">SVG</option>
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+              </select>
+              <button
+                className="secondary"
+                disabled={workspaceDocument === null || busy}
+                onClick={() => void renderPreview()}
+              >
+                ↓ {t('download')}
+              </button>
+            </div>
+          </div>
+          {busy && (
+            <button className="cancel" onClick={() => abortController.current?.abort()}>
+              {t('cancelTask')}
+            </button>
+          )}
+          {message !== '' && (
+            <p className="notice" role="status">
+              {message}
+            </p>
+          )}
         </aside>
-        <div className="content">
-          <section className="hero-row"><div><p className="eyebrow">WORKSPACE</p><h1>{fileName || 'Open a pulse document'}</h1><p className="subline">{result === null ? 'Ready for a .pulse or QR input.' : result.recognition.profile + ' · ' + result.recognition.format}</p></div>{envelope !== null && <div className="badge" data-status={envelope.status}>{envelope.status}</div>}</section>
-          {diagnostics.length > 0 && <section className="diagnostics" aria-live="polite"><div className="section-heading"><span>Diagnostics</span><span className="muted">{diagnostics.length}</span></div>{diagnostics.map((item, index) => <div className="diagnostic" data-severity={item.severity} key={item.code + index}><span className="severity" aria-hidden="true">{item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}</span><div><b>{item.code}</b><p>{item.message}</p><small>{item.location.path}{item.location.span === undefined ? '' : ' · line ' + item.location.span.line + ', column ' + item.location.span.column}{item.suggestion === undefined ? '' : ' · ' + item.suggestion}</small></div></div>)}</section>}
-          {qrPreviewUrl !== null && <section className="panel qr-preview-panel" aria-live="polite"><div className="panel-head"><div><p className="eyebrow">QR PREVIEW</p><h2>QR image preview</h2></div><span className="muted">JPG</span></div><img className="qr-preview-image" src={qrPreviewUrl} alt="Generated pulse QR code" /></section>}
-          {stream !== null ? <>
-            <section className="panel timeline-panel"><div className="panel-head"><div><p className="eyebrow">WAVEFORM STREAM</p><h2>Intensity and frequency</h2></div><div className="legend"><span><i className="swatch intensity" />Intensity</span><span><i className="swatch frequency" />Frequency index</span></div></div><div className="timeline-wrap"><svg viewBox="0 0 960 280" role="img" aria-label="Waveform stream timeline. Hover or focus to inspect point metadata." tabIndex={0} onClick={selectTimeline} onPointerMove={hoverTimeline} onPointerLeave={() => setHoveredPointIndex(null)} onFocus={focusTimeline} onKeyDown={(event) => { const key = event.key; if (key === 'ArrowRight') moveTimelinePoint(1); else if (key === 'ArrowLeft') moveTimelinePoint(-1); else if (key === 'Home' || key === 'End') moveTimelineToKey(key); else return; event.preventDefault(); }}><line className="axis" x1="0" y1="240" x2="960" y2="240" /><line className="axis" x1="0" y1="0" x2="0" y2="240" /><polyline className="line frequency" points={plot.frequency} /><polyline className="line intensity" points={plot.intensity} />{stream.points.length > 0 && <line className="cursor" x1={(playhead / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} x2={(playhead / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} y1="0" y2="240" />}</svg>{hoveredPoint !== undefined && <div className="timeline-tooltip" role="status" aria-live="polite"><strong>Point {hoveredPoint.index + 1}</strong><span>{formatMs(hoveredPoint.timeMs)} · {hoveredPoint.intensityDecimal} intensity · frequency {hoveredPoint.frequencyIndex}</span><small>Section {hoveredPoint.source.sectionIndex + 1} · repetition {hoveredPoint.source.repetitionIndex + 1} · {hoveredPoint.source.origin}</small></div>}<div className="time-labels"><span>0 ms</span><span>{formatMs(stream.totalDurationMs)}</span></div></div><div className="playback"><button className="icon-button" aria-label={playing ? 'Pause preview playback' : 'Play preview playback'} onClick={() => { if (playback === null || stream.totalDurationMs <= 0) return; if (playing) playback.pause(); else playback.play(); }}>{playing ? 'Ⅱ' : '▶'}</button><button className="icon-button" aria-label="Stop preview playback" onClick={() => { playback?.stop(); setPlayhead(0); }}>■</button><input aria-label="Preview playback position" type="range" min="0" max={Math.max(1, stream.totalDurationMs)} value={Math.min(playhead, stream.totalDurationMs)} onChange={(event) => { const value = Number(event.target.value); playback?.seek(value); setPlaying(false); }} /><span className="timecode">{formatMs(playhead)} / {formatMs(stream.totalDurationMs)}</span><span className="preview-label">Preview playback</span></div></section>
-            <section className="visual-grid"><div className="panel intensity-panel"><div className="panel-head"><div><p className="eyebrow">INTENSITY MAP</p><h2>Current strength</h2></div><span className="muted">numeric + colour</span></div><div className="intensity-visual"><div className="intensity-ring" style={{ '--intensity': (point?.intensity ?? 0) + '%' } as CSSProperties} role="img" aria-label={'Current intensity ' + (point?.intensityDecimal ?? '0') + ' out of 100'}><span>{point?.intensityDecimal ?? '0'}</span><small>/ 100</small></div><div className="intensity-scale"><div className="colour-strip" /><div className="scale-labels"><span>0</span><span>50</span><span>100</span></div><p>{point === undefined ? 'Select a point to inspect its colour mapping.' : 'Colour is a secondary cue. The exact intensity remains visible as a number.'}</p></div></div></div><div className="panel stream-stats"><div className="panel-head"><div><p className="eyebrow">STREAM STATS</p><h2>Expanded snapshot</h2></div></div>{result !== null && <dl className="detail-grid"><div><dt>Points</dt><dd>{result.metadata.stream.stats.pointCount}</dd></div><div><dt>Total duration</dt><dd>{formatMs(result.metadata.stream.stats.totalDurationMs)}</dd></div><div><dt>Frequency range</dt><dd>{result.metadata.stream.stats.minFrequencyIndex ?? '--'} to {result.metadata.stream.stats.maxFrequencyIndex ?? '--'}</dd></div><div><dt>Mean intensity</dt><dd>{result.metadata.stream.stats.meanIntensity?.toFixed(2) ?? '--'}</dd></div><div><dt>Granularity</dt><dd>{formatMs(result.metadata.stream.timeGranularityMs)}</dd></div><div><dt>Warnings</dt><dd>{result.metadata.stream.warningCount}</dd></div></dl>}</div></section>
-            <section className="lower-grid"><div className="panel"><div className="panel-head"><div><p className="eyebrow">SECTIONS</p><h2>Structure</h2></div></div><div className="section-list">{sections.map((item) => <button className="section-row" data-selected={item.sectionIndex === selectedSection} aria-pressed={item.sectionIndex === selectedSection} key={item.sectionIndex} onClick={() => selectSection(item.sectionIndex)}><span className="section-number">{String(item.sectionIndex + 1).padStart(2, '0')}</span><span><b>Section {item.sectionIndex + 1}</b><small>{item.enabled ? 'Enabled' : 'Disabled'} · mode {item.frequencyMode} · {item.pointCount} points</small></span><strong>{formatMs(item.effectiveDurationMs)}</strong></button>)}</div></div><div className="panel detail-panel"><div className="panel-head"><div><p className="eyebrow">POINT DETAIL</p><h2>{point === undefined ? 'Select a point' : 'Point ' + (point.index + 1)}</h2></div></div>{point === undefined || section === undefined ? <div className="empty">Select a timeline point or section.</div> : <><dl className="detail-grid"><div><dt>Time</dt><dd>{formatMs(point.timeMs)}</dd></div><div><dt>Duration</dt><dd>{formatMs(point.durationMs)}</dd></div><div><dt>Intensity</dt><dd>{point.intensityDecimal}</dd></div><div><dt>Frequency index</dt><dd>{point.frequencyIndex}</dd></div><div><dt>Section</dt><dd>{point.source.sectionIndex + 1}</dd></div><div><dt>Repetition</dt><dd>{point.source.repetitionIndex + 1}{section.repetitionCount > 1 ? ' of ' + section.repetitionCount : ''}</dd></div><div><dt>Origin</dt><dd>{point.source.origin}</dd></div></dl><div className="edit-stack"><label>Intensity <input type="number" min="0" max="100" step="0.01" value={strengthInput} onChange={(event) => setStrengthInput(event.target.value)} /><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'strength', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex, value: Number(strengthInput) })}>Apply</button></label><label>Anchor <select value={anchorInput} onChange={(event) => setAnchorInput(Number(event.target.value) as 0 | 1)}><option value={0}>Automatic</option><option value={1}>Anchor</option></select><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'anchor', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex, value: anchorInput })}>Apply</button></label></div></>}</div></section>
-            <section className="panel controls-panel"><div className="panel-head"><div><p className="eyebrow">SECTION EDITOR</p><h2>Frequency, duration and points</h2></div><span className="muted">Section {(section?.sectionIndex ?? selectedSection) + 1}</span></div>{section !== undefined && <div className="editor-grid"><label>Start index<input type="number" min="0" max="83" step="1" value={frequencyStartInput} onChange={(event) => setFrequencyStartInput(event.target.value)} /></label><label>End index<input type="number" min="0" max="83" step="1" value={frequencyEndInput} onChange={(event) => setFrequencyEndInput(event.target.value)} /></label><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'frequency', sectionIndex: section.sectionIndex, startIndex: Number(frequencyStartInput), endIndex: Number(frequencyEndInput) })}>Apply frequency</button><label>Duration index<input type="number" min="0" max="99" step="1" value={durationInput} onChange={(event) => setDurationInput(event.target.value)} /></label><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'duration', sectionIndex: section.sectionIndex, value: Number(durationInput) })}>Apply duration</button><label>Add strength<input type="number" min="0" max="100" step="0.01" value={addStrengthInput} onChange={(event) => setAddStrengthInput(event.target.value)} /></label><label>Add type<select value={addAnchorInput} onChange={(event) => setAddAnchorInput(Number(event.target.value) as 0 | 1)}><option value={0}>Automatic</option><option value={1}>Anchor</option></select></label><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'add-point', sectionIndex: section.sectionIndex, value: Number(addStrengthInput), anchor: addAnchorInput, atIndex: point?.source.sectionIndex === section.sectionIndex ? point.source.controlPointIndex : undefined })}>+ Add point</button><button className="danger-button" disabled={busy || point === undefined || point.source.sectionIndex !== section.sectionIndex} onClick={() => point !== undefined && void applyEdit({ kind: 'remove-point', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex })}>− Remove selected point</button></div>}</section>
-            <section className="panel assist-panel"><div className="panel-head"><div><p className="eyebrow">REVIEWED ASSIST</p><h2>Quadratic curve proposal</h2></div></div><p className="panel-copy">Set two control-point endpoints. The proposal stays local until you review and confirm it.</p><div className="assist-grid"><label>Start point<input type="number" min="0" step="1" value={assistStartInput} onChange={(event) => setAssistStartInput(event.target.value)} /></label><label>End point<input type="number" min="0" step="1" value={assistEndInput} onChange={(event) => setAssistEndInput(event.target.value)} /></label><label>Start strength<input type="number" min="0" max="100" step="0.01" value={assistStartStrengthInput} onChange={(event) => setAssistStartStrengthInput(event.target.value)} /></label><label>End strength<input type="number" min="0" max="100" step="0.01" value={assistEndStrengthInput} onChange={(event) => setAssistEndStrengthInput(event.target.value)} /></label></div><div className="assist-actions"><button className="secondary" disabled={busy || section === undefined} onClick={previewAssist}>Preview proposal</button><label className="review-check"><input type="checkbox" checked={assistReviewed} onChange={(event) => setAssistReviewedFingerprint(event.target.checked ? assistFingerprint : null)} disabled={busy || assistPreview.length === 0} /> I reviewed the proposed values</label><button className="secondary" disabled={busy || !assistReviewed || assistPreview.length === 0} onClick={() => void applyAssist()}>Apply reviewed curve</button></div>{assistPreview.length > 0 && <div className="assist-preview" aria-live="polite"><span>Proposed values</span>{assistPreview.map((value, index) => <code key={index}>{assistStart + index}: {value.toFixed(2)}</code>)}</div>}</section>
-          </> : result !== null && <section className="panel empty-panel"><h2>No stream available</h2><p>Resolve the diagnostics before previewing this document.</p></section>}
-          {diffEnvelope !== null && <section className="panel diff-panel"><div className="panel-head"><div><p className="eyebrow">DOCUMENT DIFF</p><h2>{diff?.diff.equal ? 'No semantic changes' : 'Changes between documents'}</h2></div><span className="badge" data-status={diffEnvelope.status}>{diffEnvelope.status}</span></div>{diff === null ? <div className="empty">{diffEnvelope.diagnostics.map((item) => item.message).join(' ')}</div> : <><div className="diff-summary"><span><b>{diff.diff.structural.length}</b> structural</span><span><b>{diff.diff.metadata.length}</b> metadata</span><span><b>{diff.diff.stream.length}</b> stream</span><span><b>{diff.diff.text.length}</b> text</span></div><div className="diff-list">{[...diff.diff.structural, ...diff.diff.metadata, ...diff.diff.stream].slice(0, 80).map((entry, index) => <div className="diff-row" key={entry.path + index}><code>{entry.path}</code><span>{String(entry.before ?? '∅')}</span><b>→</b><span>{String(entry.after ?? '∅')}</span></div>)}{diff.diff.structural.length + diff.diff.metadata.length + diff.diff.stream.length > 80 && <small className="field-note">Showing the first 80 field changes.</small>}</div></>}</section>}
-          {batchEnvelope !== null && <section className="panel batch-results"><div className="panel-head"><div><p className="eyebrow">BATCH RESULTS</p><h2>{batch === null ? 'Batch task' : batch.completed + ' of ' + batch.total + ' complete'}</h2></div>{batchEnvelope.status === 'success' && batch !== null && batchMode === 'export' && batch.items.some((item) => item.status === 'success' && typeof item.result === 'object' && item.result !== null && typeof (item.result as { readonly downloadId?: unknown }).downloadId === 'string') && <button className="secondary" onClick={() => void downloadAllBatch()}>Download successful</button>}</div>{batch === null ? <div className="empty">{batchEnvelope.diagnostics.map((item) => item.message).join(' ')}</div> : <div className="batch-list">{batch.items.map((item, index) => { const itemResult = typeof item.result === 'object' && item.result !== null ? item.result as { readonly downloadId?: unknown } : null; const downloadable = item.status === 'success' && batchMode === 'export' && typeof itemResult?.downloadId === 'string'; return <div className="batch-row" key={item.id}><div><b>{item.displayName}</b><small>{item.status} · {item.diagnostics.length} diagnostics</small></div>{downloadable ? <button className="secondary" onClick={() => void downloadBatchItem(index)}>Download</button> : <span className="batch-status" data-status={item.status}>{item.status === 'success' && batchMode === 'export' ? 'saved' : item.status}</span>}</div>; })}</div>}</section>}
-          {busy && <div className="busy-bar" role="status">{busyLabel}…</div>}
+        <div className="content" id="workspace-content">
+          <section className="hero-row">
+            <div>
+              <p className="eyebrow">{t('workspace')}</p>
+              <h1>{fileName || t('openDocument')}</h1>
+              <p className="subline">
+                {result === null
+                  ? t('ready')
+                  : result.recognition.profile + ' · ' + result.recognition.format}
+              </p>
+            </div>
+            {envelope !== null && (
+              <div className="badge" data-status={envelope.status}>
+                {statusLabel(envelope.status)}
+              </div>
+            )}
+          </section>
+          {diagnostics.length > 0 && (
+            <section className="diagnostics" aria-live="polite">
+              <div className="section-heading">
+                <span>{t('diagnostics')}</span>
+                <span className="muted">{diagnostics.length}</span>
+              </div>
+              {diagnostics.map((item, index) => (
+                <div className="diagnostic" data-severity={item.severity} key={item.code + index}>
+                  <span className="severity" aria-hidden="true">
+                    {item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}
+                  </span>
+                  <div>
+                    <b>{item.code}</b>
+                    <p>{item.message}</p>
+                    <small>
+                      {item.location.path}
+                      {item.location.span === undefined
+                        ? ''
+                        : ' · ' + t('lineColumn', item.location.span)}
+                      {item.suggestion === undefined ? '' : ' · ' + item.suggestion}
+                    </small>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+          {qrPreviewUrl !== null && (
+            <section className="panel qr-preview-panel" aria-live="polite">
+              <div className="panel-head">
+                <div>
+                  <p className="eyebrow">{t('qrPreview')}</p>
+                  <h2>{t('qrPreviewTitle')}</h2>
+                </div>
+                <span className="muted">JPG</span>
+              </div>
+              <img className="qr-preview-image" src={qrPreviewUrl} alt={t('qrAlt')} />
+            </section>
+          )}
+          {stream !== null ? (
+            <>
+              <section className="panel timeline-panel">
+                <div className="panel-head">
+                  <div>
+                    <p className="eyebrow">{t('waveformStream')}</p>
+                    <h2>{t('waveformTitle')}</h2>
+                  </div>
+                  <div className="legend">
+                    <span>
+                      <i className="swatch intensity" />
+                      {t('intensity')}
+                    </span>
+                    <span>
+                      <i className="swatch frequency" />
+                      {t('frequencyIndex')}
+                    </span>
+                  </div>
+                </div>
+                <div className="timeline-wrap">
+                  <svg
+                    viewBox="0 0 960 280"
+                    role="img"
+                    aria-label={t('timelineLabel')}
+                    tabIndex={0}
+                    onClick={selectTimeline}
+                    onPointerMove={hoverTimeline}
+                    onPointerLeave={() => setHoveredPointIndex(null)}
+                    onFocus={focusTimeline}
+                    onKeyDown={(event) => {
+                      const key = event.key;
+                      if (key === 'ArrowRight') moveTimelinePoint(1);
+                      else if (key === 'ArrowLeft') moveTimelinePoint(-1);
+                      else if (key === 'Home' || key === 'End') moveTimelineToKey(key);
+                      else return;
+                      event.preventDefault();
+                    }}
+                  >
+                    <line className="axis" x1="0" y1="240" x2="960" y2="240" />
+                    <line className="axis" x1="0" y1="0" x2="0" y2="240" />
+                    <polyline className="line frequency" points={plot.frequency} />
+                    <polyline className="line intensity" points={plot.intensity} />
+                    {stream.points.length > 0 && (
+                      <line
+                        className="cursor"
+                        x1={((playhead / Math.max(1, stream.totalDurationMs)) * 960).toFixed(2)}
+                        x2={((playhead / Math.max(1, stream.totalDurationMs)) * 960).toFixed(2)}
+                        y1="0"
+                        y2="240"
+                      />
+                    )}
+                  </svg>
+                  {hoveredPoint !== undefined && (
+                    <div className="timeline-tooltip" role="status" aria-live="polite">
+                      <strong>{t('pointNumber', { number: hoveredPoint.index + 1 })}</strong>
+                      <span>
+                        {t('pointSummary', {
+                          time: formatMs(hoveredPoint.timeMs),
+                          intensity: hoveredPoint.intensityDecimal,
+                          frequency: hoveredPoint.frequencyIndex
+                        })}
+                      </span>
+                      <small>
+                        {t('pointOrigin', {
+                          section: hoveredPoint.source.sectionIndex + 1,
+                          repetition: hoveredPoint.source.repetitionIndex + 1,
+                          origin: hoveredPoint.source.origin
+                        })}
+                      </small>
+                    </div>
+                  )}
+                  <div className="time-labels">
+                    <span>0 ms</span>
+                    <span>{formatMs(stream.totalDurationMs)}</span>
+                  </div>
+                </div>
+                <div className="playback">
+                  <button
+                    className="icon-button"
+                    aria-label={playing ? t('pausePlayback') : t('playPlayback')}
+                    title={playing ? t('pausePlayback') : t('playPlayback')}
+                    onClick={() => {
+                      if (playback === null || stream.totalDurationMs <= 0) return;
+                      if (playing) playback.pause();
+                      else playback.play();
+                    }}
+                  >
+                    {playing ? 'Ⅱ' : '▶'}
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={t('stopPlayback')}
+                    title={t('stopPlayback')}
+                    onClick={() => {
+                      playback?.stop();
+                      setPlayhead(0);
+                    }}
+                  >
+                    ■
+                  </button>
+                  <input
+                    aria-label={t('playbackPosition')}
+                    type="range"
+                    min="0"
+                    max={Math.max(1, stream.totalDurationMs)}
+                    value={Math.min(playhead, stream.totalDurationMs)}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      playback?.seek(value);
+                      setPlaying(false);
+                    }}
+                  />
+                  <span className="timecode">
+                    {formatMs(playhead)} / {formatMs(stream.totalDurationMs)}
+                  </span>
+                  <span className="preview-label">{t('previewPlayback')}</span>
+                </div>
+              </section>
+              <section className="visual-grid">
+                <div className="panel intensity-panel">
+                  <div className="panel-head">
+                    <div>
+                      <p className="eyebrow">{t('intensityMap')}</p>
+                      <h2>{t('currentStrength')}</h2>
+                    </div>
+                    <span className="muted">{t('numericColour')}</span>
+                  </div>
+                  <div className="intensity-visual">
+                    <div
+                      className="intensity-ring"
+                      style={
+                        { '--intensity-value': (point?.intensity ?? 0) + '%' } as CSSProperties
+                      }
+                      role="img"
+                      aria-label={t('currentIntensity', { value: point?.intensityDecimal ?? '0' })}
+                    >
+                      <span>{point?.intensityDecimal ?? '0'}</span>
+                      <small>/ 100</small>
+                    </div>
+                    <div className="intensity-scale">
+                      <div className="colour-strip" />
+                      <div className="scale-labels">
+                        <span>0</span>
+                        <span>50</span>
+                        <span>100</span>
+                      </div>
+                      <p>{point === undefined ? t('selectColour') : t('colourCue')}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="panel stream-stats">
+                  <div className="panel-head">
+                    <div>
+                      <p className="eyebrow">{t('streamStats')}</p>
+                      <h2>{t('expandedSnapshot')}</h2>
+                    </div>
+                  </div>
+                  {result !== null && (
+                    <dl className="detail-grid">
+                      <div>
+                        <dt>{t('points')}</dt>
+                        <dd>{result.metadata.stream.stats.pointCount}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('totalDuration')}</dt>
+                        <dd>{formatMs(result.metadata.stream.stats.totalDurationMs)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('frequencyRange')}</dt>
+                        <dd>
+                          {result.metadata.stream.stats.minFrequencyIndex ?? '--'} {t('to')}{' '}
+                          {result.metadata.stream.stats.maxFrequencyIndex ?? '--'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('meanIntensity')}</dt>
+                        <dd>{result.metadata.stream.stats.meanIntensity?.toFixed(2) ?? '--'}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('granularity')}</dt>
+                        <dd>{formatMs(result.metadata.stream.timeGranularityMs)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('warnings')}</dt>
+                        <dd>{result.metadata.stream.warningCount}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </div>
+              </section>
+              <section className="lower-grid">
+                <div className="panel">
+                  <div className="panel-head">
+                    <div>
+                      <p className="eyebrow">{t('sections')}</p>
+                      <h2>{t('structure')}</h2>
+                    </div>
+                  </div>
+                  <div className="section-list">
+                    {sections.map((item) => (
+                      <button
+                        className="section-row"
+                        data-selected={item.sectionIndex === selectedSection}
+                        aria-pressed={item.sectionIndex === selectedSection}
+                        key={item.sectionIndex}
+                        onClick={() => selectSection(item.sectionIndex)}
+                      >
+                        <span className="section-number">
+                          {String(item.sectionIndex + 1).padStart(2, '0')}
+                        </span>
+                        <span>
+                          <b>{t('sectionNumber', { number: item.sectionIndex + 1 })}</b>
+                          <small>
+                            {t('sectionSummary', {
+                              state: item.enabled ? t('enabled') : t('disabled'),
+                              mode: item.frequencyMode,
+                              points: item.pointCount
+                            })}
+                          </small>
+                        </span>
+                        <strong>{formatMs(item.effectiveDurationMs)}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="panel detail-panel">
+                  <div className="panel-head">
+                    <div>
+                      <p className="eyebrow">{t('pointDetail')}</p>
+                      <h2>
+                        {point === undefined
+                          ? t('selectPoint')
+                          : t('pointNumber', { number: point.index + 1 })}
+                      </h2>
+                    </div>
+                  </div>
+                  {point === undefined || section === undefined ? (
+                    <div className="empty">{t('selectPointHelp')}</div>
+                  ) : (
+                    <>
+                      <dl className="detail-grid">
+                        <div>
+                          <dt>{t('time')}</dt>
+                          <dd>{formatMs(point.timeMs)}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('duration')}</dt>
+                          <dd>{formatMs(point.durationMs)}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('intensity')}</dt>
+                          <dd>{point.intensityDecimal}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('frequencyIndex')}</dt>
+                          <dd>{point.frequencyIndex}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('sections')}</dt>
+                          <dd>{point.source.sectionIndex + 1}</dd>
+                        </div>
+                        <div>
+                          <dt>{t('repetition')}</dt>
+                          <dd>
+                            {point.source.repetitionIndex + 1}
+                            {section.repetitionCount > 1
+                              ? ' ' + t('of') + ' ' + section.repetitionCount
+                              : ''}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>{t('origin')}</dt>
+                          <dd>{point.source.origin}</dd>
+                        </div>
+                      </dl>
+                      <div className="edit-stack">
+                        <label>
+                          {t('intensity')}{' '}
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={strengthInput}
+                            onChange={(event) => setStrengthInput(event.target.value)}
+                          />
+                          <button
+                            className="secondary"
+                            disabled={busy}
+                            onClick={() =>
+                              void applyEdit({
+                                kind: 'strength',
+                                sectionIndex: point.source.sectionIndex,
+                                pointIndex: point.source.controlPointIndex,
+                                value: Number(strengthInput)
+                              })
+                            }
+                          >
+                            {t('apply')}
+                          </button>
+                        </label>
+                        <label>
+                          {t('anchor')}{' '}
+                          <select
+                            value={anchorInput}
+                            onChange={(event) =>
+                              setAnchorInput(Number(event.target.value) as 0 | 1)
+                            }
+                          >
+                            <option value={0}>{t('automatic')}</option>
+                            <option value={1}>{t('anchor')}</option>
+                          </select>
+                          <button
+                            className="secondary"
+                            disabled={busy}
+                            onClick={() =>
+                              void applyEdit({
+                                kind: 'anchor',
+                                sectionIndex: point.source.sectionIndex,
+                                pointIndex: point.source.controlPointIndex,
+                                value: anchorInput
+                              })
+                            }
+                          >
+                            {t('apply')}
+                          </button>
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+              <section className="panel controls-panel">
+                <div className="panel-head">
+                  <div>
+                    <p className="eyebrow">{t('sectionEditor')}</p>
+                    <h2>{t('sectionEditorTitle')}</h2>
+                  </div>
+                  <span className="muted">
+                    {t('sectionNumber', { number: (section?.sectionIndex ?? selectedSection) + 1 })}
+                  </span>
+                </div>
+                {section !== undefined && (
+                  <div className="editor-grid">
+                    <label>
+                      {t('startIndex')}
+                      <input
+                        type="number"
+                        min="0"
+                        max="83"
+                        step="1"
+                        value={frequencyStartInput}
+                        onChange={(event) => setFrequencyStartInput(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      {t('endIndex')}
+                      <input
+                        type="number"
+                        min="0"
+                        max="83"
+                        step="1"
+                        value={frequencyEndInput}
+                        onChange={(event) => setFrequencyEndInput(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void applyEdit({
+                          kind: 'frequency',
+                          sectionIndex: section.sectionIndex,
+                          startIndex: Number(frequencyStartInput),
+                          endIndex: Number(frequencyEndInput)
+                        })
+                      }
+                    >
+                      {t('applyFrequency')}
+                    </button>
+                    <label>
+                      {t('durationIndex')}
+                      <input
+                        type="number"
+                        min="0"
+                        max="99"
+                        step="1"
+                        value={durationInput}
+                        onChange={(event) => setDurationInput(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void applyEdit({
+                          kind: 'duration',
+                          sectionIndex: section.sectionIndex,
+                          value: Number(durationInput)
+                        })
+                      }
+                    >
+                      {t('applyDuration')}
+                    </button>
+                    <label>
+                      {t('addStrength')}
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={addStrengthInput}
+                        onChange={(event) => setAddStrengthInput(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      {t('addType')}
+                      <select
+                        value={addAnchorInput}
+                        onChange={(event) => setAddAnchorInput(Number(event.target.value) as 0 | 1)}
+                      >
+                        <option value={0}>{t('automatic')}</option>
+                        <option value={1}>{t('anchor')}</option>
+                      </select>
+                    </label>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        void applyEdit({
+                          kind: 'add-point',
+                          sectionIndex: section.sectionIndex,
+                          value: Number(addStrengthInput),
+                          anchor: addAnchorInput,
+                          atIndex:
+                            point?.source.sectionIndex === section.sectionIndex
+                              ? point.source.controlPointIndex
+                              : undefined
+                        })
+                      }
+                    >
+                      + {t('addPoint')}
+                    </button>
+                    <button
+                      className="danger-button"
+                      disabled={
+                        busy ||
+                        point === undefined ||
+                        point.source.sectionIndex !== section.sectionIndex
+                      }
+                      onClick={() =>
+                        point !== undefined &&
+                        void applyEdit({
+                          kind: 'remove-point',
+                          sectionIndex: point.source.sectionIndex,
+                          pointIndex: point.source.controlPointIndex
+                        })
+                      }
+                    >
+                      − {t('removePoint')}
+                    </button>
+                  </div>
+                )}
+              </section>
+              <section className="panel assist-panel">
+                <div className="panel-head">
+                  <div>
+                    <p className="eyebrow">{t('reviewedAssist')}</p>
+                    <h2>{t('curveProposal')}</h2>
+                  </div>
+                </div>
+                <p className="panel-copy">{t('curveHelp')}</p>
+                <div className="assist-grid">
+                  <label>
+                    {t('startPoint')}
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={assistStartInput}
+                      onChange={(event) => setAssistStartInput(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    {t('endPoint')}
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={assistEndInput}
+                      onChange={(event) => setAssistEndInput(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    {t('startStrength')}
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={assistStartStrengthInput}
+                      onChange={(event) => setAssistStartStrengthInput(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    {t('endStrength')}
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={assistEndStrengthInput}
+                      onChange={(event) => setAssistEndStrengthInput(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="assist-actions">
+                  <button
+                    className="secondary"
+                    disabled={busy || section === undefined}
+                    onClick={previewAssist}
+                  >
+                    {t('previewProposal')}
+                  </button>
+                  <label className="review-check">
+                    <input
+                      type="checkbox"
+                      checked={assistReviewed}
+                      onChange={(event) =>
+                        setAssistReviewedFingerprint(
+                          event.target.checked ? assistFingerprint : null
+                        )
+                      }
+                      disabled={busy || assistPreview.length === 0}
+                    />{' '}
+                    {t('reviewedValues')}
+                  </label>
+                  <button
+                    className="secondary"
+                    disabled={busy || !assistReviewed || assistPreview.length === 0}
+                    onClick={() => void applyAssist()}
+                  >
+                    {t('applyCurve')}
+                  </button>
+                </div>
+                {assistPreview.length > 0 && (
+                  <div className="assist-preview" aria-live="polite">
+                    <span>{t('proposedValues')}</span>
+                    {assistPreview.map((value, index) => (
+                      <code key={index}>
+                        {assistStart + index}: {value.toFixed(2)}
+                      </code>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            result !== null && (
+              <section className="panel empty-panel">
+                <h2>{t('noStream')}</h2>
+                <p>{t('resolveDiagnostics')}</p>
+              </section>
+            )
+          )}
+          {diffEnvelope !== null && (
+            <section className="panel diff-panel">
+              <div className="panel-head">
+                <div>
+                  <p className="eyebrow">{t('documentDiff')}</p>
+                  <h2>{diff?.diff.equal ? t('noChanges') : t('changes')}</h2>
+                </div>
+                <span className="badge" data-status={diffEnvelope.status}>
+                  {statusLabel(diffEnvelope.status)}
+                </span>
+              </div>
+              {diff === null ? (
+                <div className="empty">
+                  {diffEnvelope.diagnostics.map((item) => item.message).join(' ')}
+                </div>
+              ) : (
+                <>
+                  <div className="diff-summary">
+                    <span>
+                      <b>{diff.diff.structural.length}</b> {t('structural')}
+                    </span>
+                    <span>
+                      <b>{diff.diff.metadata.length}</b> {t('metadata')}
+                    </span>
+                    <span>
+                      <b>{diff.diff.stream.length}</b> {t('stream')}
+                    </span>
+                    <span>
+                      <b>{diff.diff.text.length}</b> {t('text')}
+                    </span>
+                  </div>
+                  <div className="diff-list">
+                    {[...diff.diff.structural, ...diff.diff.metadata, ...diff.diff.stream]
+                      .slice(0, 80)
+                      .map((entry, index) => (
+                        <div className="diff-row" key={entry.path + index}>
+                          <code>{entry.path}</code>
+                          <span>{String(entry.before ?? '∅')}</span>
+                          <b>→</b>
+                          <span>{String(entry.after ?? '∅')}</span>
+                        </div>
+                      ))}
+                    {diff.diff.structural.length +
+                      diff.diff.metadata.length +
+                      diff.diff.stream.length >
+                      80 && <small className="field-note">{t('firstChanges')}</small>}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+          {batchEnvelope !== null && (
+            <section className="panel batch-results">
+              <div className="panel-head">
+                <div>
+                  <p className="eyebrow">{t('batchResults')}</p>
+                  <h2>
+                    {batch === null
+                      ? t('batchTask')
+                      : t('completeCount', { completed: batch.completed, total: batch.total })}
+                  </h2>
+                </div>
+                {batchEnvelope.status === 'success' &&
+                  batch !== null &&
+                  batchMode === 'export' &&
+                  batch.items.some(
+                    (item) =>
+                      item.status === 'success' &&
+                      typeof item.result === 'object' &&
+                      item.result !== null &&
+                      typeof (item.result as { readonly downloadId?: unknown }).downloadId ===
+                        'string'
+                  ) && (
+                    <button className="secondary" onClick={() => void downloadAllBatch()}>
+                      {t('downloadSuccessful')}
+                    </button>
+                  )}
+              </div>
+              {batch === null ? (
+                <div className="empty">
+                  {batchEnvelope.diagnostics.map((item) => item.message).join(' ')}
+                </div>
+              ) : (
+                <div className="batch-list">
+                  {batch.items.map((item, index) => {
+                    const itemResult =
+                      typeof item.result === 'object' && item.result !== null
+                        ? (item.result as { readonly downloadId?: unknown })
+                        : null;
+                    const downloadable =
+                      item.status === 'success' &&
+                      batchMode === 'export' &&
+                      typeof itemResult?.downloadId === 'string';
+                    return (
+                      <div className="batch-row" key={item.id}>
+                        <div>
+                          <b>{item.displayName}</b>
+                          <small>
+                            {t('diagnosticCount', {
+                              status: statusLabel(item.status),
+                              count: item.diagnostics.length
+                            })}
+                          </small>
+                        </div>
+                        {downloadable ? (
+                          <button
+                            className="secondary"
+                            onClick={() => void downloadBatchItem(index)}
+                          >
+                            {t('download')}
+                          </button>
+                        ) : (
+                          <span className="batch-status" data-status={item.status}>
+                            {item.status === 'success' && batchMode === 'export'
+                              ? t('saved')
+                              : statusLabel(item.status)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+          {busy && (
+            <div className="busy-bar" role="status">
+              {busyLabel}…
+            </div>
+          )}
         </div>
       </section>
     </main>

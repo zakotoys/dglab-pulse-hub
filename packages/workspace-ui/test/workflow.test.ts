@@ -76,24 +76,29 @@ describe('QR image actions', () => {
     };
 
     expect(qrImageActionFailureMessage(envelope, 'preview')).toBe(
-      'QR image preview unavailable. DGLAB QR export supports at most three sections; the source contains more.'
+      'QR image preview unavailable. DGLAB QR export supports at most three sections; ' +
+        'the source contains more.'
     );
   });
 });
 
 describe('pulse file export actions', () => {
   it('reports a cancelled save without exposing export diagnostics', () => {
-    expect(fileExportActionFailureMessage({
-      ...successEnvelope,
-      operation: 'write-file',
-      status: 'cancelled',
-      diagnostics: [{
-        code: 'PULSE_TASK_CANCELLED',
-        severity: 'info',
-        stage: 'task',
-        message: 'Artifact save was cancelled.',
-        location: { path: '$' }
-      }]
-    })).toBe('Pulse file export cancelled.');
+    expect(
+      fileExportActionFailureMessage({
+        ...successEnvelope,
+        operation: 'write-file',
+        status: 'cancelled',
+        diagnostics: [
+          {
+            code: 'PULSE_TASK_CANCELLED',
+            severity: 'info',
+            stage: 'task',
+            message: 'Artifact save was cancelled.',
+            location: { path: '$' }
+          }
+        ]
+      })
+    ).toBe('Pulse file export cancelled.');
   });
 });

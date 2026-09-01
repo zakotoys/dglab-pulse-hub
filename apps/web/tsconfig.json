@@ -8,8 +8,5 @@
     "noEmit": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "references": [
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/workspace-ui" }
-  ]
+  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/workspace-ui" }]
 }

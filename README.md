@@ -1,6 +1,7 @@
 # dglab-pulse-hub
 
-面向 DG-LAB 4 App `.pulse` 文件的桌面工具与可部署服务。项目以 TypeScript、Node.js 和 npm 为主要技术栈，最终提供两种交付形态：
+面向 DG-LAB 4 App `.pulse`
+文件的桌面工具与可部署服务。项目以 TypeScript、Node.js 和 npm 为主要技术栈，最终提供两种交付形态：
 
 - Electron 应用：供普通用户在本地导入、检查、预览、修改和导出波形。
 - Docker Compose 部署包：由 Web、Node.js API 和 Nginx 组成，供开发者在服务端部署可访问的网页与服务。
@@ -9,7 +10,8 @@
 
 ### 开发意图
 
-`dglab-pulse-hub` 的目标不是重新实现某一个 DG-LAB App，而是建立一个独立、可复用的 `.pulse` 处理内核，并在其上提供桌面端和 Web 端体验。Pulse 应被视为结构化领域数据，而不是只能在界面中编辑的字符串。
+`dglab-pulse-hub` 的目标不是重新实现某一个 DG-LAB App，而是建立一个独立、可复用的 `.pulse`
+处理内核，并在其上提供桌面端和 Web 端体验。Pulse 应被视为结构化领域数据，而不是只能在界面中编辑的字符串。
 
 核心开发意图如下：
 
@@ -19,7 +21,8 @@
    - 在格式之间转换时保留足够的原始信息，避免因展示或导出造成不可逆的数据丢失。
 
 2. **内核独立于交互和部署**
-   - 核心包不依赖 Electron、浏览器 DOM 或 Nginx，可以在 Node.js、Electron 主进程、Web API 和批处理 CLI 中复用。
+   - 核心包不依赖 Electron、浏览器 DOM 或 Nginx，可以在 Node.js、Electron 主进程、Web
+     API 和批处理 CLI 中复用。
    - UI 只负责状态呈现、用户操作和任务编排；文件系统、二维码、图像导出及设备通信通过适配器接入。
    - Electron 和 Web 端应共享同一套领域逻辑、校验规则和导出结果。
 
@@ -37,26 +40,36 @@
 - 语言与运行时：TypeScript、Node.js、npm。
 - 核心领域层：纯 TypeScript，负责模型、解析器、校验器、采样/插值、版本升级和序列化。
 - 应用层：负责单文件与批量任务、任务结果、错误聚合、取消和进度报告。
-- 适配器层：负责本地文件、HTTP 上传下载、二维码、图片/SVG 导出、Electron IPC 及未来的 DG-LAB 设备/Socket 接入。
-- 展示层：Electron renderer 与 Web 前端共享可复用的视图模型和波形渲染能力，但不把 UI 状态写入领域模型。
-- 部署层：Web 服务由 Node.js API、静态 Web 前端和 Nginx 组成，通过 Docker Compose 提供可直接部署的生产入口；Nginx 负责静态资源和反向代理，不承载领域逻辑。
+- 适配器层：负责本地文件、HTTP 上传下载、二维码、图片/SVG 导出、Electron
+  IPC 及未来的 DG-LAB 设备/Socket 接入。
+- 展示层：Electron
+  renderer 与 Web 前端共享可复用的视图模型和波形渲染能力，但不把 UI 状态写入领域模型。
+- 部署层：Web 服务由 Node.js API、静态 Web 前端和 Nginx 组成，通过 Docker
+  Compose 提供可直接部署的生产入口；Nginx 负责静态资源和反向代理，不承载领域逻辑。
 
 ### 格式边界
 
 当前项目支持的格式边界如下：
 
 - `.pulse`：本项目唯一的规范用户波形输入和输出格式，使用 `Dungeonlab+pulse:` 语法。
-- QR：以 `https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#` URL fragment 承载的 `.pulse` 分享封装，还原后得到 `.pulse` 明文，不作为独立波形格式。
-- `WaveformStream`：由 `.pulse` 展开的内部波形序列，用于预览、播放模拟、编辑和预览图导出，不作为独立文件格式。
-- dglab-kit 的 JSON/JSON5/`.pulses` 数据包、BLE/V3/V4 传输帧和其他社区方言不属于当前核心文件格式支持范围。
+- QR：以 `https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#` URL fragment 承载的 `.pulse`
+  分享封装，还原后得到 `.pulse` 明文，不作为独立波形格式。
+- `WaveformStream`：由 `.pulse`
+  展开的内部波形序列，用于预览、播放模拟、编辑和预览图导出，不作为独立文件格式。
+- dglab-kit 的 JSON/JSON5/`.pulses`
+  数据包、BLE/V3/V4 传输帧和其他社区方言不属于当前核心文件格式支持范围。
 
-详细的协议依据和兼容性风险见 [`docs/research/dglab-pulse-format.md`](docs/research/dglab-pulse-format.md)，本地样例覆盖见 [`docs/research/pulse-corpus.md`](docs/research/pulse-corpus.md)。
+详细的协议依据和兼容性风险见
+[`docs/research/dglab-pulse-format.md`](docs/research/dglab-pulse-format.md)，本地样例覆盖见
+[`docs/research/pulse-corpus.md`](docs/research/pulse-corpus.md)。
 
 ## Project Brief Overview
 
 ### 产品定位
 
-这是一个“`.pulse` 文件工作台”：用户可以把来自 DG-LAB 4 App 或其他来源的 `.pulse` 文件导入，快速确认其合法性和元数据，在时间轴上查看频率与强度变化，进行受控修改，然后导出为 `.pulse` 文件、二维码或预览图。
+这是一个“`.pulse` 文件工作台”：用户可以把来自 DG-LAB 4 App 或其他来源的 `.pulse`
+文件导入，快速确认其合法性和元数据，在时间轴上查看频率与强度变化，进行受控修改，然后导出为 `.pulse`
+文件、二维码或预览图。
 
 ### 核心概念
 
@@ -77,7 +90,8 @@
 
 - `.pulse` 格式、版本和字段范围检查。
 - 波形合法性检查，包括 section、脉冲元、曲线点、频率和强度范围。
-- 旧版本 `.pulse` 文件升级（条件能力，当前保留为待证据项）；若未来确认需要补点，使用二次函数递减算法 `f(x) = 1 - (1 - x) ** 2`，并明确标记升级结果。
+- 旧版本 `.pulse` 文件升级（条件能力，当前保留为待证据项）；若未来确认需要补点，使用二次函数递减算法
+  `f(x) = 1 - (1 - x) ** 2`，并明确标记升级结果。
 
 #### 波形预览
 
@@ -117,7 +131,9 @@
 
 ### 当前实施阶段
 
-项目当前已有可运行的 M1-M4 单文件、批量、编辑、预览和跨端契约实现；M5 生产发布门禁仍在进行，旧版本升级仍为条件能力。完整质量证据、未验证边界和需求覆盖见 [`docs/plan/`](docs/plan/README.md) 与 [`docs/plan/traceability.md`](docs/plan/traceability.md)。旧版本升级只有在具备真实旧/新夹具、可识别画像、变更规则和 App 互操作证据后才进入实现，不为未知版本建立猜测性兼容路径。
+项目当前已有可运行的 M1-M4 单文件、批量、编辑、预览和跨端契约实现；M5 生产发布门禁仍在进行，旧版本升级仍为条件能力。完整质量证据、未验证边界和需求覆盖见
+[`docs/plan/`](docs/plan/README.md) 与
+[`docs/plan/traceability.md`](docs/plan/traceability.md)。旧版本升级只有在具备真实旧/新夹具、可识别画像、变更规则和 App 互操作证据后才进入实现，不为未知版本建立猜测性兼容路径。
 
 ### 非目标与边界
 
@@ -126,6 +142,13 @@
 - 不在 UI 层复制协议解析和校验逻辑。
 - 不承诺未知格式的无损转换；无法确定语义时应报告诊断并要求用户选择目标方言。
 - 设备通信和远程控制属于可插拔的后续适配器，不阻塞基础 `.pulse` 文件处理能力。
+
+### 参与翻译
+
+界面翻译位于
+[`packages/workspace-ui/src/locales/`](packages/workspace-ui/src/locales/)，每种受支持语言对应一个以 BCP
+47 locale 命名的 JSON 文件。新增或更新翻译时，应保持各文件的消息键和 `{placeholder}`
+占位符一致；`npm test -- packages/workspace-ui/test/i18n.test.ts` 会验证文件集合、消息键和占位符。
 
 ## Repository Notes
 

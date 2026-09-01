@@ -38,9 +38,7 @@ describe('syntax boundaries', () => {
   });
 
   it('does not treat an exponent plus sign as a section separator', () => {
-    const result = parsePulse(
-      'Dungeonlab+pulse:0,1,0=0,0,0,1,1/1e+1-1,2e+1-1'
-    );
+    const result = parsePulse('Dungeonlab+pulse:0,1,0=0,0,0,1,1/1e+1-1,2e+1-1');
     expect(result.accepted).toBe(true);
   });
 });
@@ -57,11 +55,23 @@ describe('derived stream and export', () => {
     const enabledOnly = expandWaveform(pulse);
     const allSections = expandWaveform(pulse, { includeDisabled: true });
     expect(enabledOnly.stream?.segments.map((item) => item.sectionIndex)).toEqual([1]);
-    expect(allSections.stream?.segments.map((item) => item.sectionIndex)).toEqual([0, undefined, 1]);
-    expect(allSections.stream?.totalDurationMs).toBeGreaterThan(enabledOnly.stream?.totalDurationMs ?? 0);
+    expect(allSections.stream?.segments.map((item) => item.sectionIndex)).toEqual([
+      0,
+      undefined,
+      1
+    ]);
+    expect(allSections.stream?.totalDurationMs).toBeGreaterThan(
+      enabledOnly.stream?.totalDurationMs ?? 0
+    );
     const metadata = projectMetadata(pulse, enabledOnly.stream);
-    expect(metadata.sections[0]?.sourcePoints.map((point) => point.strengthDecimal)).toEqual(['0', '100']);
-    expect(metadata.sections[1]?.sourcePoints.map((point) => point.strengthDecimal)).toEqual(['0', '100']);
+    expect(metadata.sections[0]?.sourcePoints.map((point) => point.strengthDecimal)).toEqual([
+      '0',
+      '100'
+    ]);
+    expect(metadata.sections[1]?.sourcePoints.map((point) => point.strengthDecimal)).toEqual([
+      '0',
+      '100'
+    ]);
   });
 
   it('round-trips source and canonical serialization', () => {
@@ -74,7 +84,9 @@ describe('derived stream and export', () => {
     expect(source.diagnostics).toEqual([]);
     const canonical = serializePulse(parsed.pulse, { mode: 'canonical' });
     expect(canonical.text).toContain('0.001-1');
-    expect(canonical.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.EXPORT_ROUNDTRIP_MISMATCH)).toBe(false);
+    expect(
+      canonical.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.EXPORT_ROUNDTRIP_MISMATCH)
+    ).toBe(false);
   });
 
   it('enforces expansion limits before allocating points', () => {
@@ -86,6 +98,10 @@ describe('derived stream and export', () => {
       maxDurationMs: DEFAULT_RULE_SET.maxExpandedDurationMs
     });
     expect(expanded.stream).toBeNull();
-    expect(expanded.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.RESOURCE_EXPANDED_POINTS_LIMIT)).toBe(true);
+    expect(
+      expanded.diagnostics.some(
+        (item) => item.code === DIAGNOSTIC_CODES.RESOURCE_EXPANDED_POINTS_LIMIT
+      )
+    ).toBe(true);
   });
 });

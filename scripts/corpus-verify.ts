@@ -84,7 +84,7 @@ async function pulseFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of entries) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await pulseFiles(path));
+    if (entry.isDirectory()) files.push(...(await pulseFiles(path)));
     else if (entry.isFile() && entry.name.endsWith('.pulse')) files.push(path);
   }
   return files.sort((left, right) => left.localeCompare(right));
@@ -117,25 +117,42 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 }
 
 function streamError(stream: WaveformStream): string | null {
-  if (!Number.isFinite(stream.totalDurationMs) || stream.totalDurationMs < 0) return 'invalid total duration';
-  if (!Number.isFinite(stream.timeGranularityMs) || stream.timeGranularityMs <= 0) return 'invalid time granularity';
+  if (!Number.isFinite(stream.totalDurationMs) || stream.totalDurationMs < 0)
+    return 'invalid total duration';
+  if (!Number.isFinite(stream.timeGranularityMs) || stream.timeGranularityMs <= 0)
+    return 'invalid time granularity';
   let previousTime = -1;
   for (let index = 0; index < stream.points.length; index += 1) {
     const point = stream.points[index];
-    if (point === undefined || point.index !== index || !Number.isSafeInteger(point.index) ||
-        point.timeMs < previousTime || !Number.isFinite(point.timeMs) || point.timeMs < 0 ||
-        !Number.isFinite(point.durationMs) || point.durationMs <= 0 ||
-        !Number.isFinite(point.frequencyIndex) ||
-        !Number.isFinite(point.intensity) || point.intensity < 0 || point.intensity > 100) {
+    if (
+      point === undefined ||
+      point.index !== index ||
+      !Number.isSafeInteger(point.index) ||
+      point.timeMs < previousTime ||
+      !Number.isFinite(point.timeMs) ||
+      point.timeMs < 0 ||
+      !Number.isFinite(point.durationMs) ||
+      point.durationMs <= 0 ||
+      !Number.isFinite(point.frequencyIndex) ||
+      !Number.isFinite(point.intensity) ||
+      point.intensity < 0 ||
+      point.intensity > 100
+    ) {
       return 'stream contains an invalid or non-finite point';
     }
     previousTime = point.timeMs;
   }
   for (const segment of stream.segments) {
-    if (!Number.isFinite(segment.startMs) || segment.startMs < 0 ||
-        !Number.isFinite(segment.durationMs) || segment.durationMs < 0 ||
-        !Number.isSafeInteger(segment.pointStart) || segment.pointStart < 0 ||
-        !Number.isSafeInteger(segment.pointCount) || segment.pointCount < 0) {
+    if (
+      !Number.isFinite(segment.startMs) ||
+      segment.startMs < 0 ||
+      !Number.isFinite(segment.durationMs) ||
+      segment.durationMs < 0 ||
+      !Number.isSafeInteger(segment.pointStart) ||
+      segment.pointStart < 0 ||
+      !Number.isSafeInteger(segment.pointCount) ||
+      segment.pointCount < 0
+    ) {
       return 'stream contains an invalid segment';
     }
   }
@@ -150,13 +167,17 @@ function imageError(format: 'svg' | 'png' | 'jpg', bytes: Uint8Array): string | 
   }
   if (format === 'png') {
     const signature = [137, 80, 78, 71, 13, 10, 26, 10];
-    return signature.every((value, index) => bytes[index] === value) ? null : 'invalid PNG signature';
+    return signature.every((value, index) => bytes[index] === value)
+      ? null
+      : 'invalid PNG signature';
   }
   return bytes[0] === 0xff && bytes[1] === 0xd8 ? null : 'invalid JPG signature';
 }
 
 function mapObject(map: Map<string, number>): Readonly<Record<string, number>> {
-  return Object.fromEntries([...map.entries()].sort(([left], [right]) => left.localeCompare(right)));
+  return Object.fromEntries(
+    [...map.entries()].sort(([left], [right]) => left.localeCompare(right))
+  );
 }
 
 function finalize(report: MutableReport): CorpusReport {
@@ -247,8 +268,17 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
         includeStream: true
       });
       diagnostics(report, inspected.diagnostics);
-      if (inspected.status !== 'success' || inspected.data === null || inspected.data.stream === null) {
-        failure(report, 'inspect', name, inspected.status + ': ' + inspected.diagnostics.map((item) => item.code).join(','));
+      if (
+        inspected.status !== 'success' ||
+        inspected.data === null ||
+        inspected.data.stream === null
+      ) {
+        failure(
+          report,
+          'inspect',
+          name,
+          inspected.status + ': ' + inspected.diagnostics.map((item) => item.code).join(',')
+        );
         continue;
       }
       report.inspectSuccess += 1;
@@ -258,8 +288,17 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
       for (const mode of ['source', 'canonical'] as const) {
         const exported = exportPulse(bytes, { displayName: basename(path), mode });
         diagnostics(report, exported.diagnostics);
-        if (exported.status !== 'success' || exported.data === null || exported.data.roundTripVerified !== true) {
-          failure(report, 'export-' + mode, name, exported.status + ': ' + exported.diagnostics.map((item) => item.code).join(','));
+        if (
+          exported.status !== 'success' ||
+          exported.data === null ||
+          exported.data.roundTripVerified !== true
+        ) {
+          failure(
+            report,
+            'export-' + mode,
+            name,
+            exported.status + ': ' + exported.diagnostics.map((item) => item.code).join(',')
+          );
           continue;
         }
         if (mode === 'source' && !equalBytes(bytes, exported.data.bytes)) {
@@ -267,7 +306,12 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
         }
         const roundTrip = parsePulse(exported.data.bytes);
         if (roundTrip.pulse === null || !semanticallyEqual(parsed.pulse, roundTrip.pulse)) {
-          failure(report, 'export-round-trip-' + mode, name, roundTrip.diagnostics.map((item) => item.code).join(','));
+          failure(
+            report,
+            'export-round-trip-' + mode,
+            name,
+            roundTrip.diagnostics.map((item) => item.code).join(',')
+          );
         } else if (mode === 'source') report.sourceExports += 1;
         else report.canonicalExports += 1;
       }
@@ -280,8 +324,18 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
         const decoded = decodeQr(encoded.content);
         diagnostics(report, decoded.diagnostics);
         const roundTrip = decoded.pulseText === null ? null : parsePulse(decoded.pulseText);
-        if (!decoded.accepted || roundTrip?.pulse === null || roundTrip === null || !semanticallyEqual(parsed.pulse, roundTrip.pulse)) {
-          failure(report, 'qr-round-trip', name, decoded.diagnostics.map((item) => item.code).join(','));
+        if (
+          !decoded.accepted ||
+          roundTrip?.pulse === null ||
+          roundTrip === null ||
+          !semanticallyEqual(parsed.pulse, roundTrip.pulse)
+        ) {
+          failure(
+            report,
+            'qr-round-trip',
+            name,
+            decoded.diagnostics.map((item) => item.code).join(',')
+          );
         } else report.qrRoundTrips += 1;
       }
 
@@ -292,8 +346,11 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
         else report.renderedImages += 1;
       }
 
-      const sectionIndex = parsed.pulse.sections.findIndex((section) => section.pulseElement.points.length > 0);
-      const firstPoint = sectionIndex < 0 ? undefined : parsed.pulse.sections[sectionIndex]?.pulseElement.points[0];
+      const sectionIndex = parsed.pulse.sections.findIndex(
+        (section) => section.pulseElement.points.length > 0
+      );
+      const firstPoint =
+        sectionIndex < 0 ? undefined : parsed.pulse.sections[sectionIndex]?.pulseElement.points[0];
       if (firstPoint !== undefined) {
         const edited = applyPulseEdit(bytes, {
           command: {
@@ -304,12 +361,26 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
           }
         });
         diagnostics(report, edited.diagnostics);
-        if (edited.status !== 'success' || edited.data === null || edited.data.roundTripVerified !== true) {
-          failure(report, 'edit', name, edited.status + ': ' + edited.diagnostics.map((item) => item.code).join(','));
+        if (
+          edited.status !== 'success' ||
+          edited.data === null ||
+          edited.data.roundTripVerified !== true
+        ) {
+          failure(
+            report,
+            'edit',
+            name,
+            edited.status + ': ' + edited.diagnostics.map((item) => item.code).join(',')
+          );
         } else report.edits += 1;
       }
     } catch (error) {
-      failure(report, 'pipeline-throw', name, error instanceof Error ? error.message : String(error));
+      failure(
+        report,
+        'pipeline-throw',
+        name,
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
@@ -330,10 +401,23 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
   const inspectedBatch = await inspectBatch(batchInputs, batchOptions);
   diagnostics(report, inspectedBatch.diagnostics);
   if (inspectedBatch.status !== 'success' || inspectedBatch.data === null) {
-    failure(report, 'batch-inspect', '.', inspectedBatch.status + ': ' + inspectedBatch.diagnostics.map((item) => item.code).join(','));
+    failure(
+      report,
+      'batch-inspect',
+      '.',
+      inspectedBatch.status + ': ' + inspectedBatch.diagnostics.map((item) => item.code).join(',')
+    );
   } else {
-    report.batchInspectSuccess = inspectedBatch.data.items.filter((item, index) => item.status === (expectedByIndex[index] ? 'success' : 'rejected')).length;
-    if (report.batchInspectSuccess !== files.length) failure(report, 'batch-inspect-items', '.', 'batch item statuses differ from single-file parsing');
+    report.batchInspectSuccess = inspectedBatch.data.items.filter(
+      (item, index) => item.status === (expectedByIndex[index] ? 'success' : 'rejected')
+    ).length;
+    if (report.batchInspectSuccess !== files.length)
+      failure(
+        report,
+        'batch-inspect-items',
+        '.',
+        'batch item statuses differ from single-file parsing'
+      );
   }
 
   const exportedBatch = await exportBatch(
@@ -349,24 +433,41 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
   let artifactDirectory: string | null = null;
   try {
     if (exportedBatch.status !== 'success' || exportedBatch.data === null) {
-      failure(report, 'batch-export', '.', exportedBatch.status + ': ' + exportedBatch.diagnostics.map((item) => item.code).join(','));
+      failure(
+        report,
+        'batch-export',
+        '.',
+        exportedBatch.status + ': ' + exportedBatch.diagnostics.map((item) => item.code).join(',')
+      );
     } else {
       report.batchExportSuccess = exportedBatch.data.items.filter((item, index) => {
         if (!expectedByIndex[index]) return item.status === 'rejected';
         return item.status === 'success' && item.data?.roundTripVerified === true;
       }).length;
-      if (report.batchExportSuccess !== files.length) failure(report, 'batch-export-items', '.', 'batch export item results are incomplete');
+      if (report.batchExportSuccess !== files.length)
+        failure(report, 'batch-export-items', '.', 'batch export item results are incomplete');
       artifactDirectory = await mkdtemp(join(tmpdir(), 'pulse-corpus-verify-'));
       for (const item of exportedBatch.data.items) {
         if (item.status !== 'success' || item.data === null) continue;
         const target = join(artifactDirectory, item.data.displayName);
         const written = await atomicWriteFile(target, item.data.bytes);
         if (written.status !== 'success') {
-          failure(report, 'write', item.displayName, written.diagnostics.map((diagnostic) => diagnostic.code).join(','));
+          failure(
+            report,
+            'write',
+            item.displayName,
+            written.diagnostics.map((diagnostic) => diagnostic.code).join(',')
+          );
           continue;
         }
         const persisted = new Uint8Array(await readFile(target));
-        if (!equalBytes(persisted, item.data.bytes)) failure(report, 'write-bytes', item.displayName, 'written bytes differ from export bytes');
+        if (!equalBytes(persisted, item.data.bytes))
+          failure(
+            report,
+            'write-bytes',
+            item.displayName,
+            'written bytes differ from export bytes'
+          );
         else report.writtenArtifacts += 1;
       }
     }
@@ -377,26 +478,35 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
 }
 
 function printReport(report: CorpusReport): void {
-  process.stdout.write([
-    'pulse corpus verification',
-    'source: ' + report.sourceDirectory,
-    'files: ' + report.files,
-    'accepted/rejected: ' + report.accepted + '/' + report.rejected,
-    'parse throws: ' + report.parseThrows,
-    'inspect success: ' + report.inspectSuccess,
-    'source/canonical exports: ' + report.sourceExports + '/' + report.canonicalExports,
-    'QR round-trips: ' + report.qrRoundTrips,
-    'rendered images: ' + report.renderedImages,
-    'edits: ' + report.edits,
-    'batch inspect/export items: ' + report.batchInspectSuccess + '/' + report.batchExportSuccess,
-    'written artifacts: ' + report.writtenArtifacts,
-    'intentional warnings: ' + report.warningCount,
-    'unexpected failures: ' + report.failureCount,
-    'rejected diagnostic codes: ' + (Object.entries(report.rejectedCodes).map(([code, count]) => code + '=' + count).join(', ') || 'none'),
-    'warning diagnostic codes: ' + (Object.entries(report.warningCodes).map(([code, count]) => code + '=' + count).join(', ') || 'none')
-  ].join('\n') + '\n');
+  process.stdout.write(
+    [
+      'pulse corpus verification',
+      'source: ' + report.sourceDirectory,
+      'files: ' + report.files,
+      'accepted/rejected: ' + report.accepted + '/' + report.rejected,
+      'parse throws: ' + report.parseThrows,
+      'inspect success: ' + report.inspectSuccess,
+      'source/canonical exports: ' + report.sourceExports + '/' + report.canonicalExports,
+      'QR round-trips: ' + report.qrRoundTrips,
+      'rendered images: ' + report.renderedImages,
+      'edits: ' + report.edits,
+      'batch inspect/export items: ' + report.batchInspectSuccess + '/' + report.batchExportSuccess,
+      'written artifacts: ' + report.writtenArtifacts,
+      'intentional warnings: ' + report.warningCount,
+      'unexpected failures: ' + report.failureCount,
+      'rejected diagnostic codes: ' +
+        (Object.entries(report.rejectedCodes)
+          .map(([code, count]) => code + '=' + count)
+          .join(', ') || 'none'),
+      'warning diagnostic codes: ' +
+        (Object.entries(report.warningCodes)
+          .map(([code, count]) => code + '=' + count)
+          .join(', ') || 'none')
+    ].join('\n') + '\n'
+  );
   if (report.failureCount > 0) {
-    for (const item of report.failures) process.stdout.write('  ' + item.kind + ' [' + item.file + '] ' + item.detail + '\n');
+    for (const item of report.failures)
+      process.stdout.write('  ' + item.kind + ' [' + item.file + '] ' + item.detail + '\n');
   }
 }
 

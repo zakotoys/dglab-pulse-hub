@@ -26,10 +26,7 @@ export interface PlotScene {
 
 const MAX_RENDER_PIXELS = 4_000_000;
 
-export function createPlotScene(
-  stream: WaveformStream,
-  options: RenderOptions = {}
-): PlotScene {
+export function createPlotScene(stream: WaveformStream, options: RenderOptions = {}): PlotScene {
   let width = clampDimension(options.width ?? 1200);
   let height = clampDimension(options.height ?? 520);
   // Image adapters allocate one RGBA byte per channel. Bound the product as
@@ -50,18 +47,20 @@ export function createPlotScene(
   // Empty streams are valid (for example, when every section is disabled).
   // Keep the derived range finite so future labels/paths cannot inherit the
   // reduce identities of +/-Infinity.
-  const minFrequency = points.length === 0
-    ? 0
-    : points.reduce(
-      (value, point) => Math.min(value, point.frequencyIndex),
-      Number.POSITIVE_INFINITY
-    );
-  const maxFrequency = points.length === 0
-    ? 0
-    : points.reduce(
-      (value, point) => Math.max(value, point.frequencyIndex),
-      Number.NEGATIVE_INFINITY
-    );
+  const minFrequency =
+    points.length === 0
+      ? 0
+      : points.reduce(
+          (value, point) => Math.min(value, point.frequencyIndex),
+          Number.POSITIVE_INFINITY
+        );
+  const maxFrequency =
+    points.length === 0
+      ? 0
+      : points.reduce(
+          (value, point) => Math.max(value, point.frequencyIndex),
+          Number.NEGATIVE_INFINITY
+        );
   const frequencySpan = Math.max(1, maxFrequency - minFrequency);
   const innerWidth = width - padding * 2;
   const innerHeight = height - padding * 2;
@@ -81,40 +80,99 @@ export function createPlotScene(
   });
 }
 
-export function renderSvg(
-  stream: WaveformStream,
-  options: RenderOptions = {}
-): string {
+export function renderSvg(stream: WaveformStream, options: RenderOptions = {}): string {
   const scene = createPlotScene(stream, options);
   const intensityPath = scene.points
-    .map((point, index) => (index === 0 ? 'M' : 'L') + point.x.toFixed(2) + ',' + point.intensityY.toFixed(2))
+    .map(
+      (point, index) =>
+        (index === 0 ? 'M' : 'L') + point.x.toFixed(2) + ',' + point.intensityY.toFixed(2)
+    )
     .join(' ');
   const frequencyPath = scene.points
-    .map((point, index) => (index === 0 ? 'M' : 'L') + point.x.toFixed(2) + ',' + point.frequencyY.toFixed(2))
+    .map(
+      (point, index) =>
+        (index === 0 ? 'M' : 'L') + point.x.toFixed(2) + ',' + point.frequencyY.toFixed(2)
+    )
     .join(' ');
-  const labels = options.showLabels === false ? '' :
-    '<text x="' + scene.padding + '" y="24" class="title">' + escapeXml(scene.title) + '</text>' +
-    '<text x="' + scene.padding + '" y="' + (scene.height - 12) + '" class="axis-label">time (ms)</text>' +
-    '<text x="12" y="' + (scene.padding + 4) + '" class="axis-label">100</text>' +
-    '<text x="22" y="' + (scene.height - scene.padding) + '" class="axis-label">0</text>';
+  const labels =
+    options.showLabels === false
+      ? ''
+      : '<text x="' +
+        scene.padding +
+        '" y="24" class="title">' +
+        escapeXml(scene.title) +
+        '</text>' +
+        '<text x="' +
+        scene.padding +
+        '" y="' +
+        (scene.height - 12) +
+        '" class="axis-label">time (ms)</text>' +
+        '<text x="12" y="' +
+        (scene.padding + 4) +
+        '" class="axis-label">100</text>' +
+        '<text x="22" y="' +
+        (scene.height - scene.padding) +
+        '" class="axis-label">0</text>';
   const circles = scene.points
     .slice(0, 2000)
-    .map((point) =>
-      '<circle cx="' + point.x.toFixed(2) + '" cy="' + point.intensityY.toFixed(2) +
-      '" r="2" data-source-index="' + point.sourceIndex + '" />'
-    ).join('');
+    .map(
+      (point) =>
+        '<circle cx="' +
+        point.x.toFixed(2) +
+        '" cy="' +
+        point.intensityY.toFixed(2) +
+        '" r="2" data-source-index="' +
+        point.sourceIndex +
+        '" />'
+    )
+    .join('');
+  const styles = [
+    '.axis{stroke:#9ca3af;stroke-width:1}',
+    '.grid{stroke:#e5e7eb;stroke-width:1}',
+    '.intensity{fill:none;stroke:#e11d48;stroke-width:2}',
+    '.frequency{fill:none;stroke:#2563eb;stroke-width:2}',
+    '.points{fill:#be123c}',
+    '.title{font:600 16px sans-serif;fill:#111827}',
+    '.axis-label{font:12px sans-serif;fill:#4b5563}'
+  ].join('');
   return [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + scene.width + '" height="' + scene.height +
-      '" viewBox="0 0 ' + scene.width + ' ' + scene.height + '" role="img" aria-labelledby="title desc">',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' +
+      scene.width +
+      '" height="' +
+      scene.height +
+      '" viewBox="0 0 ' +
+      scene.width +
+      ' ' +
+      scene.height +
+      '" role="img" aria-labelledby="title desc">',
     '<title id="title">' + escapeXml(scene.title) + '</title>',
-    '<desc id="desc">Waveform stream with ' + stream.points.length + ' points and total duration ' +
-      stream.totalDurationMs + ' milliseconds. Stream digest ' + escapeXml(stream.digest) + '.</desc>',
-    '<style>.axis{stroke:#9ca3af;stroke-width:1}.grid{stroke:#e5e7eb;stroke-width:1}.intensity{fill:none;stroke:#e11d48;stroke-width:2}.frequency{fill:none;stroke:#2563eb;stroke-width:2}.points{fill:#be123c}.title{font:600 16px sans-serif;fill:#111827}.axis-label{font:12px sans-serif;fill:#4b5563}</style>',
+    '<desc id="desc">Waveform stream with ' +
+      stream.points.length +
+      ' points and total duration ' +
+      stream.totalDurationMs +
+      ' milliseconds. Stream digest ' +
+      escapeXml(stream.digest) +
+      '.</desc>',
+    '<style>' + styles + '</style>',
     '<rect width="100%" height="100%" fill="#ffffff"/>',
-    '<line class="axis" x1="' + scene.padding + '" y1="' + scene.padding + '" x2="' + scene.padding +
-      '" y2="' + (scene.height - scene.padding) + '"/>',
-    '<line class="axis" x1="' + scene.padding + '" y1="' + (scene.height - scene.padding) +
-      '" x2="' + (scene.width - scene.padding) + '" y2="' + (scene.height - scene.padding) + '"/>',
+    '<line class="axis" x1="' +
+      scene.padding +
+      '" y1="' +
+      scene.padding +
+      '" x2="' +
+      scene.padding +
+      '" y2="' +
+      (scene.height - scene.padding) +
+      '"/>',
+    '<line class="axis" x1="' +
+      scene.padding +
+      '" y1="' +
+      (scene.height - scene.padding) +
+      '" x2="' +
+      (scene.width - scene.padding) +
+      '" y2="' +
+      (scene.height - scene.padding) +
+      '"/>',
     '<path class="intensity" d="' + intensityPath + '"/>',
     '<path class="frequency" d="' + frequencyPath + '"/>',
     '<g class="points">' + circles + '</g>',
@@ -123,10 +181,7 @@ export function renderSvg(
   ].join('');
 }
 
-function downsample(
-  points: readonly WaveformPoint[],
-  maxPoints: number
-): readonly WaveformPoint[] {
+function downsample(points: readonly WaveformPoint[], maxPoints: number): readonly WaveformPoint[] {
   if (points.length <= maxPoints) return points;
   const step = (points.length - 1) / (maxPoints - 1);
   const sampled: WaveformPoint[] = [];

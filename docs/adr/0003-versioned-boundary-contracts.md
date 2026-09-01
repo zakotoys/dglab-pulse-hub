@@ -1,18 +1,21 @@
 # ADR-0003：版本化跨端契约与 adapter 边界
 
-| 项目 | 内容 |
-| --- | --- |
-| 状态 | Accepted |
-| 日期 | 2026-08-30 |
+| 项目 | 内容                      |
+| ---- | ------------------------- |
+| 状态 | Accepted                  |
+| 日期 | 2026-08-30                |
 | 关联 | TRD 3、7-9；TASK-001..003 |
 
 ## 背景
 
-CLI、HTTP、Electron IPC 和 UI 都要表达任务、Pulse 摘要、stream、诊断和导出结果。直接暴露内部领域对象会把运行时细节、不可序列化值和重构变化扩散到所有入口；为每个入口手写 DTO 又会导致语义漂移。
+CLI、HTTP、Electron
+IPC 和 UI 都要表达任务、Pulse 摘要、stream、诊断和导出结果。直接暴露内部领域对象会把运行时细节、不可序列化值和重构变化扩散到所有入口；为每个入口手写 DTO 又会导致语义漂移。
 
 ## 决策
 
-建立一个 `contracts` workspace，使用成熟的运行时 schema 库定义外部 DTO，并由 schema 推导 TypeScript 类型。M0 在候选库中核对 ESM、Node 24、浏览器、Fastify、许可证和维护状态后选择一个；不得自己实现 schema validator。
+建立一个 `contracts`
+workspace，使用成熟的运行时 schema 库定义外部 DTO，并由 schema 推导 TypeScript 类型。M0 在候选库中核对 ESM、Node
+24、浏览器、Fastify、许可证和维护状态后选择一个；不得自己实现 schema validator。
 
 每个响应 envelope 至少包含：
 
@@ -52,4 +55,3 @@ Adapter 职责限定为：
 - schema 变更必须更新 `schemaVersion`、测试和消费者。
 - application 保持 transport-neutral，但负责结果语义和取消状态。
 - 选择 schema 库是 M0 的有界技术验证，不阻塞本 ADR 的边界决定。
-

@@ -17,22 +17,11 @@ export type FormatProfile = typeof FORMAT_PROFILE;
 export type RuleVersion = typeof RULE_VERSION;
 export type FormatKind = 'pulse-text' | 'qr-envelope' | 'unsupported';
 export type EvidenceLevel =
-  | 'official-semantics'
-  | 'corpus-observed'
-  | 'community-inferred'
-  | 'unverified';
+  'official-semantics' | 'corpus-observed' | 'community-inferred' | 'unverified';
 
 export type DiagnosticSeverity = 'error' | 'warning' | 'info';
 export type DiagnosticStage =
-  | 'recognize'
-  | 'syntax'
-  | 'range'
-  | 'semantic'
-  | 'resource'
-  | 'export'
-  | 'qr'
-  | 'adapter'
-  | 'task';
+  'recognize' | 'syntax' | 'range' | 'semantic' | 'resource' | 'export' | 'qr' | 'adapter' | 'task';
 
 export interface SourceSpan {
   readonly start: number;
@@ -89,13 +78,7 @@ export interface SyntacticControlPoint {
 }
 
 export interface SyntacticSection {
-  readonly fields: readonly [
-    NumericToken,
-    NumericToken,
-    NumericToken,
-    NumericToken,
-    NumericToken
-  ];
+  readonly fields: readonly [NumericToken, NumericToken, NumericToken, NumericToken, NumericToken];
   readonly points: readonly SyntacticControlPoint[];
   readonly span: SourceSpan;
 }
@@ -160,10 +143,7 @@ export interface Pulse {
 }
 
 export type StreamPointOrigin =
-  | 'source-anchor'
-  | 'source-point'
-  | 'quadratic-interpolation'
-  | 'boundary-interpolation';
+  'source-anchor' | 'source-point' | 'quadratic-interpolation' | 'boundary-interpolation';
 
 export interface StreamPointSource {
   readonly sectionIndex: number;
@@ -279,11 +259,7 @@ export interface PulseMetadataBundle {
   readonly stream: StreamMetadata;
 }
 
-export type ChangeKind =
-  | 'edit'
-  | 'interpolation'
-  | 'format-normalization'
-  | 'upgrade';
+export type ChangeKind = 'edit' | 'interpolation' | 'format-normalization' | 'upgrade';
 
 export interface ChangeRecord {
   readonly id: string;

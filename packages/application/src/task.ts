@@ -1,29 +1,9 @@
-import {
-  DIAGNOSTIC_CODES,
-  makeDiagnostic,
-  location,
-  type Diagnostic
-} from '@dglab-pulse-hub/core';
-import {
-  operationResult,
-  type OperationResult,
-  type OperationStatus
-} from './result.js';
+import { DIAGNOSTIC_CODES, makeDiagnostic, location, type Diagnostic } from '@dglab-pulse-hub/core';
+import { operationResult, type OperationResult, type OperationStatus } from './result.js';
 
-export type TaskState =
-  | 'pending'
-  | 'running'
-  | 'succeeded'
-  | 'rejected'
-  | 'failed'
-  | 'cancelled';
+export type TaskState = 'pending' | 'running' | 'succeeded' | 'rejected' | 'failed' | 'cancelled';
 
-const TERMINAL_STATES: readonly TaskState[] = [
-  'succeeded',
-  'rejected',
-  'failed',
-  'cancelled'
-];
+const TERMINAL_STATES: readonly TaskState[] = ['succeeded', 'rejected', 'failed', 'cancelled'];
 
 export interface TaskSnapshot<T> {
   readonly id: string;
@@ -50,11 +30,16 @@ function isDiagnosticLike(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   const item = value as Record<string, unknown>;
   const locationValue = item.location;
-  return typeof item.code === 'string' && item.code.length > 0 &&
+  return (
+    typeof item.code === 'string' &&
+    item.code.length > 0 &&
     (item.severity === 'error' || item.severity === 'warning' || item.severity === 'info') &&
-    typeof item.stage === 'string' && typeof item.message === 'string' &&
-    locationValue !== null && typeof locationValue === 'object' &&
-    typeof (locationValue as Record<string, unknown>).path === 'string';
+    typeof item.stage === 'string' &&
+    typeof item.message === 'string' &&
+    locationValue !== null &&
+    typeof locationValue === 'object' &&
+    typeof (locationValue as Record<string, unknown>).path === 'string'
+  );
 }
 
 function invalidOperationResult<T>(operation: string, message: string): OperationResult<T> {
@@ -89,12 +74,17 @@ function normalizeOperationResult<T>(operation: string, value: unknown): Operati
     return invalidOperationResult(operation, 'Non-successful task operation returned result data.');
   }
   const timingValue = candidate.timing;
-  const timing = timingValue !== null && typeof timingValue === 'object'
-    ? timingValue as Record<string, unknown>
-    : undefined;
-  if (timing !== undefined &&
-      (timing.startedAt !== undefined && (!Number.isFinite(timing.startedAt) || typeof timing.startedAt !== 'number') ||
-       timing.durationMs !== undefined && (!Number.isFinite(timing.durationMs) || typeof timing.durationMs !== 'number'))) {
+  const timing =
+    timingValue !== null && typeof timingValue === 'object'
+      ? (timingValue as Record<string, unknown>)
+      : undefined;
+  if (
+    timing !== undefined &&
+    ((timing.startedAt !== undefined &&
+      (!Number.isFinite(timing.startedAt) || typeof timing.startedAt !== 'number')) ||
+      (timing.durationMs !== undefined &&
+        (!Number.isFinite(timing.durationMs) || typeof timing.durationMs !== 'number')))
+  ) {
     return invalidOperationResult(operation, 'Task operation returned invalid timing data.');
   }
   const operationId = candidate.operationId;
@@ -113,7 +103,7 @@ function normalizeOperationResult<T>(operation: string, value: unknown): Operati
   return operationResult(
     operation,
     candidate.status,
-    candidate.status === 'success' ? data as T : null,
+    candidate.status === 'success' ? (data as T) : null,
     candidate.diagnostics as Diagnostic[],
     options
   );
@@ -124,11 +114,7 @@ export class SingleFileTask<T> {
   private readonly controller: AbortController;
   private cancelWaiter: ((result: OperationResult<T>) => void) | null = null;
 
-  public constructor(
-    id: string,
-    operation: string,
-    controller = new AbortController()
-  ) {
+  public constructor(id: string, operation: string, controller = new AbortController()) {
     this.controller = controller;
     this.current = Object.freeze({
       id,
@@ -148,27 +134,22 @@ export class SingleFileTask<T> {
 
   public cancel(): OperationResult<T> {
     if (TERMINAL_STATES.includes(this.current.state)) {
-      return this.current.result ?? operationResult(
-        this.current.operation,
-        'cancelled',
-        null,
-        [this.invalidTransition('Task is already terminal.')]
+      return (
+        this.current.result ??
+        operationResult(this.current.operation, 'cancelled', null, [
+          this.invalidTransition('Task is already terminal.')
+        ])
       );
     }
-    const result = operationResult<T>(
-      this.current.operation,
-      'cancelled',
-      null as T | null,
-      [
-        makeDiagnostic(
-          DIAGNOSTIC_CODES.TASK_CANCELLED,
-          'info',
-          'task',
-          'Task was cancelled.',
-          location('$')
-        )
-      ]
-    );
+    const result = operationResult<T>(this.current.operation, 'cancelled', null as T | null, [
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.TASK_CANCELLED,
+        'info',
+        'task',
+        'Task was cancelled.',
+        location('$')
+      )
+    ]);
     // Transition before aborting so the abort listener installed by `run`
     // cannot race this explicit cancellation with a second result.
     this.transition('cancelled', result);
@@ -182,17 +163,17 @@ export class SingleFileTask<T> {
     operation: (signal: AbortSignal) => OperationResult<T> | Promise<OperationResult<T>>,
     options: TaskRunOptions = {}
   ): Promise<OperationResult<T>> {
-    const safeOptions: TaskRunOptions = options !== null && typeof options === 'object' ? options : {};
+    const safeOptions: TaskRunOptions =
+      options !== null && typeof options === 'object' ? options : {};
     if (!this.transition('running', null)) {
-      return operationResult(
-        this.current.operation,
-        'failed',
-        null,
-        [this.invalidTransition('Task can only be run once.')]
-      );
+      return operationResult(this.current.operation, 'failed', null, [
+        this.invalidTransition('Task can only be run once.')
+      ]);
     }
-    if (safeOptions.timeoutMs !== undefined &&
-        (!Number.isSafeInteger(safeOptions.timeoutMs) || safeOptions.timeoutMs <= 0)) {
+    if (
+      safeOptions.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(safeOptions.timeoutMs) || safeOptions.timeoutMs <= 0)
+    ) {
       const result = operationResult<T>(this.current.operation, 'failed', null, [
         makeDiagnostic(
           DIAGNOSTIC_CODES.TASK_TIMEOUT,
@@ -233,91 +214,121 @@ export class SingleFileTask<T> {
     // An externally supplied controller may have been aborted between the
     // initial check above and listener registration.
     if (this.signal.aborted) abortListener();
-    const timeoutPromise = safeOptions.timeoutMs === undefined
-      ? null
-      : new Promise<OperationResult<T>>((resolve) => {
-          timeout = setTimeout(() => {
-            if (this.current.state !== 'running') return;
-            timeoutTriggered = true;
-            timeoutValue = operationResult<T>(this.current.operation, 'failed', null, [
-              makeDiagnostic(
-                DIAGNOSTIC_CODES.TASK_TIMEOUT,
-                'error',
-                'task',
-                'Task processing exceeded the configured timeout.',
-                location('$')
-              )
-            ]);
-            // Make timeout terminal before aborting so it wins a concurrent
-            // caller cancellation deterministically.
-            this.transition('failed', timeoutValue);
-            this.controller.abort();
-            resolve(timeoutValue);
-          }, safeOptions.timeoutMs);
-        });
+    const timeoutPromise =
+      safeOptions.timeoutMs === undefined
+        ? null
+        : new Promise<OperationResult<T>>((resolve) => {
+            timeout = setTimeout(() => {
+              if (this.current.state !== 'running') return;
+              timeoutTriggered = true;
+              timeoutValue = operationResult<T>(this.current.operation, 'failed', null, [
+                makeDiagnostic(
+                  DIAGNOSTIC_CODES.TASK_TIMEOUT,
+                  'error',
+                  'task',
+                  'Task processing exceeded the configured timeout.',
+                  location('$')
+                )
+              ]);
+              // Make timeout terminal before aborting so it wins a concurrent
+              // caller cancellation deterministically.
+              this.transition('failed', timeoutValue);
+              this.controller.abort();
+              resolve(timeoutValue);
+            }, safeOptions.timeoutMs);
+          });
     try {
       const operationPromise = Promise.resolve().then(() => operation(this.signal));
       const contenders: Array<Promise<OperationResult<T>>> = [operationPromise, cancellation];
       if (timeoutPromise !== null) contenders.push(timeoutPromise);
       const result = await Promise.race(contenders);
-      if (this.current.state === 'cancelled' || this.current.state === 'failed' && timeoutValue !== null) {
+      if (
+        this.current.state === 'cancelled' ||
+        (this.current.state === 'failed' && timeoutValue !== null)
+      ) {
         return this.current.result ?? result;
       }
-      if (timeoutTriggered || (safeOptions.timeoutMs !== undefined && Date.now() - startedAt >= safeOptions.timeoutMs)) {
-        const timedOut = timeoutValue ?? operationResult<T>(this.current.operation, 'failed', null, [
-          makeDiagnostic(
-            DIAGNOSTIC_CODES.TASK_TIMEOUT,
-            'error',
-            'task',
-            'Task processing exceeded the configured timeout.',
-            location('$')
-          )
-        ]);
+      if (
+        timeoutTriggered ||
+        (safeOptions.timeoutMs !== undefined && Date.now() - startedAt >= safeOptions.timeoutMs)
+      ) {
+        const timedOut =
+          timeoutValue ??
+          operationResult<T>(this.current.operation, 'failed', null, [
+            makeDiagnostic(
+              DIAGNOSTIC_CODES.TASK_TIMEOUT,
+              'error',
+              'task',
+              'Task processing exceeded the configured timeout.',
+              location('$')
+            )
+          ]);
         this.transition('failed', timedOut);
         this.controller.abort();
         return timedOut;
       }
       const normalized = normalizeOperationResult<T>(this.current.operation, result);
       if (normalized.status === 'cancelled' || this.signal.aborted) {
-        const cancelled = normalized.status === 'cancelled'
-          ? normalized
-          : operationResult(this.current.operation, 'cancelled', null, [
-              makeDiagnostic(
-                DIAGNOSTIC_CODES.TASK_CANCELLED,
-                'info',
-                'task',
-                'Task was cancelled.',
-                location('$')
-              )
-            ]);
+        const cancelled =
+          normalized.status === 'cancelled'
+            ? normalized
+            : operationResult(this.current.operation, 'cancelled', null, [
+                makeDiagnostic(
+                  DIAGNOSTIC_CODES.TASK_CANCELLED,
+                  'info',
+                  'task',
+                  'Task was cancelled.',
+                  location('$')
+                )
+              ]);
         this.transition('cancelled', cancelled);
         return cancelled;
       }
-      const nextState: TaskState = normalized.status === 'success'
-        ? 'succeeded'
-        : normalized.status === 'rejected'
-          ? 'rejected'
-          : 'failed';
+      const nextState: TaskState =
+        normalized.status === 'success'
+          ? 'succeeded'
+          : normalized.status === 'rejected'
+            ? 'rejected'
+            : 'failed';
       this.transition(nextState, normalized);
       return normalized;
     } catch {
-      if (this.current.state === 'cancelled' || this.current.state === 'failed' && timeoutValue !== null) {
-        return this.current.result ?? operationResult(this.current.operation, this.current.state === 'cancelled' ? 'cancelled' : 'failed', null, [
-          makeDiagnostic(
-            this.current.state === 'cancelled' ? DIAGNOSTIC_CODES.TASK_CANCELLED : DIAGNOSTIC_CODES.TASK_TIMEOUT,
-            this.current.state === 'cancelled' ? 'info' : 'error',
-            'task',
-            this.current.state === 'cancelled' ? 'Task was cancelled.' : 'Task processing exceeded the configured timeout.',
-            location('$')
+      if (
+        this.current.state === 'cancelled' ||
+        (this.current.state === 'failed' && timeoutValue !== null)
+      ) {
+        return (
+          this.current.result ??
+          operationResult(
+            this.current.operation,
+            this.current.state === 'cancelled' ? 'cancelled' : 'failed',
+            null,
+            [
+              makeDiagnostic(
+                this.current.state === 'cancelled'
+                  ? DIAGNOSTIC_CODES.TASK_CANCELLED
+                  : DIAGNOSTIC_CODES.TASK_TIMEOUT,
+                this.current.state === 'cancelled' ? 'info' : 'error',
+                'task',
+                this.current.state === 'cancelled'
+                  ? 'Task was cancelled.'
+                  : 'Task processing exceeded the configured timeout.',
+                location('$')
+              )
+            ]
           )
-        ]);
+        );
       }
       const result = operationResult<T>(this.current.operation, 'failed', null as T | null, [
         makeDiagnostic(
-          timeoutTriggered ? DIAGNOSTIC_CODES.TASK_TIMEOUT : DIAGNOSTIC_CODES.TASK_INVALID_TRANSITION,
+          timeoutTriggered
+            ? DIAGNOSTIC_CODES.TASK_TIMEOUT
+            : DIAGNOSTIC_CODES.TASK_INVALID_TRANSITION,
           'error',
           'task',
-          timeoutTriggered ? 'Task processing exceeded the configured timeout.' : 'Task operation failed unexpectedly.',
+          timeoutTriggered
+            ? 'Task processing exceeded the configured timeout.'
+            : 'Task operation failed unexpectedly.',
           location('$')
         )
       ]);
@@ -340,10 +351,7 @@ export class SingleFileTask<T> {
     );
   }
 
-  private transition(
-    state: TaskState,
-    result: OperationResult<T> | null
-  ): boolean {
+  private transition(state: TaskState, result: OperationResult<T> | null): boolean {
     if (!transitionAllowed(this.current.state, state)) return false;
     this.current = Object.freeze({
       ...this.current,
