@@ -1251,7 +1251,7 @@ export function WorkspaceApp({
                   : compareName}
             </small>
             <button
-              className="secondary"
+              className="secondary sidebar-run-button"
               disabled={
                 busy ||
                 workspaceDocument === null ||
@@ -1320,7 +1320,7 @@ export function WorkspaceApp({
               </div>
             )}
             <button
-              className="secondary"
+              className="secondary sidebar-run-button"
               disabled={busy || (client.fileMode === 'browser' && batchFiles.length === 0)}
               onClick={() => void runBatch()}
             >

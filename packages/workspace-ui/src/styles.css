@@ -998,6 +998,10 @@ textarea:focus-visible,
   color: var(--accent-strong);
   background: var(--surface-accent);
 }
+.sidebar-run-button {
+  width: 100%;
+  margin-top: 10px;
+}
 .danger-button,
 .cancel {
   border-color: var(--danger-soft);

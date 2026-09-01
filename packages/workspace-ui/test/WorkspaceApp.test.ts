@@ -34,4 +34,12 @@ describe('WorkspaceApp QR image controls', () => {
     expect(markup).toContain('title="Refresh workspace"');
     expect(markup).not.toContain('rules pulse-rules-v1');
   });
+
+  it('stretches the compare and batch run buttons to the sidebar width', () => {
+    const client = { fileMode: 'browser' } as WorkspaceClient;
+    const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
+
+    expect(markup).toContain('class="secondary sidebar-run-button"');
+    expect(markup.match(/class="secondary sidebar-run-button"/g)).toHaveLength(2);
+  });
 });
