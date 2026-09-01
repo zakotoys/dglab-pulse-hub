@@ -4,36 +4,73 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  CI: true
+
 jobs:
   quality:
+    name: Quality and build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
-      - run: npm run typecheck
-      - run: npm test -- --run
-      - run: npm run test:coverage -- --run
-      - run: npm run build
-      - run: npm run desktop:make
-      - run: npm run web:build
-      - run: npm run corpus:report -- --json
-      - run: npm run corpus:verify -- tests/fixtures --json
-      - run: git diff --check
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check formatting, types, tests, and builds
+        run: npm run check
+
+      - name: Package desktop application
+        run: npm --workspace @dglab-pulse-hub/desktop run make
+
+      - name: Validate corpus tools
+        run: |
+          npm run corpus:report -- --json
+          npm run corpus:verify -- tests/fixtures --json
 
   containers:
+    name: Container smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - run: docker compose config --quiet
-      - run: docker compose build api web
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build and start services
+        run: docker compose up --detach --build --wait --wait-timeout 120
+
+      - name: Verify public readiness endpoint
+        run:
+          curl --fail --show-error --retry 5 --retry-all-errors http://127.0.0.1:8080/health/ready
+
+      - name: Stop services
+        if: always()
+        run: docker compose down --volumes --remove-orphans --timeout 20
