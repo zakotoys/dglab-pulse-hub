@@ -5,6 +5,7 @@ import {
   expandWaveform,
   hasBlockingErrors,
   makeDiagnostic,
+  normalizeDecimal,
   location,
   parsePulse,
   projectMetadata,
@@ -18,15 +19,17 @@ import {
   removeControlPoint,
   serializePulse,
   sortDiagnostics,
+  sourceSpan,
   validatePulse,
   type Diagnostic,
+  type ControlPoint,
   type FormatKind,
   type ParseResult,
   type Pulse,
-  type ControlPoint,
   type PulseMetadataBundle,
   type WaveformStream
 } from '@dglab-pulse-hub/core';
+import type { AssistCommand, EditCommand } from './commands.js';
 import { decodeQr, encodeQr } from './qr.js';
 import { renderQrImage } from './images.js';
 import { operationResult, statusFromDiagnostics, type OperationResult } from './result.js';
@@ -341,42 +344,6 @@ export interface ExportData {
   readonly contentType?: string;
 }
 
-export type EditCommand =
-  | {
-      readonly kind: 'strength';
-      readonly sectionIndex: number;
-      readonly pointIndex: number;
-      readonly value: number;
-    }
-  | {
-      readonly kind: 'anchor';
-      readonly sectionIndex: number;
-      readonly pointIndex: number;
-      readonly value: 0 | 1;
-    }
-  | {
-      readonly kind: 'frequency';
-      readonly sectionIndex: number;
-      readonly startIndex: number;
-      readonly endIndex: number;
-    }
-  | {
-      readonly kind: 'duration';
-      readonly sectionIndex: number;
-      readonly value: number;
-    }
-  | {
-      readonly kind: 'add-point';
-      readonly sectionIndex: number;
-      readonly point: ControlPoint;
-      readonly atIndex?: number;
-    }
-  | {
-      readonly kind: 'remove-point';
-      readonly sectionIndex: number;
-      readonly pointIndex: number;
-    };
-
 export interface EditOptions {
   readonly maxBytes?: number;
   readonly displayName?: string;
@@ -384,16 +351,10 @@ export interface EditOptions {
   readonly signal?: AbortSignal;
 }
 
-export interface AssistOptions {
+export type AssistOptions = AssistCommand & {
   readonly maxBytes?: number;
-  readonly sectionIndex: number;
-  readonly startPointIndex: number;
-  readonly endPointIndex: number;
-  readonly startStrength: number;
-  readonly endStrength: number;
-  readonly reviewed: boolean;
   readonly signal?: AbortSignal;
-}
+};
 
 export interface EditData {
   readonly format: 'pulse-text';
@@ -608,6 +569,19 @@ function editFailure(diagnostics: readonly Diagnostic[]): OperationResult<EditDa
   return operationResult('edit', 'rejected', null, sortDiagnostics(effective));
 }
 
+function controlPointFromCommand(
+  command: Extract<EditCommand, { readonly kind: 'add-point' }>
+): ControlPoint {
+  const decimal = normalizeDecimal(command.value.toFixed(6));
+  return Object.freeze({
+    strength: Number(decimal),
+    strengthDecimal: decimal,
+    strengthRaw: decimal,
+    anchor: command.anchor,
+    sourceSpan: sourceSpan('', 0, 0)
+  });
+}
+
 function finalizeEdit(
   sourcePulse: Pulse,
   edited: {
@@ -755,7 +729,7 @@ export function applyPulseEdit(
         edited = addControlPoint(
           pulse,
           options.command.sectionIndex,
-          options.command.point,
+          controlPointFromCommand(options.command),
           options.command.atIndex
         );
         break;

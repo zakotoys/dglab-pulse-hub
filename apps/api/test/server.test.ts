@@ -1048,6 +1048,35 @@ describe('HTTP adapter', () => {
         .json()
         .diagnostics.some((item: { code: string }) => item.code === 'PULSE_EDIT_NOT_REVIEWED')
     ).toBe(true);
+    expect(unreviewed.json().diagnostics[0]).toEqual({
+      code: 'PULSE_EDIT_NOT_REVIEWED',
+      severity: 'error',
+      stage: 'semantic',
+      message: 'Assist requires explicit review and valid endpoints.',
+      location: { path: 'reviewed' }
+    });
+    const malformed = await app.inject({
+      method: 'POST',
+      url: '/api/v1/pulses/assist',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        text: VALID_TEXT,
+        sectionIndex: 0,
+        startPointIndex: 2,
+        endPointIndex: 1,
+        startStrength: 10,
+        endStrength: 90,
+        reviewed: false
+      }
+    });
+    expect(malformed.statusCode).toBe(422);
+    expect(malformed.json().diagnostics[0]).toEqual({
+      code: 'PULSE_EDIT_INVALID_VALUE',
+      severity: 'error',
+      stage: 'semantic',
+      message: 'Assist end point must be greater than its start point.',
+      location: { path: 'endPointIndex' }
+    });
     const reviewed = await app.inject({
       method: 'POST',
       url: '/api/v1/pulses/assist',

@@ -1,4 +1,5 @@
 export * from './result.js';
+export * from './commands.js';
 export * from './single.js';
 export * from './batch.js';
 export * from './task.js';

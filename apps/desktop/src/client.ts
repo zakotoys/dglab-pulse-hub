@@ -11,6 +11,7 @@ import {
 } from '@dglab-pulse-hub/contracts';
 import {
   documentFromInspect,
+  type AssistPayload,
   type EditPayload,
   type WorkspaceArtifact,
   type WorkspaceClient,
@@ -27,15 +28,7 @@ interface DesktopApi {
     readonly sourceDigest: string;
     readonly command: EditPayload;
   }) => Promise<unknown>;
-  readonly assist: (payload: {
-    readonly sourceDigest: string;
-    readonly sectionIndex: number;
-    readonly startPointIndex: number;
-    readonly endPointIndex: number;
-    readonly startStrength: number;
-    readonly endStrength: number;
-    readonly reviewed: true;
-  }) => Promise<unknown>;
+  readonly assist: (payload: { readonly sourceDigest: string } & AssistPayload) => Promise<unknown>;
   readonly diff: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
   readonly undo: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
   readonly redo: (payload: { readonly sourceDigest: string }) => Promise<unknown>;

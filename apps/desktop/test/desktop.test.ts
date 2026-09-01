@@ -199,6 +199,34 @@ describe('Electron IPC boundary', () => {
       }
     );
     expect(unreviewed).toMatchObject({ operation: 'edit', status: 'rejected', result: null });
+    expect((unreviewed as { diagnostics?: unknown[] }).diagnostics?.[0]).toEqual({
+      code: 'PULSE_EDIT_NOT_REVIEWED',
+      severity: 'error',
+      stage: 'semantic',
+      message: 'Assist requires explicit review and valid endpoints.',
+      location: { path: 'reviewed' }
+    });
+
+    const malformed = await assist?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      {
+        sourceDigest: nextDigest,
+        sectionIndex: 0,
+        startPointIndex: 2,
+        endPointIndex: 1,
+        startStrength: 10,
+        endStrength: 90,
+        reviewed: false
+      }
+    );
+    expect(malformed).toMatchObject({ operation: 'edit', status: 'rejected', result: null });
+    expect((malformed as { diagnostics?: unknown[] }).diagnostics?.[0]).toEqual({
+      code: 'PULSE_EDIT_INVALID_VALUE',
+      severity: 'error',
+      stage: 'semantic',
+      message: 'Assist end point must be greater than its start point.',
+      location: { path: 'endPointIndex' }
+    });
 
     const exportHandler = mocks.handlers.get('pulse:export');
     const sourceExport = await exportHandler?.(

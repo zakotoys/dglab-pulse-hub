@@ -17,19 +17,15 @@ import {
   inspectBatch,
   readInputFile,
   renderPreviewImage,
+  parseAssistCommand,
+  parseEditCommand,
   SingleFileTask,
   TempArtifactStore,
   toOperationDto
 } from '../src/index.js';
 import { operationResult } from '../src/result.js';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
-import {
-  QR_PREFIX,
-  QR_SHARE_URL,
-  expandWaveform,
-  parsePulse,
-  sourceSpan
-} from '@dglab-pulse-hub/core';
+import { QR_PREFIX, QR_SHARE_URL, expandWaveform, parsePulse } from '@dglab-pulse-hub/core';
 
 const VALID_TEXT = 'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
 function qrEnvelopeForInternal(text: string): string {
@@ -591,13 +587,8 @@ describe('application boundaries', () => {
         kind: 'add-point',
         sectionIndex: 0,
         atIndex: 1,
-        point: {
-          strength: 25,
-          strengthDecimal: '25',
-          strengthRaw: '25',
-          anchor: 0 as const,
-          sourceSpan: sourceSpan('', 0, 0)
-        }
+        value: 25,
+        anchor: 0 as const
       },
       { kind: 'remove-point', sectionIndex: 0, pointIndex: 1 }
     ] as const;
@@ -608,6 +599,70 @@ describe('application boundaries', () => {
       expect(result.data?.changeRecords.length, command.kind).toBeGreaterThan(0);
       expect(parsePulse(result.data?.bytes ?? new Uint8Array()).accepted, command.kind).toBe(true);
     }
+  });
+
+  it('validates edit and assist commands once at the application boundary', () => {
+    const edit = parseEditCommand({
+      kind: 'add-point',
+      sectionIndex: 0,
+      value: 25,
+      anchor: 1,
+      atIndex: 1
+    });
+    expect(edit.error).toBeNull();
+    expect(edit.value).toEqual({
+      kind: 'add-point',
+      sectionIndex: 0,
+      value: 25,
+      anchor: 1,
+      atIndex: 1
+    });
+
+    const mixed = parseEditCommand({
+      kind: 'strength',
+      sectionIndex: 0,
+      pointIndex: 1,
+      value: 42,
+      anchor: 1
+    });
+    expect(mixed.value).toBeNull();
+    expect(mixed.error?.code).toBe('PULSE_EDIT_INVALID_VALUE');
+    expect(mixed.error?.field).toBe('command');
+
+    const unreviewed = parseAssistCommand({
+      sectionIndex: 0,
+      startPointIndex: 0,
+      endPointIndex: 2,
+      startStrength: 10,
+      endStrength: 90,
+      reviewed: false
+    });
+    expect(unreviewed.value).toBeNull();
+    expect(unreviewed.error?.code).toBe('PULSE_EDIT_NOT_REVIEWED');
+    expect(unreviewed.error?.field).toBe('reviewed');
+
+    const malformed = parseAssistCommand({
+      sectionIndex: 0,
+      startPointIndex: 2,
+      endPointIndex: 1,
+      startStrength: 10,
+      endStrength: 90,
+      reviewed: false
+    });
+    expect(malformed.value).toBeNull();
+    expect(malformed.error?.code).toBe('PULSE_EDIT_INVALID_VALUE');
+    expect(malformed.error?.field).toBe('endPointIndex');
+
+    const reviewed = parseAssistCommand({
+      sectionIndex: 0,
+      startPointIndex: 0,
+      endPointIndex: 2,
+      startStrength: 10,
+      endStrength: 90,
+      reviewed: true
+    });
+    expect(reviewed.error).toBeNull();
+    expect(reviewed.value?.reviewed).toBe(true);
   });
 
   it('expires and atomically consumes artifacts', async () => {

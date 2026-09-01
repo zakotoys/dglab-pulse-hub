@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { OperationEnvelopeDto } from '@dglab-pulse-hub/contracts';
+import type {
+  EditCommandDto,
+  OperationEnvelopeDto,
+  ReviewedAssistCommandDto
+} from '@dglab-pulse-hub/contracts';
 
 export interface DesktopExportRequest {
   readonly sourceDigest: string;
@@ -32,27 +36,12 @@ export interface DesktopPreviewRequest {
 
 export interface DesktopEditRequest {
   readonly sourceDigest: string;
-  readonly command: {
-    readonly kind: 'strength' | 'anchor' | 'frequency' | 'duration' | 'add-point' | 'remove-point';
-    readonly sectionIndex: number;
-    readonly pointIndex?: number;
-    readonly value?: number;
-    readonly startIndex?: number;
-    readonly endIndex?: number;
-    readonly atIndex?: number;
-    readonly anchor?: 0 | 1;
-  };
+  readonly command: EditCommandDto;
 }
 
-export interface DesktopAssistRequest {
+export type DesktopAssistRequest = ReviewedAssistCommandDto & {
   readonly sourceDigest: string;
-  readonly sectionIndex: number;
-  readonly startPointIndex: number;
-  readonly endPointIndex: number;
-  readonly startStrength: number;
-  readonly endStrength: number;
-  readonly reviewed: true;
-}
+};
 
 export interface DesktopDiffRequest {
   readonly sourceDigest: string;

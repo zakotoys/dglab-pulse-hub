@@ -2,21 +2,15 @@ import type {
   BatchDataDto,
   DiffDataDto,
   EditDataDto,
+  EditCommandDto,
   InspectDataDto,
   OperationEnvelope,
+  ReviewedAssistCommandDto,
   RenderDataDto
 } from '@dglab-pulse-hub/contracts';
 
-export type EditPayload = {
-  readonly kind: 'strength' | 'anchor' | 'frequency' | 'duration' | 'add-point' | 'remove-point';
-  readonly sectionIndex: number;
-  readonly pointIndex?: number;
-  readonly value?: number;
-  readonly startIndex?: number;
-  readonly endIndex?: number;
-  readonly atIndex?: number;
-  readonly anchor?: 0 | 1;
-};
+export type EditPayload = EditCommandDto;
+export type AssistPayload = ReviewedAssistCommandDto;
 
 export interface WorkspaceFile {
   readonly name: string;
@@ -75,14 +69,7 @@ export interface WorkspaceClient {
   ) => Promise<WorkspaceOperation>;
   readonly assist: (
     document: WorkspaceDocument,
-    input: {
-      readonly sectionIndex: number;
-      readonly startPointIndex: number;
-      readonly endPointIndex: number;
-      readonly startStrength: number;
-      readonly endStrength: number;
-      readonly reviewed: true;
-    },
+    input: AssistPayload,
     signal?: AbortSignal
   ) => Promise<WorkspaceOperation>;
   readonly diff: (
