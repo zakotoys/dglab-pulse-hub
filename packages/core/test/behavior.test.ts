@@ -134,6 +134,18 @@ describe('stream rules and provenance', () => {
       ).toBe(true);
     }
   });
+
+  it('does not report rounded interpolation values as diagnostics', () => {
+    const parsed = parsePulse('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,25-0,100-1');
+    expect(parsed.pulse).not.toBeNull();
+    if (parsed.pulse === null) return;
+    const resolved = resolveControlPoints(parsed.pulse.sections[0]!.pulseElement.points);
+    expect(
+      resolved.diagnostics.some(
+        (item) => item.code === DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED
+      )
+    ).toBe(false);
+  });
 });
 
 describe('editing, validation, and rendering', () => {

@@ -150,7 +150,6 @@ export function resolveControlPoints(points: readonly ControlPoint[]): {
     .map((point, index) => (isRecord(point) && point.anchor === 1 ? index : -1))
     .filter((index) => index >= 0);
   const resolved: ResolvedControlPoint[] = [];
-  let roundedReported = false;
   let clippedReported = false;
   for (let index = 0; index < points.length; index += 1) {
     const point = points[index];
@@ -220,19 +219,6 @@ export function resolveControlPoints(points: readonly ControlPoint[]): {
     const x = (index - leftIndex) / (rightIndex - leftIndex);
     const rawValue = rawInterpolateQuadratic(leftPoint.strength, rightPoint.strength, x);
     const roundedValue = Math.round(rawValue);
-    if (roundedValue !== rawValue && !roundedReported) {
-      diagnostics.push(
-        makeDiagnostic(
-          DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED,
-          'warning',
-          'semantic',
-          'Interpolated intensity was rounded to the nearest integer.',
-          location('points[' + index + '].strength', undefined, { pointIndex: index }),
-          { parameters: { value: rawValue, rounded: roundedValue } }
-        )
-      );
-      roundedReported = true;
-    }
     const value = Math.min(100, Math.max(0, roundedValue));
     if (value !== roundedValue && !clippedReported) {
       diagnostics.push(

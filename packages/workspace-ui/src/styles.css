@@ -219,14 +219,23 @@ textarea:focus-visible,
   gap: 10px;
   min-width: 0;
 }
-.version {
-  color: var(--text-faint);
-  font:
-    10px ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
-  white-space: nowrap;
+.home-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  font-size: 18px;
+  line-height: 1;
+}
+.home-button:hover {
+  color: var(--accent-strong);
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
 }
 .preference-control {
   display: flex;
@@ -1292,9 +1301,6 @@ textarea:focus-visible,
   }
   .visual-grid {
     grid-template-columns: 1fr;
-  }
-  .version {
-    display: none;
   }
 }
 

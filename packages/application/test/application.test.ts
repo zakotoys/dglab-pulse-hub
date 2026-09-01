@@ -13,8 +13,8 @@ import {
   encodeQr,
   exportBatch,
   exportPulse,
-  inspectBatch,
   inspectPulse,
+  inspectBatch,
   readInputFile,
   renderPreviewImage,
   SingleFileTask,
@@ -125,6 +125,30 @@ describe('application boundaries', () => {
           item.location.path === 'sections'
       )
     ).toHaveLength(1);
+  });
+
+  it('reports an unverified section count once globally and never on sections', () => {
+    const section = '0,0,0,1,1/0-1,100-1';
+    const inspected = inspectPulse(
+      'Dungeonlab+pulse:0,1,0=' + Array.from({ length: 4 }, () => section).join('+section+')
+    );
+    expect(
+      inspected.diagnostics.filter(
+        (item) => item.code === 'PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT'
+      )
+    ).toHaveLength(1);
+    expect(
+      inspected.data?.metadata.pulse.diagnostics.filter(
+        (item) => item.code === 'PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT'
+      )
+    ).toHaveLength(1);
+    expect(
+      inspected.data?.metadata.sections.some((sectionMetadata) =>
+        sectionMetadata.diagnostics.some(
+          (item) => item.code === 'PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT'
+        )
+      )
+    ).toBe(false);
   });
 
   it('rejects intensity values that cannot be represented by the App QR scale', () => {

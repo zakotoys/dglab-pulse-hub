@@ -49,7 +49,7 @@ import {
   type AssistProposalFingerprintInput,
   type QrImageAction
 } from './workflow.js';
-import { createTranslator, detectLocale, type Locale } from './i18n.js';
+import { createTranslator, detectLocale, localizeDiagnostic, type Locale } from './i18n.js';
 import { detectTheme, type Theme } from './preferences.js';
 
 type StreamPoint = NonNullable<InspectDataDto['stream']>['points'][number];
@@ -478,6 +478,26 @@ export function WorkspaceApp({
     setQrArtifact(null);
     setDiffEnvelope(null);
     clearHistory();
+  }
+
+  function refreshWorkspaceContext(): void {
+    interactionGeneration.current += 1;
+    abortController.current?.abort();
+    abortController.current = null;
+    setBusy(false);
+    setBusyLabel('');
+    clearDocumentState();
+    setEnvelope(null);
+    setMessage('');
+    setQrInput('');
+    setCompareText('');
+    setCompareFile(null);
+    setCompareName('compare.pulse');
+    setBatchFiles([]);
+    setBatchEnvelope(null);
+    setBatchMode('inspect');
+    setBatchProgress({ completed: 0, total: 0 });
+    setDragActive(false);
   }
 
   function commitHistory(document: WorkspaceDocument): void {
@@ -1101,9 +1121,15 @@ export function WorkspaceApp({
           </div>
         </div>
         <div className="topbar-actions">
-          <span className="version">
-            {t('rules')} {result?.recognition.ruleVersion ?? RULE_VERSION}
-          </span>
+          <button
+            className="home-button"
+            type="button"
+            aria-label={t('home')}
+            title={t('refreshWorkspace')}
+            onClick={refreshWorkspaceContext}
+          >
+            <span aria-hidden="true">⌂</span>
+          </button>
           <label className="preference-control">
             <span>{t('language')}</span>
             <select
@@ -1472,24 +1498,33 @@ export function WorkspaceApp({
                 <span>{t('diagnostics')}</span>
                 <span className="muted">{diagnostics.length}</span>
               </div>
-              {diagnostics.map((item, index) => (
-                <div className="diagnostic" data-severity={item.severity} key={item.code + index}>
-                  <span className="severity" aria-hidden="true">
-                    {item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}
-                  </span>
-                  <div>
-                    <b>{item.code}</b>
-                    <p>{item.message}</p>
-                    <small>
-                      {item.location.path}
-                      {item.location.span === undefined
-                        ? ''
-                        : ' · ' + t('lineColumn', item.location.span)}
-                      {item.suggestion === undefined ? '' : ' · ' + item.suggestion}
-                    </small>
-                  </div>
-                </div>
-              ))}
+              {diagnostics.map((item, index) =>
+                (() => {
+                  const localized = localizeDiagnostic(item, t);
+                  return (
+                    <div
+                      className="diagnostic"
+                      data-severity={item.severity}
+                      key={item.code + index}
+                    >
+                      <span className="severity" aria-hidden="true">
+                        {item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}
+                      </span>
+                      <div>
+                        <b>{item.code}</b>
+                        <p>{localized.message}</p>
+                        <small>
+                          {item.location.path}
+                          {item.location.span === undefined
+                            ? ''
+                            : ' · ' + t('lineColumn', item.location.span)}
+                          {localized.suggestion === undefined ? '' : ' · ' + localized.suggestion}
+                        </small>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </section>
           )}
           {qrPreviewUrl !== null && (
@@ -2082,7 +2117,9 @@ export function WorkspaceApp({
               </div>
               {diff === null ? (
                 <div className="empty">
-                  {diffEnvelope.diagnostics.map((item) => item.message).join(' ')}
+                  {diffEnvelope.diagnostics
+                    .map((item) => localizeDiagnostic(item, t).message)
+                    .join(' ')}
                 </div>
               ) : (
                 <>
@@ -2149,7 +2186,9 @@ export function WorkspaceApp({
               </div>
               {batch === null ? (
                 <div className="empty">
-                  {batchEnvelope.diagnostics.map((item) => item.message).join(' ')}
+                  {batchEnvelope.diagnostics
+                    .map((item) => localizeDiagnostic(item, t).message)
+                    .join(' ')}
                 </div>
               ) : (
                 <div className="batch-list">

@@ -25,4 +25,13 @@ describe('WorkspaceApp QR image controls', () => {
     expect(markup).toContain('aria-label="言語"');
     expect(markup).toContain('data-theme="dark"');
   });
+
+  it('uses a home control instead of exposing the rules version in navigation', () => {
+    const client = { fileMode: 'browser' } as WorkspaceClient;
+    const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
+
+    expect(markup).toContain('aria-label="Home"');
+    expect(markup).toContain('title="Refresh workspace"');
+    expect(markup).not.toContain('rules pulse-rules-v1');
+  });
 });

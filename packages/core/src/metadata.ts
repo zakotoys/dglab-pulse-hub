@@ -1,4 +1,4 @@
-import { sortDiagnostics } from './diagnostics.js';
+import { DIAGNOSTIC_CODES, sortDiagnostics } from './diagnostics.js';
 import { expandWaveform, sectionMetadata, sectionTiming } from './expand.js';
 import {
   DEFAULT_RULE_SET,
@@ -66,7 +66,15 @@ export function projectMetadata(
   options: MetadataOptions = {}
 ): PulseMetadataBundle {
   const rules = options.rules ?? DEFAULT_RULE_SET;
-  const diagnostics = sortDiagnostics(options.diagnostics ?? []);
+  let unverifiedSectionCountReported = false;
+  const diagnostics = sortDiagnostics(options.diagnostics ?? []).filter((item) => {
+    if (item.code === DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED) return false;
+    if (item.code !== DIAGNOSTIC_CODES.SEMANTIC_UNVERIFIED_SECTION_COUNT) return true;
+    if (item.location.sectionIndex !== undefined) return false;
+    if (unverifiedSectionCountReported) return false;
+    unverifiedSectionCountReported = true;
+    return true;
+  });
   const sections: SectionMetadata[] = pulse.sections
     .map((_, index) => {
       const sectionDiagnostics = diagnostics.filter((item) => item.location.sectionIndex === index);

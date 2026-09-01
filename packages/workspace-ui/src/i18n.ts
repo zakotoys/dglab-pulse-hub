@@ -1,6 +1,7 @@
 import en from './locales/en-US.json' with { type: 'json' };
 import ja from './locales/ja-JP.json' with { type: 'json' };
 import zh from './locales/zh-CN.json' with { type: 'json' };
+import type { Diagnostic } from '@dglab-pulse-hub/core';
 
 export const supportedLocales = ['en-US', 'zh-CN', 'ja-JP'] as const;
 export type Locale = (typeof supportedLocales)[number];
@@ -38,10 +39,43 @@ export type Translator = (
   values?: Readonly<Record<string, string | number>>
 ) => string;
 
+type DiagnosticMessageKeys = {
+  readonly message: MessageKey;
+  readonly suggestion?: MessageKey;
+};
+
+const diagnosticMessageKeys: Readonly<Record<string, DiagnosticMessageKeys>> = Object.freeze({
+  PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT: {
+    message: 'diagnosticUnverifiedSectionCount',
+    suggestion: 'diagnosticUnverifiedSectionCountSuggestion'
+  }
+});
+
 export function createTranslator(locale: Locale): Translator {
   return (key, values = {}) =>
     Object.entries(values).reduce(
       (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
       messages[locale][key]
     );
+}
+
+export function localizeDiagnostic(
+  diagnostic: Diagnostic,
+  translate: Translator
+): { readonly message: string; readonly suggestion?: string } {
+  const keys = diagnosticMessageKeys[diagnostic.code];
+  if (keys === undefined) {
+    return {
+      message: diagnostic.message,
+      ...(diagnostic.suggestion === undefined ? {} : { suggestion: diagnostic.suggestion })
+    };
+  }
+  return {
+    message: translate(keys.message),
+    ...(keys.suggestion === undefined
+      ? diagnostic.suggestion === undefined
+        ? {}
+        : { suggestion: diagnostic.suggestion }
+      : { suggestion: translate(keys.suggestion) })
+  };
 }

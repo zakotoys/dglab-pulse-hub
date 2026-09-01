@@ -85,6 +85,23 @@ interface ParsedInput {
   readonly diagnostics: readonly Diagnostic[];
 }
 
+function normalizeInspectionDiagnostics(diagnostics: readonly Diagnostic[]): readonly Diagnostic[] {
+  let unverifiedSectionCountReported = false;
+  return diagnostics.filter((diagnostic) => {
+    if (diagnostic.code === DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED) return false;
+    if (
+      diagnostic.code !== DIAGNOSTIC_CODES.SEMANTIC_UNVERIFIED_SECTION_COUNT ||
+      diagnostic.location.path !== 'sections' ||
+      diagnostic.location.sectionIndex !== undefined
+    ) {
+      return true;
+    }
+    if (unverifiedSectionCountReported) return false;
+    unverifiedSectionCountReported = true;
+    return true;
+  });
+}
+
 /** Resolve text/bytes through recognition, or defensively validate a model
  * supplied by an in-process caller. Object inputs must use the same source
  * snapshot and resource boundary as parsed inputs; otherwise diff/export/edit
@@ -210,22 +227,23 @@ export function inspectPulse(
     signal: options.signal
   });
   diagnostics.push(...expansion.diagnostics);
+  const normalizedDiagnostics = normalizeInspectionDiagnostics(diagnostics);
   if (cancelled(options.signal)) {
-    return operationResult('inspect', 'cancelled', null, sortDiagnostics(diagnostics));
+    return operationResult('inspect', 'cancelled', null, sortDiagnostics(normalizedDiagnostics));
   }
   const stream = expansion.stream;
-  const status = statusFromDiagnostics(diagnostics, stream !== null);
+  const status = statusFromDiagnostics(normalizedDiagnostics, stream !== null);
   // A rejected expansion must not leak a partial metadata/Pulse payload. The
   // public envelope treats every non-success result as terminal with `null`
   // data, even though the low-level expansion result may contain projections
   // useful for diagnostics.
   if (status !== 'success') {
-    return operationResult('inspect', status, null, sortDiagnostics(diagnostics));
+    return operationResult('inspect', status, null, sortDiagnostics(normalizedDiagnostics));
   }
   const metadata = projectMetadata(parsed.parse.pulse, stream, {
     displayName: options.input?.displayName,
     byteSize: options.input?.bytes,
-    diagnostics
+    diagnostics: normalizedDiagnostics
   });
   const data: InspectData = {
     recognition: parsed.parse.recognition,
@@ -234,7 +252,7 @@ export function inspectPulse(
     stream: options.includeStream === false ? null : stream,
     sourceDigest: parsed.parse.pulse.source.digest
   };
-  return operationResult('inspect', status, data, sortDiagnostics(diagnostics));
+  return operationResult('inspect', status, data, sortDiagnostics(normalizedDiagnostics));
 }
 
 /** Compare two independently supplied documents through the same semantic,
