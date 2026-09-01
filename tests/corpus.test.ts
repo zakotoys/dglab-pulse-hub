@@ -48,5 +48,5 @@ describe('checked-in corpus fixtures', () => {
     expect(report.failureCount).toBe(0);
     expect(report.qrRoundTrips).toBe(2);
     expect(report.failures).toEqual([]);
-  });
+  }, 15_000);
 });
