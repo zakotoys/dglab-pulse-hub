@@ -3,7 +3,7 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /workspace
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/cli/package.json apps/cli/package.json
 COPY apps/desktop/package.json apps/desktop/package.json
