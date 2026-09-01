@@ -364,11 +364,15 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       });
       const effective = requestResult(result, requestSignal.signal);
       if (effective.status !== 'success' || effective.data === null) return sendEnvelope(reply, effective);
-      const dto = toOperationDto(effective);
+      const displayName = asciiDisplayName(effective.data.displayName);
+      const dto = toOperationDto({
+        ...effective,
+        data: { ...effective.data, displayName }
+      });
       return reply
         .code(200)
-        .header('content-type', 'text/plain; charset=utf-8')
-        .header('content-disposition', contentDisposition(effective.data.displayName))
+        .header('content-type', effective.data.contentType ?? 'text/plain; charset=utf-8')
+        .header('content-disposition', contentDisposition(displayName))
         .header('x-pulse-schema-version', 'pulse-contract-v1')
         .header('x-pulse-rule-version', 'pulse-rules-v1')
         .header('x-pulse-result', JSON.stringify(dto.result))
@@ -1703,9 +1707,12 @@ function sendEnvelope(reply: FastifyReply, result: OperationResult<unknown>): Fa
   return reply.code(code).type('application/json').send(envelope);
 }
 
+function asciiDisplayName(displayName: string): string {
+  return sanitizeDisplayName(basename(displayName)).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 180) || 'pulse-output';
+}
+
 function contentDisposition(displayName: string): string {
-  const safe = sanitizeDisplayName(basename(displayName)).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 180) || 'pulse-output';
-  return 'attachment; filename="' + safe + '"';
+  return 'attachment; filename="' + asciiDisplayName(displayName) + '"';
 }
 
 export async function startServer(options: ApiOptions & { readonly port?: number; readonly host?: string } = {}): Promise<FastifyInstance> {

@@ -9,6 +9,7 @@
 export const FORMAT_PROFILE = 'dungeonlab-pulse-text/corpus-v1' as const;
 export const RULE_VERSION = 'pulse-rules-v1' as const;
 export const QR_PREFIX = '#DGLAB-PULSE#' as const;
+export const QR_SHARE_URL = 'https://www.dungeon-lab.com/app-download.php' as const;
 export const PULSE_PREFIX = 'Dungeonlab+pulse:' as const;
 
 export type FormatProfile = typeof FORMAT_PROFILE;

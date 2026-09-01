@@ -46,7 +46,7 @@
 当前项目支持的格式边界如下：
 
 - `.pulse`：本项目唯一的规范用户波形输入和输出格式，使用 `Dungeonlab+pulse:` 语法。
-- QR：以 `#DGLAB-PULSE#` 前缀承载的 `.pulse` 分享封装，还原后得到 `.pulse` 明文，不作为独立波形格式。
+- QR：以 `https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#` URL fragment 承载的 `.pulse` 分享封装，还原后得到 `.pulse` 明文，不作为独立波形格式。
 - `WaveformStream`：由 `.pulse` 展开的内部波形序列，用于预览、播放模拟、编辑和预览图导出，不作为独立文件格式。
 - dglab-kit 的 JSON/JSON5/`.pulses` 数据包、BLE/V3/V4 传输帧和其他社区方言不属于当前核心文件格式支持范围。
 

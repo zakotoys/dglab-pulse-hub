@@ -17,7 +17,6 @@ import {
   inspectDataSchema,
   type BatchDataDto,
   type DiffDataDto,
-  type EditDataDto,
   type InspectDataDto,
   type OperationEnvelope
 } from '@dglab-pulse-hub/contracts';
@@ -30,6 +29,7 @@ import {
 import { nearestTimelinePointIndex, timelineIndexForKey, timelineSectionForPoint, timelineTimeAtClientX } from './timeline.js';
 import {
   type EditPayload,
+  type WorkspaceArtifact,
   type WorkspaceClient,
   type WorkspaceDocument,
   type WorkspaceFile,
@@ -160,7 +160,8 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   const [assistEndStrengthInput, setAssistEndStrengthInput] = useState('100');
   const [assistReviewedFingerprint, setAssistReviewedFingerprint] = useState<string | null>(null);
   const [assistPreview, setAssistPreview] = useState<readonly number[]>([]);
-  const [changeRecords, setChangeRecords] = useState<Readonly<EditDataDto['changeRecords']>>([]);
+  const [qrArtifact, setQrArtifact] = useState<WorkspaceArtifact | null>(null);
+  const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [batchFiles, setBatchFiles] = useState<readonly WorkspaceFile[]>([]);
   const [batchEnvelope, setBatchEnvelope] = useState<OperationEnvelope | null>(null);
   const [batchMode, setBatchMode] = useState<'inspect' | 'export'>('inspect');
@@ -175,6 +176,12 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   const historyRef = useRef<readonly WorkspaceDocument[]>([]);
   const cursorRef = useRef(-1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const selectedPointRef = useRef<number | null>(null);
+
+  function updateSelectedPoint(index: number | null): void {
+    selectedPointRef.current = index;
+    setSelectedPoint(index);
+  }
 
   // Contract parsing allocates fresh objects. Keep the parsed view model
   // stable between renders so effects that synchronize form fields do not
@@ -222,9 +229,8 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   );
   const playback = useMemo(() => {
     if (stream === null) return null;
-    return new PreviewPlaybackController(stream as unknown as WaveformStream);
+    return new PreviewPlaybackController(stream as unknown as WaveformStream, { playbackRate: 0.2 });
   }, [stream?.digest]);
-
   useEffect(() => () => {
     interactionGeneration.current += 1;
     abortController.current?.abort();
@@ -251,13 +257,28 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     const unsubscribe = playback.subscribe((snapshot) => {
       setPlaying(snapshot.state === 'playing');
       setPlayhead(snapshot.currentTimeMs);
-      if (snapshot.currentPointIndex !== null) selectStreamPoint(snapshot.currentPointIndex);
+      if (snapshot.state !== 'idle' && snapshot.currentPointIndex !== null) {
+        selectStreamPoint(snapshot.currentPointIndex);
+      }
     });
     return () => {
       unsubscribe();
       playback.dispose();
     };
   }, [playback]);
+
+  useEffect(() => {
+    if (qrArtifact === null) {
+      setQrPreviewUrl(null);
+      return;
+    }
+    const bytes = qrArtifact.bytes.slice().buffer as ArrayBuffer;
+    const url = URL.createObjectURL(new Blob([bytes], {
+      type: qrArtifact.contentType ?? 'image/jpeg'
+    }));
+    setQrPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [qrArtifact]);
 
   useEffect(() => {
     if (point !== undefined) {
@@ -325,10 +346,10 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     if (nextResult !== null) {
       const nextPointIndex = nextResult.stream === null || nextResult.stream.points.length === 0
         ? null
-        : selectedPoint === null
+        : selectedPointRef.current === null
           ? 0
-          : Math.min(selectedPoint, nextResult.stream.points.length - 1);
-      setSelectedPoint(nextPointIndex);
+          : Math.min(selectedPointRef.current, nextResult.stream.points.length - 1);
+      updateSelectedPoint(nextPointIndex);
       setSelectedSection((current) => {
         const pointSection = nextPointIndex === null || nextResult.stream === null
           ? null
@@ -339,7 +360,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       });
       setHoveredPointIndex(null);
     } else {
-      setSelectedPoint(null);
+      updateSelectedPoint(null);
       setHoveredPointIndex(null);
     }
     setPlayhead(0);
@@ -348,6 +369,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
 
   function applyOperationView(operation: WorkspaceOperation): void {
     applyInspectionView(operation.envelope);
+    setQrArtifact(null);
     const nextResult = inspectResult(operation.envelope);
     const nextDocument = operation.document ?? (nextResult === null ? null : {
       displayName: nextResult.metadata.file.displayName,
@@ -366,7 +388,6 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     setHistory(next);
     setHistoryCursor(0);
     setAssistReviewedFingerprint(null);
-    setChangeRecords([]);
   }
 
   function clearHistory(): void {
@@ -381,14 +402,14 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     setFileName('');
     setWorkspaceDocument(null);
     setSelectedSection(0);
-    setSelectedPoint(null);
+    updateSelectedPoint(null);
     setHoveredPointIndex(null);
     setPlaying(false);
     setPlayhead(0);
     setExportMode('source');
     setAssistPreview([]);
     setAssistReviewedFingerprint(null);
-    setChangeRecords([]);
+    setQrArtifact(null);
     setDiffEnvelope(null);
     clearHistory();
   }
@@ -536,7 +557,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       if (operation.artifact !== undefined) {
         const saved = await client.saveArtifact(
           operation.artifact,
-          format === 'qr-envelope' ? 'pulse.qr.txt' : (fileName || 'pulse.pulse'),
+          format === 'qr-envelope' ? (operation.artifact.displayName || 'pulse.qr.jpg') : (fileName || 'pulse.pulse'),
           controller.signal
         );
         if (saved.status !== 'success') {
@@ -544,7 +565,8 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
           return;
         }
       }
-      setMessage(format === 'qr-envelope' ? 'QR text downloaded.' : 'Pulse file downloaded.');
+      if (format === 'qr-envelope') setQrArtifact(operation.artifact ?? null);
+      setMessage(format === 'qr-envelope' ? 'QR image downloaded.' : 'Pulse file downloaded.');
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       if (error instanceof DOMException && error.name === 'AbortError') setMessage('Export cancelled.');
@@ -594,7 +616,6 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       applyOperationView(operation);
       commitHistory(operation.document);
       setExportMode('canonical');
-      setChangeRecords(operation.editData?.changeRecords ?? []);
       setMessage('Edit applied. The source snapshot remains available through undo.');
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
@@ -694,9 +715,8 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       applyOperationView(operation);
       commitHistory(operation.document);
       setExportMode('canonical');
-      setChangeRecords(operation.editData?.changeRecords ?? []);
       setAssistReviewedFingerprint(null);
-      setMessage('Reviewed curve applied. The change record is available in the response.');
+      setMessage('Reviewed curve applied.');
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       setMessage(error instanceof DOMException && error.name === 'AbortError' ? 'Curve application cancelled.' : 'Curve application failed.');
@@ -772,7 +792,6 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
       cursorRef.current = nextCursor;
       setHistoryCursor(nextCursor);
       setExportMode(nextCursor === 0 ? 'source' : 'canonical');
-      setChangeRecords([]);
       setMessage(direction < 0 ? 'Undo applied.' : 'Redo applied.');
     } catch {
       // Keep the cursor at the last accepted snapshot if an adapter exception
@@ -808,7 +827,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     if (index === null || stream === null) return;
     const nextSection = timelineSectionForPoint(stream.points, index);
     if (nextSection === null) return;
-    setSelectedPoint(index);
+    updateSelectedPoint(index);
     setSelectedSection(nextSection);
   }
 
@@ -830,7 +849,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     setSelectedSection(index);
     if (stream === null) return;
     const first = stream.points.findIndex((item) => item.source.sectionIndex === index);
-    setSelectedPoint(first >= 0 ? first : null);
+    updateSelectedPoint(first >= 0 ? first : null);
   }
 
   const plot = useMemo(() => {
@@ -869,7 +888,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
           {fileName !== '' && <div className="file-chip"><span aria-hidden="true">◇</span><div><b title={fileName}>{fileName}</b><small>{result?.metadata.file.byteSize ?? 0} bytes{dirty ? ' · unsaved' : ''}</small></div></div>}
           {result !== null && <div className="sidebar-block"><div className="section-heading"><span>Pulse</span><span className="muted">r{result.pulse.revision}</span></div><dl className="compact"><div><dt>Sections</dt><dd>{result.metadata.pulse.sectionCount}</dd></div><div><dt>Enabled</dt><dd>{result.metadata.pulse.enabledSectionCount}</dd></div><div><dt>Duration</dt><dd>{formatMs(result.metadata.pulse.effectiveDurationMs)}</dd></div><div><dt>Points</dt><dd>{result.metadata.stream.stats.pointCount}</dd></div></dl></div>}
           <div className="sidebar-block"><div className="section-heading"><span>History</span><span className="muted">{history.length}</span></div><div className="history-actions"><button className="icon-button" aria-label="Undo" disabled={!canUndo || busy} onClick={() => void moveHistory(-1)}>↶</button><button className="icon-button" aria-label="Redo" disabled={!canRedo || busy} onClick={() => void moveHistory(1)}>↷</button></div></div>
-          <div className="sidebar-block"><div className="section-heading"><span>Export</span></div><label className="select-label">Text mode<select value={exportMode} onChange={(event) => setExportMode(event.target.value as 'source' | 'canonical')} disabled={busy}><option value="source" disabled={dirty}>Source snapshot</option><option value="canonical">Canonical</option></select></label><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent()}>↓ <span>Export .pulse</span></button><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent('qr-envelope')}>⌁ <span>Export QR text</span></button></div>
+          <div className="sidebar-block"><div className="section-heading"><span>Export</span></div><label className="select-label">Text mode<select value={exportMode} onChange={(event) => setExportMode(event.target.value as 'source' | 'canonical')} disabled={busy}><option value="source" disabled={dirty}>Source snapshot</option><option value="canonical">Canonical</option></select></label><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent()}>↓ <span>Export .pulse</span></button><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent('qr-envelope')}>⌁ <span>Export QR image</span></button></div>
           <div className="sidebar-block"><div className="section-heading"><span>Preview image</span></div><div className="preview-actions"><select aria-label="Preview format" value={previewFormat} onChange={(event) => setPreviewFormat(event.target.value as 'svg' | 'png' | 'jpg')} disabled={busy}><option value="svg">SVG</option><option value="png">PNG</option><option value="jpg">JPG</option></select><button className="secondary" disabled={workspaceDocument === null || busy} onClick={() => void renderPreview()}>↓ Download</button></div></div>
           {busy && <button className="cancel" onClick={() => abortController.current?.abort()}>Cancel current task</button>}
           {message !== '' && <p className="notice" role="status">{message}</p>}
@@ -877,13 +896,13 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
         <div className="content">
           <section className="hero-row"><div><p className="eyebrow">WORKSPACE</p><h1>{fileName || 'Open a pulse document'}</h1><p className="subline">{result === null ? 'Ready for a .pulse or QR input.' : result.recognition.profile + ' · ' + result.recognition.format}</p></div>{envelope !== null && <div className="badge" data-status={envelope.status}>{envelope.status}</div>}</section>
           {diagnostics.length > 0 && <section className="diagnostics" aria-live="polite"><div className="section-heading"><span>Diagnostics</span><span className="muted">{diagnostics.length}</span></div>{diagnostics.map((item, index) => <div className="diagnostic" data-severity={item.severity} key={item.code + index}><span className="severity" aria-hidden="true">{item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}</span><div><b>{item.code}</b><p>{item.message}</p><small>{item.location.path}{item.location.span === undefined ? '' : ' · line ' + item.location.span.line + ', column ' + item.location.span.column}{item.suggestion === undefined ? '' : ' · ' + item.suggestion}</small></div></div>)}</section>}
-          {changeRecords.length > 0 && <section className="panel changes-panel" aria-live="polite"><div className="panel-head"><div><p className="eyebrow">CHANGE RECORDS</p><h2>Latest applied changes</h2></div><span className="muted">{changeRecords.length}</span></div><div className="change-list">{changeRecords.map((record, index) => <div className="change-row" key={record.id + '-' + index}><strong>{record.description}</strong><code>{record.path}</code><span>{String(record.before ?? '∅')} → {String(record.after ?? '∅')}</span>{record.affectedPointIndices !== undefined && record.affectedPointIndices.length > 0 && <small>Points {record.affectedPointIndices.map((item) => item + 1).join(', ')}</small>}</div>)}</div></section>}
+          {qrPreviewUrl !== null && <section className="panel qr-preview-panel" aria-live="polite"><div className="panel-head"><div><p className="eyebrow">QR EXPORT</p><h2>Generated QR image</h2></div><span className="muted">JPG</span></div><img className="qr-preview-image" src={qrPreviewUrl} alt="Generated pulse QR code" /></section>}
           {stream !== null ? <>
-            <section className="panel timeline-panel"><div className="panel-head"><div><p className="eyebrow">WAVEFORM STREAM</p><h2>Intensity and frequency</h2></div><div className="legend"><span><i className="swatch intensity" />Intensity</span><span><i className="swatch frequency" />Frequency index</span></div></div><div className="timeline-wrap"><svg viewBox="0 0 960 280" role="img" aria-label="Waveform stream timeline. Hover or focus to inspect point metadata." tabIndex={0} onClick={selectTimeline} onPointerMove={hoverTimeline} onPointerLeave={() => setHoveredPointIndex(null)} onFocus={focusTimeline} onKeyDown={(event) => { const key = event.key; if (key === 'ArrowRight') moveTimelinePoint(1); else if (key === 'ArrowLeft') moveTimelinePoint(-1); else if (key === 'Home' || key === 'End') moveTimelineToKey(key); else return; event.preventDefault(); }}><line className="axis" x1="0" y1="240" x2="960" y2="240" /><line className="axis" x1="0" y1="0" x2="0" y2="240" /><polyline className="line frequency" points={plot.frequency} /><polyline className="line intensity" points={plot.intensity} />{point !== undefined && <line className="cursor" x1={(point.timeMs / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} x2={(point.timeMs / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} y1="0" y2="240" />}</svg>{hoveredPoint !== undefined && <div className="timeline-tooltip" role="status" aria-live="polite"><strong>Point {hoveredPoint.index + 1}</strong><span>{formatMs(hoveredPoint.timeMs)} · {hoveredPoint.intensityDecimal} intensity · frequency {hoveredPoint.frequencyIndex}</span><small>Section {hoveredPoint.source.sectionIndex + 1} · {hoveredPoint.source.origin}</small></div>}<div className="time-labels"><span>0 ms</span><span>{formatMs(stream.totalDurationMs)}</span></div></div><div className="playback"><button className="icon-button" aria-label={playing ? 'Pause preview playback' : 'Play preview playback'} onClick={() => { if (playback === null || stream.totalDurationMs <= 0) return; if (playing) playback.pause(); else playback.play(); }}>{playing ? 'Ⅱ' : '▶'}</button><button className="icon-button" aria-label="Stop preview playback" onClick={() => { playback?.stop(); setPlayhead(0); }}>■</button><input aria-label="Preview playback position" type="range" min="0" max={Math.max(1, stream.totalDurationMs)} value={Math.min(playhead, stream.totalDurationMs)} onChange={(event) => { const value = Number(event.target.value); playback?.seek(value); setPlaying(false); }} /><span className="timecode">{formatMs(playhead)} / {formatMs(stream.totalDurationMs)}</span><span className="preview-label">Preview playback</span></div></section>
+            <section className="panel timeline-panel"><div className="panel-head"><div><p className="eyebrow">WAVEFORM STREAM</p><h2>Intensity and frequency</h2></div><div className="legend"><span><i className="swatch intensity" />Intensity</span><span><i className="swatch frequency" />Frequency index</span></div></div><div className="timeline-wrap"><svg viewBox="0 0 960 280" role="img" aria-label="Waveform stream timeline. Hover or focus to inspect point metadata." tabIndex={0} onClick={selectTimeline} onPointerMove={hoverTimeline} onPointerLeave={() => setHoveredPointIndex(null)} onFocus={focusTimeline} onKeyDown={(event) => { const key = event.key; if (key === 'ArrowRight') moveTimelinePoint(1); else if (key === 'ArrowLeft') moveTimelinePoint(-1); else if (key === 'Home' || key === 'End') moveTimelineToKey(key); else return; event.preventDefault(); }}><line className="axis" x1="0" y1="240" x2="960" y2="240" /><line className="axis" x1="0" y1="0" x2="0" y2="240" /><polyline className="line frequency" points={plot.frequency} /><polyline className="line intensity" points={plot.intensity} />{stream.points.length > 0 && <line className="cursor" x1={(playhead / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} x2={(playhead / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} y1="0" y2="240" />}</svg>{hoveredPoint !== undefined && <div className="timeline-tooltip" role="status" aria-live="polite"><strong>Point {hoveredPoint.index + 1}</strong><span>{formatMs(hoveredPoint.timeMs)} · {hoveredPoint.intensityDecimal} intensity · frequency {hoveredPoint.frequencyIndex}</span><small>Section {hoveredPoint.source.sectionIndex + 1} · repetition {hoveredPoint.source.repetitionIndex + 1} · {hoveredPoint.source.origin}</small></div>}<div className="time-labels"><span>0 ms</span><span>{formatMs(stream.totalDurationMs)}</span></div></div><div className="playback"><button className="icon-button" aria-label={playing ? 'Pause preview playback' : 'Play preview playback'} onClick={() => { if (playback === null || stream.totalDurationMs <= 0) return; if (playing) playback.pause(); else playback.play(); }}>{playing ? 'Ⅱ' : '▶'}</button><button className="icon-button" aria-label="Stop preview playback" onClick={() => { playback?.stop(); setPlayhead(0); }}>■</button><input aria-label="Preview playback position" type="range" min="0" max={Math.max(1, stream.totalDurationMs)} value={Math.min(playhead, stream.totalDurationMs)} onChange={(event) => { const value = Number(event.target.value); playback?.seek(value); setPlaying(false); }} /><span className="timecode">{formatMs(playhead)} / {formatMs(stream.totalDurationMs)}</span><span className="preview-label">Preview playback</span></div></section>
             <section className="visual-grid"><div className="panel intensity-panel"><div className="panel-head"><div><p className="eyebrow">INTENSITY MAP</p><h2>Current strength</h2></div><span className="muted">numeric + colour</span></div><div className="intensity-visual"><div className="intensity-ring" style={{ '--intensity': (point?.intensity ?? 0) + '%' } as CSSProperties} role="img" aria-label={'Current intensity ' + (point?.intensityDecimal ?? '0') + ' out of 100'}><span>{point?.intensityDecimal ?? '0'}</span><small>/ 100</small></div><div className="intensity-scale"><div className="colour-strip" /><div className="scale-labels"><span>0</span><span>50</span><span>100</span></div><p>{point === undefined ? 'Select a point to inspect its colour mapping.' : 'Colour is a secondary cue. The exact intensity remains visible as a number.'}</p></div></div></div><div className="panel stream-stats"><div className="panel-head"><div><p className="eyebrow">STREAM STATS</p><h2>Expanded snapshot</h2></div></div>{result !== null && <dl className="detail-grid"><div><dt>Points</dt><dd>{result.metadata.stream.stats.pointCount}</dd></div><div><dt>Total duration</dt><dd>{formatMs(result.metadata.stream.stats.totalDurationMs)}</dd></div><div><dt>Frequency range</dt><dd>{result.metadata.stream.stats.minFrequencyIndex ?? '--'} to {result.metadata.stream.stats.maxFrequencyIndex ?? '--'}</dd></div><div><dt>Mean intensity</dt><dd>{result.metadata.stream.stats.meanIntensity?.toFixed(2) ?? '--'}</dd></div><div><dt>Granularity</dt><dd>{formatMs(result.metadata.stream.timeGranularityMs)}</dd></div><div><dt>Warnings</dt><dd>{result.metadata.stream.warningCount}</dd></div></dl>}</div></section>
-            <section className="lower-grid"><div className="panel"><div className="panel-head"><div><p className="eyebrow">SECTIONS</p><h2>Structure</h2></div></div><div className="section-list">{sections.map((item) => <button className="section-row" data-selected={item.sectionIndex === selectedSection} aria-pressed={item.sectionIndex === selectedSection} key={item.sectionIndex} onClick={() => selectSection(item.sectionIndex)}><span className="section-number">{String(item.sectionIndex + 1).padStart(2, '0')}</span><span><b>Section {item.sectionIndex + 1}</b><small>{item.enabled ? 'Enabled' : 'Disabled'} · mode {item.frequencyMode} · {item.pointCount} points</small></span><strong>{formatMs(item.effectiveDurationMs)}</strong></button>)}</div></div><div className="panel detail-panel"><div className="panel-head"><div><p className="eyebrow">POINT DETAIL</p><h2>{point === undefined ? 'Select a point' : 'Point ' + (point.index + 1)}</h2></div></div>{point === undefined || section === undefined ? <div className="empty">Select a timeline point or section.</div> : <><dl className="detail-grid"><div><dt>Time</dt><dd>{formatMs(point.timeMs)}</dd></div><div><dt>Duration</dt><dd>{formatMs(point.durationMs)}</dd></div><div><dt>Intensity</dt><dd>{point.intensityDecimal}</dd></div><div><dt>Frequency index</dt><dd>{point.frequencyIndex}</dd></div><div><dt>Section</dt><dd>{point.source.sectionIndex + 1}</dd></div><div><dt>Origin</dt><dd>{point.source.origin}</dd></div></dl><div className="edit-stack"><label>Intensity <input type="number" min="0" max="100" step="0.01" value={strengthInput} onChange={(event) => setStrengthInput(event.target.value)} /><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'strength', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex, value: Number(strengthInput) })}>Apply</button></label><label>Anchor <select value={anchorInput} onChange={(event) => setAnchorInput(Number(event.target.value) as 0 | 1)}><option value={0}>Automatic</option><option value={1}>Anchor</option></select><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'anchor', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex, value: anchorInput })}>Apply</button></label></div></>}</div></section>
+            <section className="lower-grid"><div className="panel"><div className="panel-head"><div><p className="eyebrow">SECTIONS</p><h2>Structure</h2></div></div><div className="section-list">{sections.map((item) => <button className="section-row" data-selected={item.sectionIndex === selectedSection} aria-pressed={item.sectionIndex === selectedSection} key={item.sectionIndex} onClick={() => selectSection(item.sectionIndex)}><span className="section-number">{String(item.sectionIndex + 1).padStart(2, '0')}</span><span><b>Section {item.sectionIndex + 1}</b><small>{item.enabled ? 'Enabled' : 'Disabled'} · mode {item.frequencyMode} · {item.pointCount} points</small></span><strong>{formatMs(item.effectiveDurationMs)}</strong></button>)}</div></div><div className="panel detail-panel"><div className="panel-head"><div><p className="eyebrow">POINT DETAIL</p><h2>{point === undefined ? 'Select a point' : 'Point ' + (point.index + 1)}</h2></div></div>{point === undefined || section === undefined ? <div className="empty">Select a timeline point or section.</div> : <><dl className="detail-grid"><div><dt>Time</dt><dd>{formatMs(point.timeMs)}</dd></div><div><dt>Duration</dt><dd>{formatMs(point.durationMs)}</dd></div><div><dt>Intensity</dt><dd>{point.intensityDecimal}</dd></div><div><dt>Frequency index</dt><dd>{point.frequencyIndex}</dd></div><div><dt>Section</dt><dd>{point.source.sectionIndex + 1}</dd></div><div><dt>Repetition</dt><dd>{point.source.repetitionIndex + 1}{section.repetitionCount > 1 ? ' of ' + section.repetitionCount : ''}</dd></div><div><dt>Origin</dt><dd>{point.source.origin}</dd></div></dl><div className="edit-stack"><label>Intensity <input type="number" min="0" max="100" step="0.01" value={strengthInput} onChange={(event) => setStrengthInput(event.target.value)} /><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'strength', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex, value: Number(strengthInput) })}>Apply</button></label><label>Anchor <select value={anchorInput} onChange={(event) => setAnchorInput(Number(event.target.value) as 0 | 1)}><option value={0}>Automatic</option><option value={1}>Anchor</option></select><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'anchor', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex, value: anchorInput })}>Apply</button></label></div></>}</div></section>
             <section className="panel controls-panel"><div className="panel-head"><div><p className="eyebrow">SECTION EDITOR</p><h2>Frequency, duration and points</h2></div><span className="muted">Section {(section?.sectionIndex ?? selectedSection) + 1}</span></div>{section !== undefined && <div className="editor-grid"><label>Start index<input type="number" min="0" max="83" step="1" value={frequencyStartInput} onChange={(event) => setFrequencyStartInput(event.target.value)} /></label><label>End index<input type="number" min="0" max="83" step="1" value={frequencyEndInput} onChange={(event) => setFrequencyEndInput(event.target.value)} /></label><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'frequency', sectionIndex: section.sectionIndex, startIndex: Number(frequencyStartInput), endIndex: Number(frequencyEndInput) })}>Apply frequency</button><label>Duration index<input type="number" min="0" max="99" step="1" value={durationInput} onChange={(event) => setDurationInput(event.target.value)} /></label><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'duration', sectionIndex: section.sectionIndex, value: Number(durationInput) })}>Apply duration</button><label>Add strength<input type="number" min="0" max="100" step="0.01" value={addStrengthInput} onChange={(event) => setAddStrengthInput(event.target.value)} /></label><label>Add type<select value={addAnchorInput} onChange={(event) => setAddAnchorInput(Number(event.target.value) as 0 | 1)}><option value={0}>Automatic</option><option value={1}>Anchor</option></select></label><button className="secondary" disabled={busy} onClick={() => void applyEdit({ kind: 'add-point', sectionIndex: section.sectionIndex, value: Number(addStrengthInput), anchor: addAnchorInput, atIndex: point?.source.sectionIndex === section.sectionIndex ? point.source.controlPointIndex : undefined })}>+ Add point</button><button className="danger-button" disabled={busy || point === undefined || point.source.sectionIndex !== section.sectionIndex} onClick={() => point !== undefined && void applyEdit({ kind: 'remove-point', sectionIndex: point.source.sectionIndex, pointIndex: point.source.controlPointIndex })}>− Remove selected point</button></div>}</section>
-            <section className="panel assist-panel"><div className="panel-head"><div><p className="eyebrow">REVIEWED ASSIST</p><h2>Quadratic curve proposal</h2></div><span className="muted">f(x) = 1 − (1 − x)^2</span></div><p className="panel-copy">Set two control-point endpoints. The proposal stays local until you review and confirm it.</p><div className="assist-grid"><label>Start point<input type="number" min="0" step="1" value={assistStartInput} onChange={(event) => setAssistStartInput(event.target.value)} /></label><label>End point<input type="number" min="0" step="1" value={assistEndInput} onChange={(event) => setAssistEndInput(event.target.value)} /></label><label>Start strength<input type="number" min="0" max="100" step="0.01" value={assistStartStrengthInput} onChange={(event) => setAssistStartStrengthInput(event.target.value)} /></label><label>End strength<input type="number" min="0" max="100" step="0.01" value={assistEndStrengthInput} onChange={(event) => setAssistEndStrengthInput(event.target.value)} /></label></div><div className="assist-actions"><button className="secondary" disabled={busy || section === undefined} onClick={previewAssist}>Preview proposal</button><label className="review-check"><input type="checkbox" checked={assistReviewed} onChange={(event) => setAssistReviewedFingerprint(event.target.checked ? assistFingerprint : null)} disabled={busy || assistPreview.length === 0} /> I reviewed the proposed values</label><button className="secondary" disabled={busy || !assistReviewed || assistPreview.length === 0} onClick={() => void applyAssist()}>Apply reviewed curve</button></div>{assistPreview.length > 0 && <div className="assist-preview" aria-live="polite"><span>Proposed values</span>{assistPreview.map((value, index) => <code key={index}>{assistStart + index}: {value.toFixed(2)}</code>)}</div>}</section>
+            <section className="panel assist-panel"><div className="panel-head"><div><p className="eyebrow">REVIEWED ASSIST</p><h2>Quadratic curve proposal</h2></div></div><p className="panel-copy">Set two control-point endpoints. The proposal stays local until you review and confirm it.</p><div className="assist-grid"><label>Start point<input type="number" min="0" step="1" value={assistStartInput} onChange={(event) => setAssistStartInput(event.target.value)} /></label><label>End point<input type="number" min="0" step="1" value={assistEndInput} onChange={(event) => setAssistEndInput(event.target.value)} /></label><label>Start strength<input type="number" min="0" max="100" step="0.01" value={assistStartStrengthInput} onChange={(event) => setAssistStartStrengthInput(event.target.value)} /></label><label>End strength<input type="number" min="0" max="100" step="0.01" value={assistEndStrengthInput} onChange={(event) => setAssistEndStrengthInput(event.target.value)} /></label></div><div className="assist-actions"><button className="secondary" disabled={busy || section === undefined} onClick={previewAssist}>Preview proposal</button><label className="review-check"><input type="checkbox" checked={assistReviewed} onChange={(event) => setAssistReviewedFingerprint(event.target.checked ? assistFingerprint : null)} disabled={busy || assistPreview.length === 0} /> I reviewed the proposed values</label><button className="secondary" disabled={busy || !assistReviewed || assistPreview.length === 0} onClick={() => void applyAssist()}>Apply reviewed curve</button></div>{assistPreview.length > 0 && <div className="assist-preview" aria-live="polite"><span>Proposed values</span>{assistPreview.map((value, index) => <code key={index}>{assistStart + index}: {value.toFixed(2)}</code>)}</div>}</section>
           </> : result !== null && <section className="panel empty-panel"><h2>No stream available</h2><p>Resolve the diagnostics before previewing this document.</p></section>}
           {diffEnvelope !== null && <section className="panel diff-panel"><div className="panel-head"><div><p className="eyebrow">DOCUMENT DIFF</p><h2>{diff?.diff.equal ? 'No semantic changes' : 'Changes between documents'}</h2></div><span className="badge" data-status={diffEnvelope.status}>{diffEnvelope.status}</span></div>{diff === null ? <div className="empty">{diffEnvelope.diagnostics.map((item) => item.message).join(' ')}</div> : <><div className="diff-summary"><span><b>{diff.diff.structural.length}</b> structural</span><span><b>{diff.diff.metadata.length}</b> metadata</span><span><b>{diff.diff.stream.length}</b> stream</span><span><b>{diff.diff.text.length}</b> text</span></div><div className="diff-list">{[...diff.diff.structural, ...diff.diff.metadata, ...diff.diff.stream].slice(0, 80).map((entry, index) => <div className="diff-row" key={entry.path + index}><code>{entry.path}</code><span>{String(entry.before ?? '∅')}</span><b>→</b><span>{String(entry.after ?? '∅')}</span></div>)}{diff.diff.structural.length + diff.diff.metadata.length + diff.diff.stream.length > 80 && <small className="field-note">Showing the first 80 field changes.</small>}</div></>}</section>}
           {batchEnvelope !== null && <section className="panel batch-results"><div className="panel-head"><div><p className="eyebrow">BATCH RESULTS</p><h2>{batch === null ? 'Batch task' : batch.completed + ' of ' + batch.total + ' complete'}</h2></div>{batchEnvelope.status === 'success' && batch !== null && batchMode === 'export' && batch.items.some((item) => item.status === 'success' && typeof item.result === 'object' && item.result !== null && typeof (item.result as { readonly downloadId?: unknown }).downloadId === 'string') && <button className="secondary" onClick={() => void downloadAllBatch()}>Download successful</button>}</div>{batch === null ? <div className="empty">{batchEnvelope.diagnostics.map((item) => item.message).join(' ')}</div> : <div className="batch-list">{batch.items.map((item, index) => { const itemResult = typeof item.result === 'object' && item.result !== null ? item.result as { readonly downloadId?: unknown } : null; const downloadable = item.status === 'success' && batchMode === 'export' && typeof itemResult?.downloadId === 'string'; return <div className="batch-row" key={item.id}><div><b>{item.displayName}</b><small>{item.status} · {item.diagnostics.length} diagnostics</small></div>{downloadable ? <button className="secondary" onClick={() => void downloadBatchItem(index)}>Download</button> : <span className="batch-status" data-status={item.status}>{item.status === 'success' && batchMode === 'export' ? 'saved' : item.status}</span>}</div>; })}</div>}</section>}

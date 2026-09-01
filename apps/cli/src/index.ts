@@ -335,7 +335,7 @@ async function qrDecodeCommand(args: readonly string[], io: CliIo): Promise<numb
   }
   let content: string;
   const contentCandidate = inputPath.trim();
-  if (contentCandidate.startsWith('#DGLAB-PULSE#') || /^https?:\/\//i.test(contentCandidate)) {
+  if (/^https?:\/\/[^\s]+#DGLAB-PULSE#/i.test(contentCandidate)) {
     content = contentCandidate;
   } else {
     const read = await readInputFile(inputPath, {

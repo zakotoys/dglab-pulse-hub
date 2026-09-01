@@ -8,6 +8,17 @@ export interface DesktopExportRequest {
   readonly mode?: 'canonical' | 'source';
 }
 
+export interface DesktopExportArtifact {
+  readonly bytes: Uint8Array;
+  readonly displayName: string;
+  readonly contentType: string;
+}
+
+export interface DesktopExportResponse {
+  readonly envelope: OperationEnvelopeDto;
+  readonly artifact?: DesktopExportArtifact;
+}
+
 export interface DesktopPreviewRequest {
   readonly sourceDigest: string;
   readonly displayName?: string;
@@ -84,7 +95,7 @@ contextBridge.exposeInMainWorld('pulseDesktop', Object.freeze({
     ipcRenderer.invoke('pulse:batch-export', payload),
   renderPreview: (payload: DesktopPreviewRequest): Promise<OperationEnvelopeDto> =>
     ipcRenderer.invoke('pulse:render-preview', payload),
-  export: (payload: DesktopExportRequest): Promise<OperationEnvelopeDto> =>
+  export: (payload: DesktopExportRequest): Promise<OperationEnvelopeDto | DesktopExportResponse> =>
     ipcRenderer.invoke('pulse:export', payload),
   markDirty: (dirty: boolean): Promise<OperationEnvelopeDto> =>
     ipcRenderer.invoke('pulse:mark-dirty', { dirty })

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import { buildServer } from '../src/server.js';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
 import { encodeQr, TempArtifactStore, type ArtifactDescriptor, type ArtifactPutOptions } from '@dglab-pulse-hub/application';
@@ -207,6 +207,75 @@ describe('HTTP adapter', () => {
     expect(incompatibleMode.json().result).toBeNull();
   });
 
+  it('streams QR export as a JPEG image with an image filename', async () => {
+    const app = buildServer();
+    apps.push(app);
+    await app.ready();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/pulses/export',
+      headers: { 'content-type': 'application/json' },
+      payload: { text: VALID_TEXT, format: 'qr-envelope', displayName: 'source.pulse' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('image/jpeg');
+    expect(response.headers['content-disposition']).toBe('attachment; filename="source.qr.jpg"');
+    expect(response.rawPayload.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+    expect(JSON.parse(response.headers['x-pulse-result'] ?? 'null')).toMatchObject({
+      format: 'qr-envelope',
+      displayName: 'source.qr.jpg',
+      contentType: 'image/jpeg',
+      roundTripVerified: true
+    });
+  });
+
+  it('keeps QR export headers valid for non-ASCII source filenames', async () => {
+    const app = buildServer();
+    apps.push(app);
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    const address = app.server.address();
+    if (address === null || typeof address === 'string') throw new Error('API test server did not expose an address.');
+    const payload = JSON.stringify({
+      text: VALID_TEXT,
+      format: 'qr-envelope',
+      displayName: '127-猩红告白.pulse'
+    });
+    const response = await new Promise<{ statusCode: number; headers: IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
+      const request = httpRequest({
+        host: '127.0.0.1',
+        port: address.port,
+        path: '/api/v1/pulses/export',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(payload)
+        }
+      }, (incoming) => {
+        const chunks: Buffer[] = [];
+        incoming.on('data', (chunk: Buffer) => chunks.push(chunk));
+        incoming.on('end', () => resolve({
+          statusCode: incoming.statusCode ?? 0,
+          headers: incoming.headers,
+          body: Buffer.concat(chunks)
+        }));
+        incoming.on('error', reject);
+      });
+      request.on('error', reject);
+      request.end(payload);
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('image/jpeg');
+    expect(response.headers['content-disposition']).toBe('attachment; filename="127-____.qr.jpg"');
+    expect(response.body.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+    expect(JSON.parse(String(response.headers['x-pulse-result']))).toMatchObject({
+      format: 'qr-envelope',
+      displayName: '127-____.qr.jpg',
+      contentType: 'image/jpeg',
+      roundTripVerified: true
+    });
+  });
+
   it('enforces the application byte limit', async () => {
     const app = buildServer({ maxBytes: 8 });
     apps.push(app);
@@ -295,7 +364,10 @@ describe('HTTP adapter', () => {
     ]);
     expect([first.statusCode, second.statusCode].sort()).toEqual([200, 422]);
     const success = first.statusCode === 200 ? first : second;
-    expect(success.body).toBe(VALID_TEXT);
+    expect(success.body).toBe(
+      'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1+' +
+      'section+0,20,20,1,0/0-1,100-1+section+0,20,20,1,0/0-1,100-1'
+    );
   });
 
   it('returns an edit artifact for canonical commands and rejects flat aliases', async () => {

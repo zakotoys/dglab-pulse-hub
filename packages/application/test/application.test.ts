@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { decode as decodeJpeg } from 'jpeg-js';
 import { spawn } from 'node:child_process';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,15 +23,32 @@ import {
 } from '../src/index.js';
 import { operationResult } from '../src/result.js';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
-import { expandWaveform, parsePulse, sourceSpan } from '@dglab-pulse-hub/core';
+import { QR_PREFIX, QR_SHARE_URL, expandWaveform, parsePulse, sourceSpan } from '@dglab-pulse-hub/core';
 
 const VALID_TEXT =
   'Dungeonlab+pulse:0,1,8=27,7,32,3,1/0-1,50-0,100-1';
+function qrEnvelopeForInternal(text: string): string {
+  const base64 = Buffer.from(text, 'utf8').toString('base64');
+  return QR_SHARE_URL + QR_PREFIX + gzipSync(Buffer.from(base64, 'utf8')).toString('hex').toUpperCase();
+}
 
 function qrEnvelopeFor(text: string): string {
-  const base64 = Buffer.from(text, 'utf8').toString('base64');
-  return '#DGLAB-PULSE#' + gzipSync(Buffer.from(base64, 'utf8')).toString('hex');
+  const encoded = encodeQr(text);
+  if (encoded.content === null) throw new Error('Test pulse could not be encoded as a QR envelope.');
+  return encoded.content;
 }
+
+function qrInternalText(content: string): string {
+  const payload = content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length);
+  const base64 = gunzipSync(Buffer.from(payload, 'hex')).toString('utf8');
+  return Buffer.from(base64, 'base64').toString('utf8');
+}
+
+const OFFICIAL_QR_INTERNAL_TEXT =
+  '0,0,0,20,20,20,8,2,2,0,20,20,1,1,1,0,0,35,8,1+' +
+  '1-0.00,0-4.00,0-8.00,0-12.00,0-16.00,1-20.00,1-20.00,1-20.00+' +
+  '1-0.00,1-20.00+1-0.00,1-20.00';
+const OFFICIAL_QR_CONTENT = qrEnvelopeForInternal(OFFICIAL_QR_INTERNAL_TEXT);
 
 describe('application boundaries', () => {
   it('encodes empty streams without non-finite render coordinates', () => {
@@ -52,10 +70,57 @@ describe('application boundaries', () => {
   });
   it('encodes a parsed pulse once and produces a contract-safe QR envelope', () => {
     const encoded = encodeQr(VALID_TEXT);
-    expect(encoded.content).toMatch(/^#DGLAB-PULSE#[0-9a-f]+$/);
+    expect(encoded.content).toMatch(/^https:\/\/www\.dungeon-lab\.com\/app-download\.php#DGLAB-PULSE#[0-9A-F]+$/);
     const decoded = decodeQr(encoded.content ?? '');
     expect(decoded.accepted).toBe(true);
     expect(decoded.pulseText).toBeTruthy();
+    expect(qrInternalText(encoded.content ?? '')).toBe(
+      '27,0,0,7,20,20,3,2,2,32,20,20,3,1,1,0,0,0,8,1+' +
+      '1-0.00,0-10.00,1-20.00+1-0.00,1-20.00+1-0.00,1-20.00'
+    );
+  });
+
+  it('decodes the official App QR payload format and preserves its sections', () => {
+    const decoded = decodeQr(OFFICIAL_QR_CONTENT);
+    expect(decoded.accepted).toBe(true);
+    expect(decoded.pulseText).toBe(
+      'Dungeonlab+pulse:35,1,8=0,20,0,1,1/0-1,20-0,40-0,60-0,80-0,100-1,100-1,100-1+' +
+      'section+0,20,20,1,0/0-1,100-1+section+0,20,20,1,0/0-1,100-1'
+    );
+    const reencoded = encodeQr(decoded.pulseText ?? '');
+    expect(reencoded.content).toBe(OFFICIAL_QR_CONTENT);
+  });
+
+  it('rejects App QR export when the source exceeds three sections', () => {
+    const section = '0,0,0,1,1/0-1,100-1';
+    const encoded = encodeQr(
+      'Dungeonlab+pulse:0,1,0=' + Array.from({ length: 4 }, () => section).join('+section+')
+    );
+    expect(encoded.content).toBeNull();
+    expect(encoded.diagnostics.some((item) => item.code === 'PULSE_QR_SECTION_LIMIT')).toBe(true);
+  });
+
+  it('rejects intensity values that cannot be represented by the App QR scale', () => {
+    const encoded = encodeQr('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,16.67-1');
+    expect(encoded.content).toBeNull();
+    expect(encoded.diagnostics.some((item) => item.code === 'PULSE_QR_UNREPRESENTABLE_INTENSITY')).toBe(true);
+  });
+
+  it('exports QR content as a decodable JPEG image', () => {
+    const result = exportPulse(VALID_TEXT, {
+      format: 'qr-envelope',
+      displayName: 'source.pulse'
+    });
+    expect(result.status).toBe('success');
+    expect(result.data).not.toBeNull();
+    if (result.data === null) return;
+    expect(result.data.displayName).toBe('source.qr.jpg');
+    expect(result.data.contentType).toBe('image/jpeg');
+    expect(Array.from(result.data.bytes.slice(0, 2))).toEqual([0xff, 0xd8]);
+    expect(new TextDecoder().decode(result.data.bytes)).not.toContain('#DGLAB-PULSE#');
+    const decoded = decodeJpeg(Buffer.from(result.data.bytes));
+    expect(decoded.width).toBe(1_024);
+    expect(decoded.height).toBe(1_024);
   });
 
   it('rejects unsupported runtime export options instead of falling back', () => {
@@ -351,12 +416,12 @@ describe('application boundaries', () => {
   });
 
   it('distinguishes malformed gzip from a valid stream over the output limit', () => {
-    const malformed = decodeQr('#DGLAB-PULSE#' + Buffer.from('not-a-gzip').toString('hex'));
+    const malformed = decodeQr(QR_SHARE_URL + QR_PREFIX + Buffer.from('not-a-gzip').toString('hex').toUpperCase());
     expect(malformed.accepted).toBe(false);
     expect(malformed.diagnostics.some((item) => item.code === 'PULSE_QR_INVALID_GZIP')).toBe(true);
 
     const oversized = gzipSync(Buffer.alloc(1024, 0x41));
-    const limited = decodeQr('#DGLAB-PULSE#' + oversized.toString('hex'), {
+    const limited = decodeQr(QR_SHARE_URL + QR_PREFIX + oversized.toString('hex').toUpperCase(), {
       maxDecompressedBytes: 32
     });
     expect(limited.accepted).toBe(false);
@@ -368,10 +433,10 @@ describe('application boundaries', () => {
     const encoded = encodeQr(VALID_TEXT);
     expect(encoded.content).not.toBeNull();
     const envelope = encoded.content!;
-    const compressed = Buffer.from(envelope.slice('#DGLAB-PULSE#'.length), 'hex');
+    const compressed = Buffer.from(envelope.slice(envelope.indexOf(QR_PREFIX) + QR_PREFIX.length), 'hex');
     const withTrailingBytes = Buffer.concat([compressed, Buffer.from([0, 1, 2])]);
 
-    const decoded = decodeQr('#DGLAB-PULSE#' + withTrailingBytes.toString('hex'));
+    const decoded = decodeQr(QR_SHARE_URL + QR_PREFIX + withTrailingBytes.toString('hex').toUpperCase());
 
     expect(decoded.accepted).toBe(false);
     expect(decoded.pulseText).toBeNull();
@@ -382,16 +447,16 @@ describe('application boundaries', () => {
     const encoded = encodeQr(VALID_TEXT);
     expect(encoded.content).not.toBeNull();
     const content = encoded.content!;
-    const compressed = Buffer.from(content.slice('#DGLAB-PULSE#'.length), 'hex');
+    const compressed = Buffer.from(content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length), 'hex');
     const decodedText = Buffer.from(compressed);
     // A valid gzip carrying a syntactically invalid Base64 payload exercises
     // the strict padding path without relying on forgiving Buffer decoding.
     const invalidBase64 = gzipSync(Buffer.from('Zh==', 'utf8'));
-    const invalid = decodeQr('#DGLAB-PULSE#' + invalidBase64.toString('hex'));
+    const invalid = decodeQr(QR_SHARE_URL + QR_PREFIX + invalidBase64.toString('hex').toUpperCase());
     expect(invalid.diagnostics.some((item) => item.code === 'PULSE_QR_INVALID_BASE64')).toBe(true);
     expect(decodedText.byteLength).toBeGreaterThan(0);
 
-    const fromUrl = decodeQr('https://example.test/share' + content);
+    const fromUrl = decodeQr('https://example.test/share' + QR_PREFIX + content.slice(content.indexOf(QR_PREFIX) + QR_PREFIX.length));
     expect(fromUrl.accepted).toBe(true);
   });
 
@@ -534,7 +599,7 @@ describe('application boundaries', () => {
     expect(malformedBatch.result).toBeNull();
 
     const encoded = toOperationDto(operationResult('qr-encode', 'success', {
-      content: '#DGLAB-PULSE#' + VALID_TEXT
+      content: QR_SHARE_URL + QR_PREFIX + VALID_TEXT
     }, []));
     expect(encoded.status).toBe('failed');
     expect(encoded.result).toBeNull();

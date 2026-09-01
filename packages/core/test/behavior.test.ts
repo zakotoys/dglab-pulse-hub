@@ -150,10 +150,10 @@ describe('editing, validation, and rendering', () => {
     expect(removed.pulse).not.toBeNull();
     if (removed.pulse === null) return;
     const points = removed.pulse.sections[0]!.pulseElement.points;
-    expect(points.map((point) => point.strengthDecimal)).toEqual(['0', '55.555556', '88.888889', '100']);
+    expect(points.map((point) => point.strengthDecimal)).toEqual(['0', '56', '89', '100']);
     expect(removed.changeRecords.filter((record) => record.kind === 'interpolation')).toHaveLength(2);
     expect(expandWaveform(removed.pulse).stream?.points.slice(0, 4).map((point) => point.intensityDecimal)).toEqual([
-      '0', '55.555556', '88.888889', '100'
+      '0', '56', '89', '100'
     ]);
   });
 
@@ -240,7 +240,7 @@ describe('editing, validation, and rendering', () => {
     expect(result.pulse).not.toBeNull();
     if (result.pulse === null) return;
     const points = result.pulse.sections[0]!.pulseElement.points;
-    expect(points.map((point) => point.strengthDecimal)).toEqual(['10', '32.5', '40', '77.5', '90']);
+    expect(points.map((point) => point.strengthDecimal)).toEqual(['10', '33', '40', '78', '90']);
   });
 
   it('previews the same piecewise values that a reviewed assist applies', () => {
@@ -253,7 +253,7 @@ describe('editing, validation, and rendering', () => {
       startStrength: 10,
       endStrength: 90
     });
-    expect(preview).toEqual([10, 32.5, 40, 77.5, 90]);
+    expect(preview).toEqual([10, 33, 40, 78, 90]);
     const applied = applyReviewedQuadraticAssist(parsed.pulse, {
       sectionIndex: 0,
       startPointIndex: 0,
@@ -414,6 +414,63 @@ describe('editing, validation, and rendering', () => {
     expect(controller.snapshot().state).toBe('ended');
     expect(scheduled.length).toBeGreaterThan(0);
     controller.dispose();
+  });
+
+  it('applies playback rate to elapsed clock time without changing stream duration', () => {
+    const parsed = parsePulse(VALID);
+    expect(parsed.pulse).not.toBeNull();
+    if (parsed.pulse === null) return;
+    const stream = expandWaveform(parsed.pulse).stream!;
+    let now = 0;
+    const controller = new PreviewPlaybackController(stream, {
+      playbackRate: 0.2,
+      clock: { now: () => now },
+      scheduler: { set: (callback) => callback, clear: () => undefined }
+    });
+    controller.play();
+    now = 500;
+    controller.tick();
+    expect(controller.snapshot().currentTimeMs).toBe(100);
+    expect(controller.snapshot().totalDurationMs).toBe(stream.totalDurationMs);
+    controller.dispose();
+  });
+
+  it('keeps playback update cadence independent from playback rate', () => {
+    const parsed = parsePulse(VALID);
+    expect(parsed.pulse).not.toBeNull();
+    if (parsed.pulse === null) return;
+    const stream = expandWaveform(parsed.pulse).stream!;
+    let scheduledDelay = 0;
+    const controller = new PreviewPlaybackController(stream, {
+      playbackRate: 0.2,
+      scheduler: {
+        set: (_callback, delayMs) => {
+          scheduledDelay = delayMs;
+          return 0;
+        },
+        clear: () => undefined
+      }
+    });
+    controller.play();
+    expect(scheduledDelay).toBe(16);
+    controller.dispose();
+  });
+
+  it('keeps repeated stream points mapped to one editable source point', () => {
+    const parsed = parsePulse('Dungeonlab+pulse:2,1,0=0,0,5,1,1/0-1,50-0,100-1');
+    expect(parsed.pulse).not.toBeNull();
+    if (parsed.pulse === null) return;
+    const edited = setControlPointStrength(parsed.pulse, 0, 1, 42);
+    expect(edited.pulse).not.toBeNull();
+    if (edited.pulse === null) return;
+    expect(edited.pulse.sections[0]!.pulseElement.points.map((point) => point.strengthDecimal)).toEqual([
+      '0', '42', '100'
+    ]);
+    const repeated = expandWaveform(edited.pulse).stream!;
+    expect(repeated.points.map((point) => point.source.repetitionIndex)).toEqual([0, 0, 0, 1, 1, 1]);
+    expect(repeated.points.filter((point) => point.source.controlPointIndex === 1).map((point) => point.intensityDecimal)).toEqual([
+      '42', '42'
+    ]);
   });
 
   it('renders an all-disabled pulse as a finite empty scene', () => {

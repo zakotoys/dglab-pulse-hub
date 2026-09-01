@@ -28,6 +28,7 @@ import {
   type WaveformStream
 } from '@dglab-pulse-hub/core';
 import { decodeQr, encodeQr } from './qr.js';
+import { renderQrImage } from './images.js';
 import {
   operationResult,
   statusFromDiagnostics,
@@ -419,6 +420,13 @@ function exportFailure(_error: unknown): Diagnostic {
   );
 }
 
+function qrDisplayName(value: string | undefined): string {
+  if (value === undefined) return 'pulse.qr.jpg';
+  const stem = value.replace(/\.(?:pulse|txt|png|jpe?g)$/i, '');
+  if (stem.length === 0) return 'pulse.qr.jpg';
+  return (stem.endsWith('.qr') ? stem : stem + '.qr') + '.jpg';
+}
+
 export function exportPulse(
   input: Pulse | string | Uint8Array,
   options: ExportOptions = {}
@@ -469,16 +477,23 @@ export function exportPulse(
     if (encoded.content === null || hasBlockingErrors(diagnostics)) {
       return rejectedExport(diagnostics);
     }
-    const bytes = new TextEncoder().encode(encoded.content);
+    let image: ReturnType<typeof renderQrImage>;
+    try {
+      image = renderQrImage(encoded.content);
+    } catch (error) {
+      return rejectedExport([...diagnostics, exportFailure(error)]);
+    }
+    const bytes = image.bytes;
     return operationResult('export', 'success', {
       format,
-      displayName: options.displayName ?? 'pulse.qr.txt',
+      displayName: qrDisplayName(options.displayName),
       text: encoded.content,
       bytes,
       byteSize: bytes.byteLength,
       mode: 'canonical',
       sourceDigest: pulse.source.digest,
-      roundTripVerified: true
+      roundTripVerified: true,
+      contentType: image.mimeType
     }, diagnostics);
   }
   let serialized: ReturnType<typeof serializePulse>;

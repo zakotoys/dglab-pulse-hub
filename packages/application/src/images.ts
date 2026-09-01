@@ -1,5 +1,6 @@
 import { encode as encodeJpeg } from 'jpeg-js';
 import { PNG } from 'pngjs';
+import QRCode from 'qrcode';
 import {
   createPlotScene,
   renderSvg,
@@ -16,6 +17,62 @@ export interface ImageExport {
   readonly width: number;
   readonly height: number;
   readonly streamDigest: string;
+}
+
+export interface QrImageExport {
+  readonly format: 'jpg';
+  readonly mimeType: 'image/jpeg';
+  readonly bytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
+const QR_IMAGE_SIZE = 1_024;
+const QR_QUIET_ZONE_MODULES = 4;
+
+/** Render the already-verified QR envelope as a printable JPEG artifact. */
+export function renderQrImage(content: string): QrImageExport {
+  if (typeof content !== 'string' || content.length === 0) {
+    throw new TypeError('QR content must be non-empty text.');
+  }
+  const symbol = QRCode.create(content, { errorCorrectionLevel: 'M' });
+  const moduleCount = symbol.modules.size;
+  const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
+  const scale = Math.max(1, Math.floor(QR_IMAGE_SIZE / totalModules));
+  const renderedSize = totalModules * scale;
+  const offset = Math.floor((QR_IMAGE_SIZE - renderedSize) / 2);
+  const rgba = new Uint8Array(QR_IMAGE_SIZE * QR_IMAGE_SIZE * 4);
+  rgba.fill(255);
+
+  for (let row = 0; row < moduleCount; row += 1) {
+    for (let column = 0; column < moduleCount; column += 1) {
+      if (symbol.modules.get(row, column) !== 1) continue;
+      const left = offset + (column + QR_QUIET_ZONE_MODULES) * scale;
+      const top = offset + (row + QR_QUIET_ZONE_MODULES) * scale;
+      for (let y = top; y < top + scale; y += 1) {
+        const rowOffset = y * QR_IMAGE_SIZE * 4;
+        for (let x = left; x < left + scale; x += 1) {
+          const pixelOffset = rowOffset + x * 4;
+          rgba[pixelOffset] = 0;
+          rgba[pixelOffset + 1] = 0;
+          rgba[pixelOffset + 2] = 0;
+          rgba[pixelOffset + 3] = 255;
+        }
+      }
+    }
+  }
+
+  return Object.freeze({
+    format: 'jpg',
+    mimeType: 'image/jpeg',
+    bytes: encodeJpeg({
+      data: Buffer.from(rgba),
+      width: QR_IMAGE_SIZE,
+      height: QR_IMAGE_SIZE
+    }, 100).data,
+    width: QR_IMAGE_SIZE,
+    height: QR_IMAGE_SIZE
+  });
 }
 
 export function renderPreviewImage(

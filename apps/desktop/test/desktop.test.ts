@@ -290,6 +290,33 @@ describe('Electron IPC boundary', () => {
     expect(await readFile(input)).toEqual(before);
   });
 
+  it('returns the saved QR image artifact for renderer preview', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-qr-artifact-'));
+    directories.push(directory);
+    const input = join(directory, 'source.pulse');
+    const output = join(directory, 'source.qr.jpg');
+    await writeFile(input, VALID_TEXT, 'utf8');
+    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
+    const open = mocks.handlers.get('pulse:open');
+    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
+    mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
+    const exported = await mocks.handlers.get('pulse:export')?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: digest, format: 'qr-envelope', displayName: 'source.pulse' }
+    );
+    const response = exported as {
+      envelope?: unknown;
+      artifact?: { bytes?: unknown; displayName?: unknown; contentType?: unknown };
+    };
+    expect(operationEnvelopeSchema.safeParse(response.envelope).success).toBe(true);
+    expect(response.envelope).toMatchObject({ operation: 'export', status: 'success' });
+    expect(response.artifact).toMatchObject({ displayName: 'source.qr.jpg', contentType: 'image/jpeg' });
+    expect(response.artifact?.bytes).toBeInstanceOf(Uint8Array);
+    expect(Array.from((response.artifact?.bytes as Uint8Array).subarray(0, 2))).toEqual([0xff, 0xd8]);
+    expect(Array.from((await readFile(output)).subarray(0, 2))).toEqual([0xff, 0xd8]);
+  });
+
   it('refreshes snapshots after a confirmed pulse-text source overwrite', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-overwrite-'));
     directories.push(directory);

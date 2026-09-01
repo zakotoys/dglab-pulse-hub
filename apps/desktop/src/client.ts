@@ -78,6 +78,31 @@ function parseEnvelope(value: unknown, operation: string): OperationEnvelope {
     : failureEnvelope(operation, 'The desktop operation returned an invalid response.', 'PULSE_TASK_INVALID_TRANSITION');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseExportResponse(value: unknown): WorkspaceOperation {
+  if (!isRecord(value) || !('envelope' in value)) return { envelope: parseEnvelope(value, 'export') };
+  const envelope = parseEnvelope(value.envelope, 'export');
+  if (value.artifact === undefined) return { envelope };
+  if (!isRecord(value.artifact) ||
+      !(value.artifact.bytes instanceof Uint8Array) ||
+      typeof value.artifact.displayName !== 'string' ||
+      value.artifact.displayName.length === 0 ||
+      typeof value.artifact.contentType !== 'string') {
+    return { envelope: failureEnvelope('export', 'The desktop export artifact was invalid.', 'PULSE_TASK_INVALID_TRANSITION') };
+  }
+  return {
+    envelope,
+    artifact: {
+      bytes: value.artifact.bytes,
+      displayName: value.artifact.displayName,
+      contentType: value.artifact.contentType
+    }
+  };
+}
+
 function cancelled(operation: string, label = operation): OperationEnvelope {
   return failureEnvelope(operation, label + ' was cancelled.', 'PULSE_TASK_CANCELLED', 'cancelled');
 }
@@ -150,9 +175,9 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async export(document, format, mode, signal) {
       try {
         throwIfAborted(signal);
-        const envelope = parseEnvelope(await api.export({ sourceDigest: document.digest, displayName: document.displayName, format, mode }), 'export');
+        const operation = parseExportResponse(await api.export({ sourceDigest: document.digest, displayName: document.displayName, format, mode }));
         throwIfAborted(signal);
-        return { envelope, document };
+        return { ...operation, document };
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return { envelope: cancelled('export', 'Export') };
         return { envelope: failureEnvelope('export', 'The selected pulse could not be exported.') };

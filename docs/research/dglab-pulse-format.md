@@ -115,34 +115,57 @@ sectionRestTime,playbackSpeed,frequencyBalance
 
 ## 二、二维码封装格式
 
-DGLab Pulse 分享二维码中常见的内容不是直接的 `.pulse` 文本，而是带有标记和压缩数据：
+DGLab Pulse 分享二维码的内容不是直接的 `.pulse` 文本，而是官方下载页 URL 的 fragment，后面接标记和压缩数据：
 
 ```text
-#DGLAB-PULSE#<hex-data>
+https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#<HEX-DATA>
 ```
 
-公开实现复现的编码流程为：
+公开实现复现的编码流程为（注意：gzip 内层是 App 专用内部文本，不是 `.pulse` 明文）：
 
 ```text
-Dungeonlab+pulse 明文
+App 内部 QR 文本
     -> UTF-8
     -> Base64
     -> gzip 压缩
-    -> 十六进制编码
-    -> 添加 #DGLAB-PULSE# 前缀
+    -> 大写十六进制编码
+    -> 拼接官方下载页 URL 和 #DGLAB-PULSE# fragment 前缀
+```
+
+App 内部 QR 文本由 20 个全局字段和 3 个小节组成：
+
+```text
+频率起点(3),频率终点(3),点数(3),时长索引(3),频率模式(3),
+第2/3小节开关(2),休息索引,高低频平衡索引,播放速度
++第1小节+第2小节+第3小节
+```
+
+每个小节的点使用 `锚点-强度/5`，例如 `1-0.00,0-4.00`。从 `.pulse` 导出时，点的强度必须能够在 `0.01` 的 QR 精度下无损表示；App QR 最多支持 3 个小节。
+
+从 `.pulse` 到 App 内部文本的流程为：
+
+```text
+Dungeonlab+pulse 明文
+    -> 解析并映射到 App 内部 QR 文本
+    -> UTF-8
+    -> Base64
+    -> gzip 压缩
+    -> 大写十六进制编码
+    -> 拼接官方下载页 URL 和 #DGLAB-PULSE# fragment 前缀
 ```
 
 还原流程相反：
 
 ```text
-去掉 #DGLAB-PULSE#
+取 URL fragment 中的 #DGLAB-PULSE# 后半段
     -> 十六进制解码
     -> gzip 解压
     -> Base64 解码
-    -> UTF-8 Dungeonlab+pulse 文本
+    -> UTF-8 App 内部 QR 文本
+    -> 映射为 Dungeonlab+pulse 文本
 ```
 
-需要注意：前缀、大小写和压缩顺序应严格按实现处理；把十六进制字符串直接当作 `.pulse` 文本会失败。
+需要注意：下载页 URL、fragment 前缀、十六进制大小写和压缩顺序应严格按实现处理；只生成裸 `#DGLAB-PULSE#...` 内容时，二维码虽然可能被通用扫描器解出，但不能保证被 DG-LAB 4.0 App 的导入路由接受。把十六进制字符串直接当作 `.pulse` 文本也会失败。
 
 ## 三、JSON / JSON5 / `.pulses` 波形格式
 
@@ -272,7 +295,7 @@ Dungeonlab+pulse:<名称>=...
 读取未知文件时建议按以下顺序识别：
 
 1. 以 `Dungeonlab+pulse:` 开头：按 `.pulse` 明文解析。
-2. 以 `#DGLAB-PULSE#` 开头：按二维码封装流程解压后再解析明文。
+2. 以 `https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#` 开头：取 URL fragment 中的二维码封装并按流程解压后再解析明文。
 3. 顶层为数组、对象含 `pulseData`：按 JSON/JSON5 已编译帧处理。
 4. 对每个 `pulseData` 项校验 16 个十六进制字符、8 字节和频率/强度范围。
 5. 对 `.pulse` 中的数字范围、section 分隔符和形状点格式做严格校验，遇到名称方言时显式标记版本/方言。
@@ -370,4 +393,4 @@ V4: sendPulse(clientId, slotId, channel, duration, frames)
 
 ## 最终判断
 
-如果目标是导入/导出 DGLab App 分享波形，应实现 `Dungeonlab+pulse:` 明文和 `#DGLAB-PULSE#` 封装；如果目标是向 Coyote/Game Hub 或蓝牙 V3 播放器提供运行时数据，应生成 JSON/JSON5 中的 `pulseData` HEX 数组。对于 3.0 App 与 4.0 App，当前外部证据支持的判断是：Coyote V3 的波形帧编码和 100 ms/25 ms 时间粒度保持不变，4.0 主要改变 Socket 外层（V4 RPC）并增加 V2 帧显式兼容选项。两条链路之间需要经过采样、频率压缩和 25 ms 时间粒度展开，不能把一种文件的字符串直接改扩展名当作另一种格式。
+如果目标是导入/导出 DGLab App 分享波形，应实现 `Dungeonlab+pulse:` 明文和官方下载页 URL fragment 形式的 `#DGLAB-PULSE#` 封装；如果目标是向 Coyote/Game Hub 或蓝牙 V3 播放器提供运行时数据，应生成 JSON/JSON5 中的 `pulseData` HEX 数组。对于 3.0 App 与 4.0 App，当前外部证据支持的判断是：Coyote V3 的波形帧编码和 100 ms/25 ms 时间粒度保持不变，4.0 主要改变 Socket 外层（V4 RPC）并增加 V2 帧显式兼容选项。两条链路之间需要经过采样、频率压缩和 25 ms 时间粒度展开，不能把一种文件的字符串直接改扩展名当作另一种格式。

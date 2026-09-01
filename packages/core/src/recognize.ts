@@ -8,6 +8,7 @@ import {
   FORMAT_PROFILE,
   PULSE_PREFIX,
   QR_PREFIX,
+  QR_SHARE_URL,
   RULE_VERSION,
   type FormatKind,
   type RecognitionResult,
@@ -195,7 +196,7 @@ export function recognizeInput(
     format = 'pulse-text';
     profile = FORMAT_PROFILE;
     evidence = ['official-semantics', 'corpus-observed', 'community-inferred'];
-  } else if (source.text.startsWith(QR_PREFIX)) {
+  } else if (source.text.startsWith(QR_SHARE_URL + QR_PREFIX)) {
     format = 'qr-envelope';
     diagnostics.push(
       makeDiagnostic(

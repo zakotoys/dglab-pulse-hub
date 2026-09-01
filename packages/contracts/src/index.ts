@@ -539,9 +539,9 @@ export const exportDataSchema = z.object({
  * intentionally represented by a digest/metadata descriptor instead. */
 export const qrEncodeDataSchema = z.object({
   content: z.string()
-    .regex(/^#DGLAB-PULSE#[0-9a-fA-F]+$/)
+    .regex(/^https:\/\/www\.dungeon-lab\.com\/app-download\.php#DGLAB-PULSE#[0-9a-fA-F]+$/)
     .max(8_000_000)
-    .refine((value) => (value.length - '#DGLAB-PULSE#'.length) % 2 === 0, 'QR payload must contain complete hexadecimal bytes.')
+    .refine((value) => (value.length - 'https://www.dungeon-lab.com/app-download.php#DGLAB-PULSE#'.length) % 2 === 0, 'QR payload must contain complete hexadecimal bytes.')
 }).strict();
 
 export const qrDecodeDataSchema = z.object({

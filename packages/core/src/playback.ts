@@ -27,11 +27,13 @@ const defaultScheduler: PlaybackScheduler = Object.freeze({
   set: (callback: () => void, delayMs: number) => globalThis.setTimeout(callback, delayMs),
   clear: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>)
 });
+const PLAYBACK_UPDATE_MS = 16;
 
 export class PreviewPlaybackController {
   private readonly stream: WaveformStream;
   private readonly clock: PlaybackClock;
   private readonly scheduler: PlaybackScheduler;
+  private readonly playbackRate: number;
   private readonly listeners = new Set<(snapshot: PlaybackSnapshot) => void>();
   private state: PlaybackState = 'idle';
   private currentTimeMs = 0;
@@ -44,11 +46,17 @@ export class PreviewPlaybackController {
     options: {
       readonly clock?: PlaybackClock;
       readonly scheduler?: PlaybackScheduler;
+      readonly playbackRate?: number;
     } = {}
   ) {
+    if (options.playbackRate !== undefined &&
+        (!Number.isFinite(options.playbackRate) || options.playbackRate <= 0)) {
+      throw new RangeError('Playback rate must be a finite positive number.');
+    }
     this.stream = stream;
     this.clock = options.clock ?? defaultClock;
     this.scheduler = options.scheduler ?? defaultScheduler;
+    this.playbackRate = options.playbackRate ?? 1;
   }
 
   public subscribe(listener: (snapshot: PlaybackSnapshot) => void): () => void {
@@ -137,7 +145,11 @@ export class PreviewPlaybackController {
   private updateFromClock(): void {
     if (this.state !== 'playing') return;
     const elapsed = Math.max(0, this.clock.now() - this.anchorClockMs);
-    this.currentTimeMs = clamp(this.anchorTimeMs + elapsed, 0, this.stream.totalDurationMs);
+    this.currentTimeMs = clamp(
+      this.anchorTimeMs + elapsed * this.playbackRate,
+      0,
+      this.stream.totalDurationMs
+    );
     if (this.currentTimeMs >= this.stream.totalDurationMs) {
       this.currentTimeMs = this.stream.totalDurationMs;
       this.state = 'ended';
@@ -151,7 +163,7 @@ export class PreviewPlaybackController {
       this.timer = null;
       this.tick();
       if (this.state === 'playing') this.schedule();
-    }, Math.max(10, this.stream.timeGranularityMs));
+    }, PLAYBACK_UPDATE_MS);
   }
 
   private clearTimer(): void {

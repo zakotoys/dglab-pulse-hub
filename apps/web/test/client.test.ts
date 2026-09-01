@@ -43,6 +43,37 @@ describe('web workspace client', () => {
     }));
   });
 
+  it('uses a JPEG fallback name for QR image exports', async () => {
+    const descriptor = {
+      format: 'qr-envelope',
+      displayName: 'pulse.qr.jpg',
+      byteSize: 3,
+      mode: 'canonical',
+      sourceDigest: '0123456789abcdef',
+      roundTripVerified: true,
+      contentType: 'image/jpeg'
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+      status: 200,
+      headers: {
+        'content-type': 'image/jpeg',
+        'x-pulse-result': JSON.stringify(descriptor)
+      }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const operation = await createWebWorkspaceClient().export({
+      displayName: 'source.pulse',
+      digest: 'fedcba9876543210',
+      text: SOURCE
+    }, 'qr-envelope', 'canonical');
+
+    expect(operation.envelope.status).toBe('success');
+    expect(operation.artifact?.displayName).toBe('pulse.qr.jpg');
+    expect(operation.artifact?.contentType).toContain('image/jpeg');
+    expect(Array.from(operation.artifact?.bytes ?? [])).toEqual([0xff, 0xd8, 0xff]);
+  });
+
   it('omits an unspecified batch export mode so the API applies its default', async () => {
     const responseEnvelope = {
       schemaVersion: 'pulse-contract-v1',

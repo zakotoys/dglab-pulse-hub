@@ -3,13 +3,14 @@ import {
   DIAGNOSTIC_CODES,
   DEFAULT_RULE_SET,
   QR_PREFIX,
+  QR_SHARE_URL,
   PULSE_PREFIX,
   encodeUtf8,
   makeDiagnostic,
   location,
+  normalizeDecimal,
   parsePulse,
   serializePulse,
-  semanticallyEqual,
   sortDiagnostics,
   validatePulse,
   type Diagnostic,
@@ -20,7 +21,7 @@ export interface QrLimits {
   readonly maxHexCharacters?: number;
   readonly maxCompressedBytes?: number;
   readonly maxDecompressedBytes?: number;
-  /** Maximum UTF-8 bytes after Base64 decoding (the pulse text itself). */
+  /** Maximum UTF-8 bytes after Base64 decoding (the App internal QR text). */
   readonly maxDecodedBytes?: number;
 }
 
@@ -37,11 +38,302 @@ export interface QrDecodeResult {
   readonly diagnostics: readonly Diagnostic[];
 }
 
+const QR_SECTION_COUNT = 3;
+const QR_GLOBAL_FIELD_COUNT = 20;
+const QR_INTERNAL_INTEGER = /^(?:0|[1-9][0-9]*)$/;
+const QR_INTERNAL_POINT = /^(0|1)-((?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?)$/;
+
+interface QrInternalPoint {
+  readonly anchor: 0 | 1;
+  readonly strength: number;
+}
+
+interface QrInternalSection {
+  readonly frequencyStartIndex: number;
+  readonly frequencyEndIndex: number;
+  readonly durationIndex: number;
+  readonly frequencyMode: 1 | 2 | 3 | 4;
+  readonly enabled: boolean;
+  readonly points: readonly QrInternalPoint[];
+}
+
+function invalidQrInternal(
+  diagnostics: Diagnostic[],
+  message: string,
+  path = '$',
+  parameters?: Readonly<Record<string, string | number | boolean>>
+): null {
+  diagnostics.push(
+    makeDiagnostic(
+      DIAGNOSTIC_CODES.QR_INTERNAL_FORMAT,
+      'error',
+      'qr',
+      message,
+      location(path),
+      parameters === undefined ? {} : { parameters }
+    )
+  );
+  return null;
+}
+
+function parseQrInternalInteger(
+  raw: string | undefined,
+  index: number,
+  min: number,
+  max: number,
+  diagnostics: Diagnostic[]
+): number | null {
+  if (raw === undefined || !QR_INTERNAL_INTEGER.test(raw)) {
+    return invalidQrInternal(
+      diagnostics,
+      'DGLAB QR internal field ' + String(index) + ' must be a non-negative decimal integer.',
+      'internal[' + String(index) + ']'
+    );
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < min || value > max) {
+    return invalidQrInternal(
+      diagnostics,
+      'DGLAB QR internal field ' + String(index) + ' is outside the supported range.',
+      'internal[' + String(index) + ']',
+      { min, max, actual: value }
+    );
+  }
+  return value;
+}
+
+function pulseTextFromQrInternal(
+  text: string,
+  diagnostics: Diagnostic[]
+): string | null {
+  const chunks = text.split('+');
+  if (chunks.length !== QR_SECTION_COUNT + 1) {
+    return invalidQrInternal(
+      diagnostics,
+      'DGLAB QR internal data must contain one 20-field header and exactly three section payloads.',
+      '$',
+      { expectedSections: QR_SECTION_COUNT, actualChunks: Math.max(0, chunks.length - 1) }
+    );
+  }
+  const rawFields = chunks[0]?.split(',') ?? [];
+  if (rawFields.length !== QR_GLOBAL_FIELD_COUNT) {
+    return invalidQrInternal(
+      diagnostics,
+      'DGLAB QR internal header must contain exactly 20 fields.',
+      'internal',
+      { expected: QR_GLOBAL_FIELD_COUNT, actual: rawFields.length }
+    );
+  }
+  const fields: number[] = [];
+  const ranges: readonly [number, number][] = [
+    [0, 83], [0, 83], [0, 83], [0, 83], [0, 83], [0, 83],
+    [2, 100_000], [2, 100_000], [2, 100_000],
+    [0, 99], [0, 99], [0, 99],
+    [1, 4], [1, 4], [1, 4],
+    [0, 1], [0, 1], [0, 100], [0, 100], [1, 4]
+  ];
+  for (let index = 0; index < rawFields.length; index += 1) {
+    const range = ranges[index] ?? [0, 0];
+    const value = parseQrInternalInteger(rawFields[index], index, range[0], range[1], diagnostics);
+    if (value === null) return null;
+    fields.push(value);
+  }
+
+  const sections: QrInternalSection[] = [];
+  for (let sectionIndex = 0; sectionIndex < QR_SECTION_COUNT; sectionIndex += 1) {
+    const rawPoints = (chunks[sectionIndex + 1] ?? '').split(',');
+    const expectedPointCount = fields[sectionIndex + 6] ?? 0;
+    if (rawPoints.length !== expectedPointCount) {
+      return invalidQrInternal(
+        diagnostics,
+        'DGLAB QR section point count does not match its header.',
+        'sections[' + String(sectionIndex) + '].points',
+        { expected: expectedPointCount, actual: rawPoints.length }
+      );
+    }
+    const points: QrInternalPoint[] = [];
+    for (let pointIndex = 0; pointIndex < rawPoints.length; pointIndex += 1) {
+      const rawPoint = rawPoints[pointIndex] ?? '';
+      const match = QR_INTERNAL_POINT.exec(rawPoint);
+      if (match === null) {
+        return invalidQrInternal(
+          diagnostics,
+          'DGLAB QR section points must use the anchor-strength format with strength between 0 and 20.',
+          'sections[' + String(sectionIndex) + '].points[' + String(pointIndex) + ']'
+        );
+      }
+      const strength = Number(match[2]);
+      if (!Number.isFinite(strength) || strength < 0 || strength > 20) {
+        return invalidQrInternal(
+          diagnostics,
+          'DGLAB QR section point strength must be between 0 and 20.',
+          'sections[' + String(sectionIndex) + '].points[' + String(pointIndex) + ']',
+          { min: 0, max: 20, actual: strength }
+        );
+      }
+      points.push(Object.freeze({
+        anchor: Number(match[1]) as 0 | 1,
+        strength
+      }));
+    }
+    sections.push(Object.freeze({
+      frequencyStartIndex: fields[sectionIndex] ?? 0,
+      frequencyEndIndex: fields[sectionIndex + 3] ?? 0,
+      durationIndex: fields[sectionIndex + 9] ?? 0,
+      frequencyMode: (fields[sectionIndex + 12] ?? 1) as 1 | 2 | 3 | 4,
+      enabled: sectionIndex === 0 || (fields[14 + sectionIndex] ?? 0) === 1,
+      points: Object.freeze(points)
+    }));
+  }
+
+  const pulseText = PULSE_PREFIX + [fields[17], fields[19], fields[18]].join(',') + '=' + sections.map((section) => {
+    const header = [
+      section.frequencyStartIndex,
+      section.frequencyEndIndex,
+      section.durationIndex,
+      section.frequencyMode,
+      section.enabled ? 1 : 0
+    ].join(',');
+    const points = section.points.map((point) =>
+      normalizeDecimal(String(Number((point.strength * 5).toFixed(2)))) + '-' + String(point.anchor)
+    ).join(',');
+    return header + '/' + points;
+  }).join('+section+');
+  const parsed = parsePulse(pulseText);
+  if (parsed.pulse === null) {
+    return invalidQrInternal(diagnostics, 'DGLAB QR internal data could not be converted to a valid pulse document.');
+  }
+  return pulseText;
+}
+
+interface QrPulseSection {
+  readonly frequencyStartIndex: number;
+  readonly frequencyEndIndex: number;
+  readonly durationIndex: number;
+  readonly frequencyMode: 1 | 2 | 3 | 4;
+  readonly enabled: boolean;
+  readonly points: readonly { readonly anchor: 0 | 1; readonly strength: number }[];
+}
+
+const DEFAULT_QR_SECTION: QrPulseSection = Object.freeze({
+  frequencyStartIndex: 0,
+  frequencyEndIndex: 20,
+  durationIndex: 20,
+  frequencyMode: 1,
+  enabled: false,
+  points: Object.freeze([
+    Object.freeze({ anchor: 1 as const, strength: 0 }),
+    Object.freeze({ anchor: 1 as const, strength: 100 })
+  ])
+});
+
+function qrPulseSections(
+  pulse: Pulse,
+  diagnostics: Diagnostic[]
+): readonly QrPulseSection[] | null {
+  if (pulse.sections.length > QR_SECTION_COUNT) {
+    diagnostics.push(
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.QR_SECTION_LIMIT,
+        'error',
+        'qr',
+        'DGLAB QR export supports at most three sections; the source contains more.',
+        location('sections'),
+        { parameters: { max: QR_SECTION_COUNT, actual: pulse.sections.length } }
+      )
+    );
+    return null;
+  }
+  const first = pulse.sections[0];
+  if (first === undefined || !first.enabled) {
+    diagnostics.push(
+      makeDiagnostic(
+        DIAGNOSTIC_CODES.QR_FIRST_SECTION_DISABLED,
+        'error',
+        'qr',
+        'DGLAB QR export requires the first section to be enabled.',
+        location('sections[0].enabled', undefined, { sectionIndex: 0 })
+      )
+    );
+    return null;
+  }
+  const sections: QrPulseSection[] = [];
+  for (let sectionIndex = 0; sectionIndex < QR_SECTION_COUNT; sectionIndex += 1) {
+    const source = pulse.sections[sectionIndex];
+    if (source === undefined) {
+      sections.push(DEFAULT_QR_SECTION);
+      continue;
+    }
+    const points = source.pulseElement.points.map((point, pointIndex) => {
+      const qrStrength = point.strength / 5;
+      const rounded = Number(qrStrength.toFixed(2));
+      if (Math.abs(rounded - qrStrength) > 1e-9) {
+        diagnostics.push(
+          makeDiagnostic(
+            DIAGNOSTIC_CODES.QR_INTENSITY,
+            'error',
+            'qr',
+            'Pulse strength cannot be represented exactly by the DGLAB QR 0.01 scale after conversion to 0..20.',
+            location(
+              'sections[' + String(sectionIndex) + '].points[' + String(pointIndex) + '].strength',
+              undefined,
+              { sectionIndex, pointIndex }
+            ),
+            {
+              parameters: { strength: point.strength, qrStrength, rounded }
+            }
+          )
+        );
+        return null;
+      }
+      return Object.freeze({ anchor: point.anchor, strength: point.strength });
+    });
+    if (points.some((point) => point === null)) return null;
+    sections.push(Object.freeze({
+      frequencyStartIndex: source.frequencyStartIndex,
+      frequencyEndIndex: source.frequencyEndIndex,
+      durationIndex: source.durationIndex,
+      frequencyMode: source.frequencyMode,
+      enabled: source.enabled,
+      points: Object.freeze(points as readonly { readonly anchor: 0 | 1; readonly strength: number }[])
+    }));
+  }
+  return Object.freeze(sections);
+}
+
+function qrInternalTextFromPulse(pulse: Pulse, diagnostics: Diagnostic[]): string | null {
+  const sections = qrPulseSections(pulse, diagnostics);
+  if (sections === null) return null;
+  const fields = [
+    sections[0]!.frequencyStartIndex,
+    sections[1]!.frequencyStartIndex,
+    sections[2]!.frequencyStartIndex,
+    sections[0]!.frequencyEndIndex,
+    sections[1]!.frequencyEndIndex,
+    sections[2]!.frequencyEndIndex,
+    sections[0]!.points.length,
+    sections[1]!.points.length,
+    sections[2]!.points.length,
+    sections[0]!.durationIndex,
+    sections[1]!.durationIndex,
+    sections[2]!.durationIndex,
+    sections[0]!.frequencyMode,
+    sections[1]!.frequencyMode,
+    sections[2]!.frequencyMode,
+    sections[1]!.enabled ? 1 : 0,
+    sections[2]!.enabled ? 1 : 0,
+    pulse.globals.sectionRestIndex,
+    pulse.globals.frequencyBalanceIndex,
+    pulse.globals.playbackSpeed
+  ].join(',');
+  const sectionTexts = sections.map((section) => section.points.map((point) =>
+    String(point.anchor) + '-' + (point.strength / 5).toFixed(2)
+  ).join(','));
+  return fields + '+' + sectionTexts.join('+');
+}
+
 function payloadFromEnvelope(input: string): { readonly payload: string | null; readonly urlFragment: boolean } {
   const normalized = input.trim();
-  if (normalized.startsWith(QR_PREFIX)) {
-    return { payload: normalized.slice(QR_PREFIX.length), urlFragment: false };
-  }
   try {
     const parsed = new URL(normalized);
     const fragment = parsed.hash;
@@ -269,7 +561,7 @@ export function decodeQr(
         DIAGNOSTIC_CODES.RECOGNIZE_SIZE_LIMIT,
         'error',
         'resource',
-        'Decoded QR pulse text exceeds the configured byte limit.',
+        'Decoded DGLAB QR internal text exceeds the configured byte limit.',
         location('$'),
         { parameters: { maxDecodedBytes: limits.maxDecodedBytes, actualBytes: decodedByteLength } }
       )
@@ -294,31 +586,23 @@ export function decodeQr(
     );
     return Object.freeze({ accepted: false, pulseText: null, diagnostics });
   }
-  let text: string;
+  let internalText: string;
   try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(decoded);
+    internalText = new TextDecoder('utf-8', { fatal: true }).decode(decoded);
   } catch {
     diagnostics.push(
       makeDiagnostic(
         DIAGNOSTIC_CODES.QR_TEXT,
         'error',
         'qr',
-        'Base64 payload is not valid UTF-8 pulse text.',
+        'Base64 payload is not valid UTF-8 DGLAB QR internal text.',
         location('$')
       )
     );
     return Object.freeze({ accepted: false, pulseText: null, diagnostics });
   }
-  if (!text.startsWith(PULSE_PREFIX)) {
-    diagnostics.push(
-      makeDiagnostic(
-        DIAGNOSTIC_CODES.QR_TEXT,
-        'error',
-        'qr',
-        'Decoded QR content is not Dungeonlab pulse text.',
-        location('$')
-      )
-    );
+  const text = pulseTextFromQrInternal(internalText, diagnostics);
+  if (text === null) {
     return Object.freeze({ accepted: false, pulseText: null, diagnostics });
   }
   return Object.freeze({
@@ -438,19 +722,23 @@ export function encodeQr(
     );
     return Object.freeze({ content: null, diagnostics });
   }
-  const textBytes = encodeUtf8(text);
-  if (textBytes.byteLength > limits.maxDecodedBytes) {
+  const internalText = qrInternalTextFromPulse(sourcePulse, diagnostics);
+  if (internalText === null) {
+    return Object.freeze({ content: null, diagnostics: sortDiagnostics(diagnostics) });
+  }
+  const internalTextBytes = encodeUtf8(internalText);
+  if (internalTextBytes.byteLength > limits.maxDecodedBytes) {
     diagnostics.push(makeDiagnostic(
       DIAGNOSTIC_CODES.RECOGNIZE_SIZE_LIMIT,
       'error',
       'resource',
-      'Encoded pulse text exceeds the configured decoded byte limit.',
+      'Encoded DGLAB QR internal text exceeds the configured decoded byte limit.',
       location('$'),
-      { parameters: { maxDecodedBytes: limits.maxDecodedBytes, actualBytes: textBytes.byteLength } }
+      { parameters: { maxDecodedBytes: limits.maxDecodedBytes, actualBytes: internalTextBytes.byteLength } }
     ));
     return Object.freeze({ content: null, diagnostics: sortDiagnostics(diagnostics) });
   }
-  const encodedText = Buffer.from(textBytes).toString('base64');
+  const encodedText = Buffer.from(internalTextBytes).toString('base64');
   // Node emits a deterministic zero mtime for gzip streams in the supported
   // runtime; keep options empty so the public Node types remain portable.
   let compressed: Buffer;
@@ -462,13 +750,13 @@ export function encodeQr(
         DIAGNOSTIC_CODES.QR_GZIP,
         'error',
         'qr',
-        'Pulse text could not be compressed for a QR envelope.',
+        'DGLAB QR internal text could not be compressed for a QR envelope.',
         location('$')
       )
     );
     return Object.freeze({ content: null, diagnostics: sortDiagnostics(diagnostics) });
   }
-  const hex = compressed.toString('hex');
+  const hex = compressed.toString('hex').toUpperCase();
   if (compressed.byteLength > limits.maxCompressedBytes || hex.length > limits.maxHexCharacters) {
     diagnostics.push(
       makeDiagnostic(
@@ -481,14 +769,17 @@ export function encodeQr(
     );
     return Object.freeze({ content: null, diagnostics });
   }
-  const content = QR_PREFIX + hex;
+  const content = QR_SHARE_URL + QR_PREFIX + hex;
   const decoded = decodeQr(content, limits);
   if (!decoded.accepted || decoded.pulseText === null) {
     diagnostics.push(...decoded.diagnostics);
     return Object.freeze({ content: null, diagnostics: sortDiagnostics(diagnostics) });
   }
   const roundTrip = parsePulse(decoded.pulseText, { maxBytes: limits.maxDecodedBytes });
-  if (roundTrip.pulse === null || !semanticallyEqual(sourcePulse, roundTrip.pulse)) {
+  const roundTripInternalText = roundTrip.pulse === null
+    ? null
+    : qrInternalTextFromPulse(roundTrip.pulse, []);
+  if (roundTrip.pulse === null || roundTripInternalText !== internalText) {
     diagnostics.push(
       makeDiagnostic(
         DIAGNOSTIC_CODES.EXPORT_ROUNDTRIP_MISMATCH,

@@ -780,7 +780,7 @@ function registerIpc(): void {
       const target = await dialog.showSaveDialog({
         defaultPath: exported.data.displayName,
         filters: format === 'qr-envelope'
-          ? [{ name: 'QR text', extensions: ['txt'] }]
+          ? [{ name: 'QR image', extensions: ['jpg'] }]
           : [{ name: 'Pulse files', extensions: ['pulse'] }]
       });
       if (target.canceled || target.filePath === undefined) {
@@ -789,7 +789,7 @@ function registerIpc(): void {
       const sameAsSource = resolve(target.filePath) === snapshot.path;
       if (sameAsSource && format === 'qr-envelope') {
         return rejectedIpc(
-          'QR text cannot overwrite the opened pulse source file.',
+          'QR image cannot overwrite the opened pulse source file.',
           DIAGNOSTIC_CODES.EXPORT_BLOCKED
         );
       }
@@ -829,7 +829,16 @@ function registerIpc(): void {
           }
         }
       }
-      return toOperationDto(exported);
+      const envelope = toOperationDto(exported);
+      if (format !== 'qr-envelope') return envelope;
+      return {
+        envelope,
+        artifact: {
+          bytes: exported.data.bytes,
+          displayName: exported.data.displayName,
+          contentType: exported.data.contentType ?? 'image/jpeg'
+        }
+      };
     } catch {
       return failedIpc(
         'export',

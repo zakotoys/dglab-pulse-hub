@@ -15,6 +15,14 @@ export function interpolateQuadratic(
   end: number,
   x: number
 ): number {
+  return Math.round(start + (end - start) * quadraticCurve(x));
+}
+
+function rawInterpolateQuadratic(
+  start: number,
+  end: number,
+  x: number
+): number {
   return start + (end - start) * quadraticCurve(x);
 }
 
@@ -190,13 +198,25 @@ export function resolveControlPoints(
       continue;
     }
     const x = (index - leftIndex) / (rightIndex - leftIndex);
-    const rawValue = interpolateQuadratic(
+    const rawValue = rawInterpolateQuadratic(
       leftPoint.strength,
       rightPoint.strength,
       x
     );
-    const value = Math.min(100, Math.max(0, rawValue));
-    if (value !== rawValue && !clippedReported) {
+    const roundedValue = Math.round(rawValue);
+    if (roundedValue !== rawValue && !roundedReported) {
+      diagnostics.push(makeDiagnostic(
+        DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED,
+        'warning',
+        'semantic',
+        'Interpolated intensity was rounded to the nearest integer.',
+        location('points[' + index + '].strength', undefined, { pointIndex: index }),
+        { parameters: { value: rawValue, rounded: roundedValue } }
+      ));
+      roundedReported = true;
+    }
+    const value = Math.min(100, Math.max(0, roundedValue));
+    if (value !== roundedValue && !clippedReported) {
       diagnostics.push(makeDiagnostic(
         DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_CLIPPED,
         'warning',
@@ -212,17 +232,6 @@ export function resolveControlPoints(
         ? 'boundary-interpolation'
         : 'quadratic-interpolation';
     const decimal = numberToDecimal(value);
-    if (Number(decimal) !== value && !roundedReported) {
-      diagnostics.push(makeDiagnostic(
-        DIAGNOSTIC_CODES.SEMANTIC_INTERPOLATION_ROUNDED,
-        'warning',
-        'semantic',
-        'Interpolated intensity was rounded to six decimal places.',
-        location('points[' + index + '].strength', undefined, { pointIndex: index }),
-        { parameters: { value, rounded: decimal } }
-      ));
-      roundedReported = true;
-    }
     resolved.push({
       value,
       decimal,

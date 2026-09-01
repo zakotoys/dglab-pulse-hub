@@ -20,8 +20,6 @@ import {
   type WorkspaceOperation
 } from '@dglab-pulse-hub/workspace-ui';
 
-const QR_PREFIX = '#DGLAB-PULSE#';
-
 function failureEnvelope(
   operation: string,
   message: string,
@@ -235,7 +233,7 @@ export function createWebWorkspaceClient(): WorkspaceClient {
           return { envelope: failureEnvelope('inspect', 'The selected file could not be imported.') };
         }
       }
-      const candidate = decoded.trim().startsWith(QR_PREFIX) || /^https?:\/\/[^\s]+#DGLAB-PULSE#/i.test(decoded.trim())
+      const candidate = /^https?:\/\/[^\s]+#DGLAB-PULSE#/i.test(decoded.trim())
         ? await decodeQrText(decoded, signal)
         : await inspectText(decoded, file.name, signal);
       if (candidate.document === undefined || candidate.decodedText === undefined) return candidate;
@@ -265,7 +263,7 @@ export function createWebWorkspaceClient(): WorkspaceClient {
         },
         'export',
         exportDataSchema,
-        format === 'qr-envelope' ? 'pulse.qr.txt' : document.displayName,
+        format === 'qr-envelope' ? 'pulse.qr.jpg' : document.displayName,
         signal
       );
     },
