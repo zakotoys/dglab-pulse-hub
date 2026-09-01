@@ -364,10 +364,11 @@ export function buildServer(options: ApiOptions = {}): FastifyInstance {
       });
       const effective = requestResult(result, requestSignal.signal);
       if (effective.status !== 'success' || effective.data === null) return sendEnvelope(reply, effective);
-      const displayName = asciiDisplayName(effective.data.displayName);
+      const displayName = sanitizeDisplayName(effective.data.displayName);
+      const headerSafeDisplayName = asciiDisplayName(displayName);
       const dto = toOperationDto({
         ...effective,
-        data: { ...effective.data, displayName }
+        data: { ...effective.data, displayName: headerSafeDisplayName }
       });
       return reply
         .code(200)
@@ -1711,8 +1712,17 @@ function asciiDisplayName(displayName: string): string {
   return sanitizeDisplayName(basename(displayName)).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 180) || 'pulse-output';
 }
 
+function encodeDispositionFileName(displayName: string): string {
+  return encodeURIComponent(displayName).replace(/['()*]/g, (character) =>
+    '%' + character.charCodeAt(0).toString(16).toUpperCase()
+  );
+}
+
 function contentDisposition(displayName: string): string {
-  return 'attachment; filename="' + asciiDisplayName(displayName) + '"';
+  const safeName = sanitizeDisplayName(basename(displayName));
+  const fallback = asciiDisplayName(safeName);
+  if (safeName === fallback) return 'attachment; filename="' + fallback + '"';
+  return 'attachment; filename="' + fallback + '"; filename*=UTF-8\'\'' + encodeDispositionFileName(safeName);
 }
 
 export async function startServer(options: ApiOptions & { readonly port?: number; readonly host?: string } = {}): Promise<FastifyInstance> {

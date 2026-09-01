@@ -37,9 +37,14 @@ import {
 } from './client.js';
 import {
   assistProposalFingerprint,
+  fileExportActionFailureMessage,
+  finalizeQrImageAction,
   isAssistProposalValid,
+  qrImageActionFailureMessage,
+  qrImageUnavailableMessage,
   reviewedAssistMatches,
-  type AssistProposalFingerprintInput
+  type AssistProposalFingerprintInput,
+  type QrImageAction
 } from './workflow.js';
 
 type StreamPoint = NonNullable<InspectDataDto['stream']>['points'][number];
@@ -197,6 +202,9 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
   const point = selectedPoint !== null && stream !== null ? stream.points[selectedPoint] : undefined;
   const hoveredPoint = hoveredPointIndex !== null && stream !== null ? stream.points[hoveredPointIndex] : undefined;
   const dirty = workspaceDocument !== null && historyCursor > 0;
+  const qrImageUnavailable = result === null
+    ? null
+    : qrImageUnavailableMessage(result.metadata.pulse.sectionCount);
   const canUndo = historyCursor > 0;
   const canRedo = historyCursor >= 0 && historyCursor < history.length - 1;
   const batch = useMemo(
@@ -544,33 +552,72 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
     }
   }
 
-  async function exportCurrent(format: 'pulse-text' | 'qr-envelope' = 'pulse-text'): Promise<void> {
+  async function exportCurrent(): Promise<void> {
     if (workspaceDocument === null) return;
     const controller = beginRequest('Exporting');
     try {
-      const operation = await client.export(workspaceDocument, format, exportMode, controller.signal);
+      const operation = await client.export(workspaceDocument, 'pulse-text', exportMode, controller.signal);
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success') {
-        setEnvelope(operation.envelope);
+        setMessage(fileExportActionFailureMessage(operation.envelope));
         return;
       }
       if (operation.artifact !== undefined) {
         const saved = await client.saveArtifact(
           operation.artifact,
-          format === 'qr-envelope' ? (operation.artifact.displayName || 'pulse.qr.jpg') : (fileName || 'pulse.pulse'),
+          fileName || 'pulse.pulse',
           controller.signal
         );
         if (saved.status !== 'success') {
-          setEnvelope(saved);
+          setMessage(fileExportActionFailureMessage(saved));
           return;
         }
       }
-      if (format === 'qr-envelope') setQrArtifact(operation.artifact ?? null);
-      setMessage(format === 'qr-envelope' ? 'QR image downloaded.' : 'Pulse file downloaded.');
+      setMessage('Pulse file downloaded.');
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       if (error instanceof DOMException && error.name === 'AbortError') setMessage('Export cancelled.');
       else setMessage('Export failed.');
+    } finally {
+      endRequest(controller);
+    }
+  }
+
+  async function handleQrImage(action: QrImageAction): Promise<void> {
+    if (workspaceDocument === null || qrImageUnavailable !== null) return;
+    const controller = beginRequest(action === 'preview' ? 'Previewing QR image' : 'Exporting QR image');
+    try {
+      const operation = await client.export(workspaceDocument, 'qr-envelope', exportMode, controller.signal);
+      if (!isCurrentRequest(controller)) return;
+      if (operation.envelope.status !== 'success') {
+        setMessage(qrImageActionFailureMessage(operation.envelope, action));
+        return;
+      }
+      if (operation.artifact === undefined) {
+        setMessage(action === 'preview' ? 'QR image preview failed.' : 'QR image export failed.');
+        return;
+      }
+      const result = await finalizeQrImageAction(operation, action, client.saveArtifact, controller.signal);
+      if (!isCurrentRequest(controller)) return;
+      if (result.saveEnvelope !== undefined && result.saveEnvelope.status !== 'success') {
+        setMessage(result.saveEnvelope.status === 'cancelled'
+          ? 'QR image export cancelled.'
+          : qrImageActionFailureMessage(result.saveEnvelope, action));
+        return;
+      }
+      if (action === 'preview') {
+        setQrArtifact(operation.artifact);
+        setMessage('QR image preview ready.');
+      } else {
+        setMessage('QR image downloaded.');
+      }
+    } catch (error) {
+      if (!isCurrentRequest(controller)) return;
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setMessage(action === 'preview' ? 'QR image preview cancelled.' : 'QR image export cancelled.');
+      } else {
+        setMessage(action === 'preview' ? 'QR image preview failed.' : 'QR image export failed.');
+      }
     } finally {
       endRequest(controller);
     }
@@ -888,7 +935,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
           {fileName !== '' && <div className="file-chip"><span aria-hidden="true">◇</span><div><b title={fileName}>{fileName}</b><small>{result?.metadata.file.byteSize ?? 0} bytes{dirty ? ' · unsaved' : ''}</small></div></div>}
           {result !== null && <div className="sidebar-block"><div className="section-heading"><span>Pulse</span><span className="muted">r{result.pulse.revision}</span></div><dl className="compact"><div><dt>Sections</dt><dd>{result.metadata.pulse.sectionCount}</dd></div><div><dt>Enabled</dt><dd>{result.metadata.pulse.enabledSectionCount}</dd></div><div><dt>Duration</dt><dd>{formatMs(result.metadata.pulse.effectiveDurationMs)}</dd></div><div><dt>Points</dt><dd>{result.metadata.stream.stats.pointCount}</dd></div></dl></div>}
           <div className="sidebar-block"><div className="section-heading"><span>History</span><span className="muted">{history.length}</span></div><div className="history-actions"><button className="icon-button" aria-label="Undo" disabled={!canUndo || busy} onClick={() => void moveHistory(-1)}>↶</button><button className="icon-button" aria-label="Redo" disabled={!canRedo || busy} onClick={() => void moveHistory(1)}>↷</button></div></div>
-          <div className="sidebar-block"><div className="section-heading"><span>Export</span></div><label className="select-label">Text mode<select value={exportMode} onChange={(event) => setExportMode(event.target.value as 'source' | 'canonical')} disabled={busy}><option value="source" disabled={dirty}>Source snapshot</option><option value="canonical">Canonical</option></select></label><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent()}>↓ <span>Export .pulse</span></button><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent('qr-envelope')}>⌁ <span>Export QR image</span></button></div>
+          <div className="sidebar-block"><div className="section-heading"><span>Export</span></div><label className="select-label">Text mode<select value={exportMode} onChange={(event) => setExportMode(event.target.value as 'source' | 'canonical')} disabled={busy}><option value="source" disabled={dirty}>Source snapshot</option><option value="canonical">Canonical</option></select></label><button className="action" disabled={workspaceDocument === null || busy} onClick={() => void exportCurrent()}>↓ <span>Export .pulse</span></button><button className="action" disabled={workspaceDocument === null || busy || qrImageUnavailable !== null} onClick={() => void handleQrImage('preview')}>⌁ <span>Preview QR image</span></button><button className="action" disabled={workspaceDocument === null || busy || qrImageUnavailable !== null} onClick={() => void handleQrImage('download')}>↓ <span>Export QR image</span></button>{qrImageUnavailable !== null && <small className="field-note">{qrImageUnavailable}</small>}</div>
           <div className="sidebar-block"><div className="section-heading"><span>Preview image</span></div><div className="preview-actions"><select aria-label="Preview format" value={previewFormat} onChange={(event) => setPreviewFormat(event.target.value as 'svg' | 'png' | 'jpg')} disabled={busy}><option value="svg">SVG</option><option value="png">PNG</option><option value="jpg">JPG</option></select><button className="secondary" disabled={workspaceDocument === null || busy} onClick={() => void renderPreview()}>↓ Download</button></div></div>
           {busy && <button className="cancel" onClick={() => abortController.current?.abort()}>Cancel current task</button>}
           {message !== '' && <p className="notice" role="status">{message}</p>}
@@ -896,7 +943,7 @@ export function WorkspaceApp({ client }: WorkspaceAppProps): ReactElement {
         <div className="content">
           <section className="hero-row"><div><p className="eyebrow">WORKSPACE</p><h1>{fileName || 'Open a pulse document'}</h1><p className="subline">{result === null ? 'Ready for a .pulse or QR input.' : result.recognition.profile + ' · ' + result.recognition.format}</p></div>{envelope !== null && <div className="badge" data-status={envelope.status}>{envelope.status}</div>}</section>
           {diagnostics.length > 0 && <section className="diagnostics" aria-live="polite"><div className="section-heading"><span>Diagnostics</span><span className="muted">{diagnostics.length}</span></div>{diagnostics.map((item, index) => <div className="diagnostic" data-severity={item.severity} key={item.code + index}><span className="severity" aria-hidden="true">{item.severity === 'error' ? '!' : item.severity === 'warning' ? '△' : 'i'}</span><div><b>{item.code}</b><p>{item.message}</p><small>{item.location.path}{item.location.span === undefined ? '' : ' · line ' + item.location.span.line + ', column ' + item.location.span.column}{item.suggestion === undefined ? '' : ' · ' + item.suggestion}</small></div></div>)}</section>}
-          {qrPreviewUrl !== null && <section className="panel qr-preview-panel" aria-live="polite"><div className="panel-head"><div><p className="eyebrow">QR EXPORT</p><h2>Generated QR image</h2></div><span className="muted">JPG</span></div><img className="qr-preview-image" src={qrPreviewUrl} alt="Generated pulse QR code" /></section>}
+          {qrPreviewUrl !== null && <section className="panel qr-preview-panel" aria-live="polite"><div className="panel-head"><div><p className="eyebrow">QR PREVIEW</p><h2>QR image preview</h2></div><span className="muted">JPG</span></div><img className="qr-preview-image" src={qrPreviewUrl} alt="Generated pulse QR code" /></section>}
           {stream !== null ? <>
             <section className="panel timeline-panel"><div className="panel-head"><div><p className="eyebrow">WAVEFORM STREAM</p><h2>Intensity and frequency</h2></div><div className="legend"><span><i className="swatch intensity" />Intensity</span><span><i className="swatch frequency" />Frequency index</span></div></div><div className="timeline-wrap"><svg viewBox="0 0 960 280" role="img" aria-label="Waveform stream timeline. Hover or focus to inspect point metadata." tabIndex={0} onClick={selectTimeline} onPointerMove={hoverTimeline} onPointerLeave={() => setHoveredPointIndex(null)} onFocus={focusTimeline} onKeyDown={(event) => { const key = event.key; if (key === 'ArrowRight') moveTimelinePoint(1); else if (key === 'ArrowLeft') moveTimelinePoint(-1); else if (key === 'Home' || key === 'End') moveTimelineToKey(key); else return; event.preventDefault(); }}><line className="axis" x1="0" y1="240" x2="960" y2="240" /><line className="axis" x1="0" y1="0" x2="0" y2="240" /><polyline className="line frequency" points={plot.frequency} /><polyline className="line intensity" points={plot.intensity} />{stream.points.length > 0 && <line className="cursor" x1={(playhead / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} x2={(playhead / Math.max(1, stream.totalDurationMs) * 960).toFixed(2)} y1="0" y2="240" />}</svg>{hoveredPoint !== undefined && <div className="timeline-tooltip" role="status" aria-live="polite"><strong>Point {hoveredPoint.index + 1}</strong><span>{formatMs(hoveredPoint.timeMs)} · {hoveredPoint.intensityDecimal} intensity · frequency {hoveredPoint.frequencyIndex}</span><small>Section {hoveredPoint.source.sectionIndex + 1} · repetition {hoveredPoint.source.repetitionIndex + 1} · {hoveredPoint.source.origin}</small></div>}<div className="time-labels"><span>0 ms</span><span>{formatMs(stream.totalDurationMs)}</span></div></div><div className="playback"><button className="icon-button" aria-label={playing ? 'Pause preview playback' : 'Play preview playback'} onClick={() => { if (playback === null || stream.totalDurationMs <= 0) return; if (playing) playback.pause(); else playback.play(); }}>{playing ? 'Ⅱ' : '▶'}</button><button className="icon-button" aria-label="Stop preview playback" onClick={() => { playback?.stop(); setPlayhead(0); }}>■</button><input aria-label="Preview playback position" type="range" min="0" max={Math.max(1, stream.totalDurationMs)} value={Math.min(playhead, stream.totalDurationMs)} onChange={(event) => { const value = Number(event.target.value); playback?.seek(value); setPlaying(false); }} /><span className="timecode">{formatMs(playhead)} / {formatMs(stream.totalDurationMs)}</span><span className="preview-label">Preview playback</span></div></section>
             <section className="visual-grid"><div className="panel intensity-panel"><div className="panel-head"><div><p className="eyebrow">INTENSITY MAP</p><h2>Current strength</h2></div><span className="muted">numeric + colour</span></div><div className="intensity-visual"><div className="intensity-ring" style={{ '--intensity': (point?.intensity ?? 0) + '%' } as CSSProperties} role="img" aria-label={'Current intensity ' + (point?.intensityDecimal ?? '0') + ' out of 100'}><span>{point?.intensityDecimal ?? '0'}</span><small>/ 100</small></div><div className="intensity-scale"><div className="colour-strip" /><div className="scale-labels"><span>0</span><span>50</span><span>100</span></div><p>{point === undefined ? 'Select a point to inspect its colour mapping.' : 'Colour is a secondary cue. The exact intensity remains visible as a number.'}</p></div></div></div><div className="panel stream-stats"><div className="panel-head"><div><p className="eyebrow">STREAM STATS</p><h2>Expanded snapshot</h2></div></div>{result !== null && <dl className="detail-grid"><div><dt>Points</dt><dd>{result.metadata.stream.stats.pointCount}</dd></div><div><dt>Total duration</dt><dd>{formatMs(result.metadata.stream.stats.totalDurationMs)}</dd></div><div><dt>Frequency range</dt><dd>{result.metadata.stream.stats.minFrequencyIndex ?? '--'} to {result.metadata.stream.stats.maxFrequencyIndex ?? '--'}</dd></div><div><dt>Mean intensity</dt><dd>{result.metadata.stream.stats.meanIntensity?.toFixed(2) ?? '--'}</dd></div><div><dt>Granularity</dt><dd>{formatMs(result.metadata.stream.timeGranularityMs)}</dd></div><div><dt>Warnings</dt><dd>{result.metadata.stream.warningCount}</dd></div></dl>}</div></section>

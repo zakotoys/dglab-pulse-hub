@@ -71,14 +71,19 @@ function decodeUtf8(bytes: Uint8Array): string | null {
 
 function displayNameFromDisposition(value: string | null, fallback: string): string {
   if (value !== null) {
-    const match = /filename\*?=(?:UTF-8''|"?)([^";]+)"?/i.exec(value);
-    if (match?.[1] !== undefined) {
+    const encodedMatch = /(?:^|;)\s*filename\*=UTF-8''([^;]+)/i.exec(value);
+    if (encodedMatch?.[1] !== undefined) {
       try {
-        const decoded = decodeURIComponent(match[1]);
+        const decoded = decodeURIComponent(encodedMatch[1].trim());
         if (decoded.length > 0) return decoded.replace(/[\\/\0]/g, '_').slice(0, 180);
       } catch {
-        // Use the stable fallback for malformed header values.
+        // Try the ASCII filename parameter below.
       }
+    }
+    const plainMatch = /(?:^|;)\s*filename=(?:"([^"]*)"|([^;]*))/i.exec(value);
+    const plainName = plainMatch?.[1] ?? plainMatch?.[2]?.trim();
+    if (plainName !== undefined && plainName.length > 0) {
+      return plainName.replace(/[\\/\0]/g, '_').slice(0, 180);
     }
   }
   return fallback;

@@ -74,6 +74,36 @@ describe('web workspace client', () => {
     expect(Array.from(operation.artifact?.bytes ?? [])).toEqual([0xff, 0xd8, 0xff]);
   });
 
+  it('prefers the UTF-8 Content-Disposition filename for QR downloads', async () => {
+    const descriptor = {
+      format: 'qr-envelope',
+      displayName: '132-____.qr.jpg',
+      byteSize: 3,
+      mode: 'canonical',
+      sourceDigest: '0123456789abcdef',
+      roundTripVerified: true,
+      contentType: 'image/jpeg'
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+      status: 200,
+      headers: {
+        'content-type': 'image/jpeg',
+        'content-disposition': 'attachment; filename="132-____.qr.jpg"; filename*=UTF-8\'\'132-%E6%BC%82%E6%B5%AE%E4%B9%8B%E7%BE%BD.qr.jpg',
+        'x-pulse-result': JSON.stringify(descriptor)
+      }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const operation = await createWebWorkspaceClient().export({
+      displayName: '132-漂浮之羽.pulse',
+      digest: 'fedcba9876543210',
+      text: SOURCE
+    }, 'qr-envelope', 'canonical');
+
+    expect(operation.envelope.status).toBe('success');
+    expect(operation.artifact?.displayName).toBe('132-漂浮之羽.qr.jpg');
+  });
+
   it('omits an unspecified batch export mode so the API applies its default', async () => {
     const responseEnvelope = {
       schemaVersion: 'pulse-contract-v1',

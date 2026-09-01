@@ -1,5 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
-import { join, resolve } from 'node:path';
+import { app, BrowserWindow, dialog, ipcMain, session, type SaveDialogOptions } from 'electron';
+import { join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   applyPulseAssist,
@@ -157,7 +157,7 @@ function rejectedIpc(
 }
 
 function cancelledIpc(
-  operation: 'inspect' | 'export' | 'edit' | 'diff' | 'batch' | 'render' | 'undo' | 'redo',
+  operation: 'inspect' | 'export' | 'write-file' | 'edit' | 'diff' | 'batch' | 'render' | 'undo' | 'redo',
   diagnostics: readonly Diagnostic[] = []
 ): unknown {
   return toOperationDto(operationResult(operation, 'cancelled', null, [
@@ -168,6 +168,7 @@ function cancelledIpc(
       'task',
       operation === 'inspect' ? 'Open operation was cancelled.' :
         operation === 'export' ? 'Export operation was cancelled.' :
+          operation === 'write-file' ? 'Artifact save was cancelled.' :
           operation === 'diff' ? 'Diff operation was cancelled.' :
             operation === 'batch' ? 'Batch operation was cancelled.' :
               operation === 'render' ? 'Preview rendering was cancelled.' :
@@ -178,7 +179,7 @@ function cancelledIpc(
 }
 
 function failedIpc(
-  operation: 'inspect' | 'export' | 'edit' | 'diff' | 'batch' | 'render' | 'undo' | 'redo',
+  operation: 'inspect' | 'export' | 'write-file' | 'edit' | 'diff' | 'batch' | 'render' | 'undo' | 'redo',
   code: string,
   stage: Diagnostic['stage'],
   message: string
@@ -206,6 +207,32 @@ function previewDisplayName(value: string | undefined, format: 'svg' | 'png' | '
   const withoutKnownExtension = sanitized.replace(/\.(?:pulse|txt|svg|png|jpe?g)$/i, '');
   const stem = withoutKnownExtension.length > 0 ? withoutKnownExtension : 'pulse-preview';
   return stem + '.' + format;
+}
+
+function nativeOverwriteConfirmation(): Pick<SaveDialogOptions, 'properties'> | Record<string, never> {
+  return process.platform === 'linux'
+    ? { properties: ['showOverwriteConfirmation'] }
+    : {};
+}
+
+function indexedOutputPath(filePath: string, index: number): string {
+  if (index === 0) return filePath;
+  const target = parse(filePath);
+  return join(target.dir, target.name + ' (' + index + ')' + target.ext);
+}
+
+async function writeAvailableOutput(
+  filePath: string,
+  bytes: Uint8Array,
+  overwrite = false
+): Promise<Awaited<ReturnType<typeof atomicWriteFile>>> {
+  if (overwrite) return atomicWriteFile(filePath, bytes, { overwrite: true });
+  for (let index = 0; ; index += 1) {
+    const written = await atomicWriteFile(indexedOutputPath(filePath, index), bytes, { overwrite: false });
+    const conflict = written.status === 'rejected' &&
+      written.diagnostics.some((item) => item.code === DIAGNOSTIC_CODES.ADAPTER_CONFLICT);
+    if (!conflict) return written;
+  }
 }
 
 function digestPayload(payload: unknown): string | null {
@@ -626,13 +653,18 @@ function registerIpc(): void {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
         if (item === undefined || item.status !== 'success' || item.data === null) continue;
-        const written = await atomicWriteFile(join(directory.filePaths[0], item.data.displayName), item.data.bytes, { overwrite });
+        const written = await writeAvailableOutput(join(directory.filePaths[0], item.data.displayName), item.data.bytes, overwrite);
         if (written.status !== 'success') {
           items[index] = Object.freeze({
             ...item,
             status: 'failed' as const,
             diagnostics: [...item.diagnostics, ...written.diagnostics],
             data: null
+          });
+        } else if (written.data !== null) {
+          items[index] = Object.freeze({
+            ...item,
+            data: Object.freeze({ ...item.data, displayName: written.data.displayName })
           });
         }
       }
@@ -694,13 +726,11 @@ function registerIpc(): void {
           typeof payload.displayName === 'string' ? payload.displayName : snapshot.path.split(/[\\/]/).pop(),
           format
         ),
-        filters: [{ name: format.toUpperCase() + ' preview', extensions: [format] }]
+        filters: [{ name: format.toUpperCase() + ' preview', extensions: [format] }],
+        ...nativeOverwriteConfirmation()
       });
       if (target.canceled || target.filePath === undefined) return cancelledIpc('render', inspected.diagnostics);
-      if (resolve(target.filePath) === snapshot.path) {
-        return rejectedOperation('render', 'A preview cannot overwrite the opened pulse source file.', DIAGNOSTIC_CODES.EXPORT_BLOCKED, 'export');
-      }
-      const written = await atomicWriteFile(resolve(target.filePath), image.bytes, { overwrite: false });
+      const written = await writeAvailableOutput(resolve(target.filePath), image.bytes, true);
       if (written.status !== 'success' || written.data === null) {
         return toOperationDto(operationResult('render', written.status, null, [
           ...inspected.diagnostics,
@@ -777,68 +807,36 @@ function registerIpc(): void {
       if (exported.status !== 'success' || exported.data === null) {
         return toOperationDto(exported);
       }
+      const envelope = toOperationDto(exported);
+      if (format === 'qr-envelope') {
+        return {
+          envelope,
+          artifact: {
+            bytes: exported.data.bytes,
+            displayName: exported.data.displayName,
+            contentType: exported.data.contentType ?? 'image/jpeg'
+          }
+        };
+      }
       const target = await dialog.showSaveDialog({
         defaultPath: exported.data.displayName,
-        filters: format === 'qr-envelope'
-          ? [{ name: 'QR image', extensions: ['jpg'] }]
-          : [{ name: 'Pulse files', extensions: ['pulse'] }]
+        filters: [{ name: 'Pulse files', extensions: ['pulse'] }],
+        ...nativeOverwriteConfirmation()
       });
       if (target.canceled || target.filePath === undefined) {
         return cancelledIpc('export', exported.diagnostics);
       }
-      const sameAsSource = resolve(target.filePath) === snapshot.path;
-      if (sameAsSource && format === 'qr-envelope') {
-        return rejectedIpc(
-          'QR image cannot overwrite the opened pulse source file.',
-          DIAGNOSTIC_CODES.EXPORT_BLOCKED
-        );
-      }
-      let overwrite = false;
-      if (sameAsSource) {
-        const confirm = (dialog as unknown as {
-          showMessageBoxSync?: (window: BrowserWindow, options: Record<string, unknown>) => number;
-        }).showMessageBoxSync;
-        if (typeof confirm !== 'function' || mainWindow === null || confirm(mainWindow, {
-          type: 'warning',
-          buttons: ['Cancel', 'Replace'],
-          defaultId: 0,
-          cancelId: 0,
-          title: 'Replace source file?',
-          message: 'The selected destination is the opened source file.'
-        }) !== 1) {
-          return cancelledIpc('export', exported.diagnostics);
-        }
-        overwrite = true;
-      }
-      const written = await atomicWriteFile(target.filePath, exported.data.bytes, { overwrite });
-      if (written.status !== 'success') {
+      const written = await writeAvailableOutput(resolve(target.filePath), exported.data.bytes, true);
+      if (written.status !== 'success' || written.data === null) {
         return toOperationDto(operationResult('export', written.status, null, [
           ...exported.diagnostics,
           ...written.diagnostics
         ]));
       }
-      if (format === 'pulse-text' && sameAsSource) {
-        const refreshed = updateCurrentSnapshot(exported.data.bytes, target.filePath, false);
-        if (refreshed.status === 'success' && refreshed.data !== null && sourceSnapshot !== null) {
-          resetDocumentHistory(sourceSnapshot);
-          try {
-            mainWindow?.webContents.send('pulse:history-reset', toOperationDto(refreshed));
-          } catch {
-            // A closed renderer cannot receive the notification; the saved file
-            // and privileged history state remain authoritative.
-          }
-        }
-      }
-      const envelope = toOperationDto(exported);
-      if (format !== 'qr-envelope') return envelope;
-      return {
-        envelope,
-        artifact: {
-          bytes: exported.data.bytes,
-          displayName: exported.data.displayName,
-          contentType: exported.data.contentType ?? 'image/jpeg'
-        }
-      };
+      return toOperationDto(operationResult('export', 'success', {
+        ...exported.data,
+        displayName: written.data.displayName
+      }, exported.diagnostics));
     } catch {
       return failedIpc(
         'export',
@@ -846,6 +844,39 @@ function registerIpc(): void {
         'adapter',
         'Unable to export the selected pulse file.'
       );
+    }
+  });
+
+  ipcMain.handle('pulse:save-artifact', async (event, payload: unknown) => {
+    if (!trustedSender(event)) throw new Error('Untrusted IPC sender.');
+    if (!plainObject(payload) || !onlyKeys(payload, ['artifact', 'suggestedName']) ||
+        !plainObject(payload.artifact) || !onlyKeys(payload.artifact, ['bytes', 'displayName', 'contentType'])) {
+      return rejectedIpc('Artifact save request contains unsupported fields.');
+    }
+    const artifact = payload.artifact;
+    if (!(artifact.bytes instanceof Uint8Array) || artifact.bytes.byteLength === 0 ||
+        typeof artifact.displayName !== 'string' || artifact.displayName.length === 0 ||
+        typeof artifact.contentType !== 'string' || artifact.contentType.length === 0 ||
+        typeof payload.suggestedName !== 'string') {
+      return rejectedIpc('Artifact save request is invalid.');
+    }
+    const suggestedName = sanitizeDisplayName(payload.suggestedName || artifact.displayName);
+    try {
+      const target = await dialog.showSaveDialog({
+        defaultPath: suggestedName,
+        filters: artifact.contentType === 'image/jpeg'
+          ? [{ name: 'QR image', extensions: ['jpg'] }]
+          : [{ name: 'Exported file', extensions: [parse(suggestedName).ext.slice(1) || 'bin'] }],
+        ...nativeOverwriteConfirmation()
+      });
+      if (target.canceled || target.filePath === undefined) return cancelledIpc('write-file');
+      const written = await writeAvailableOutput(resolve(target.filePath), artifact.bytes, true);
+      if (written.status !== 'success' || written.data === null) {
+        return toOperationDto(operationResult('write-file', written.status, null, written.diagnostics));
+      }
+      return toOperationDto(operationResult('write-file', 'success', written.data, []));
+    } catch {
+      return failedIpc('write-file', DIAGNOSTIC_CODES.ADAPTER_WRITE, 'adapter', 'Unable to save the exported artifact.');
     }
   });
 
@@ -866,7 +897,7 @@ app.whenReady().then(() => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"]
+        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"]
       }
     });
   });

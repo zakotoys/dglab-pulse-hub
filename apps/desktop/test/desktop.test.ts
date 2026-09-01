@@ -60,6 +60,15 @@ vi.mock('electron', () => ({
 
 const directories: string[] = [];
 
+function expectNativeOverwriteDialog(): void {
+  const options = mocks.dialog.showSaveDialog.mock.lastCall?.[0];
+  if (process.platform === 'linux') {
+    expect(options).toMatchObject({ properties: ['showOverwriteConfirmation'] });
+  } else {
+    expect(options).not.toHaveProperty('properties');
+  }
+}
+
 describe('Electron IPC boundary', () => {
   beforeAll(async () => {
     await import('../src/main.js');
@@ -105,6 +114,28 @@ describe('Electron IPC boundary', () => {
     );
     expect(operationEnvelopeSchema.safeParse(exported).success).toBe(true);
     expect(exported).toMatchObject({ status: 'success' });
+    expect(await readFile(output, 'utf8')).toContain('Dungeonlab+pulse:');
+  });
+
+  it('overwrites an existing export filename after native confirmation', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-overwrite-'));
+    directories.push(directory);
+    const input = join(directory, 'source.pulse');
+    const output = join(directory, 'exported.pulse');
+    await writeFile(input, VALID_TEXT, 'utf8');
+    await writeFile(output, 'existing', 'utf8');
+    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
+    const opened = await mocks.handlers.get('pulse:open')?.({ senderFrame: { url: TRUSTED_URL } });
+    const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
+    mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
+
+    const exported = await mocks.handlers.get('pulse:export')?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      { sourceDigest: digest, displayName: 'exported.pulse' }
+    );
+
+    expect(exported).toMatchObject({ operation: 'export', status: 'success' });
+    expectNativeOverwriteDialog();
     expect(await readFile(output, 'utf8')).toContain('Dungeonlab+pulse:');
   });
 
@@ -267,7 +298,7 @@ describe('Electron IPC boundary', () => {
     expect(mocks.dialog.showOpenDialog).not.toHaveBeenCalled();
   });
 
-  it('refuses QR export to the opened source path without changing source bytes', async () => {
+  it('generates a QR artifact without opening a save dialog or changing source bytes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-qr-source-'));
     directories.push(directory);
     const input = join(directory, 'source.pulse');
@@ -279,18 +310,21 @@ describe('Electron IPC boundary', () => {
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     expect(typeof digest).toBe('string');
 
-    mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: input });
+    mocks.dialog.showSaveDialog.mockClear();
     const exportHandler = mocks.handlers.get('pulse:export');
     const exported = await exportHandler?.(
       { senderFrame: { url: TRUSTED_URL } },
       { sourceDigest: digest, format: 'qr-envelope', displayName: 'source.txt' }
     );
-    expect(exported).toMatchObject({ operation: 'export', status: 'rejected', result: null });
-    expect((exported as { diagnostics?: readonly { code: string }[] }).diagnostics?.some((item) => item.code === 'PULSE_EXPORT_BLOCKED')).toBe(true);
+    expect(exported).toMatchObject({
+      envelope: { operation: 'export', status: 'success' },
+      artifact: { displayName: 'source.qr.jpg', contentType: 'image/jpeg' }
+    });
+    expect(mocks.dialog.showSaveDialog).not.toHaveBeenCalled();
     expect(await readFile(input)).toEqual(before);
   });
 
-  it('returns the saved QR image artifact for renderer preview', async () => {
+  it('returns an unsaved QR image artifact for renderer preview', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-qr-artifact-'));
     directories.push(directory);
     const input = join(directory, 'source.pulse');
@@ -300,7 +334,7 @@ describe('Electron IPC boundary', () => {
     const open = mocks.handlers.get('pulse:open');
     const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
-    mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
+    mocks.dialog.showSaveDialog.mockClear();
     const exported = await mocks.handlers.get('pulse:export')?.(
       { senderFrame: { url: TRUSTED_URL } },
       { sourceDigest: digest, format: 'qr-envelope', displayName: 'source.pulse' }
@@ -314,10 +348,39 @@ describe('Electron IPC boundary', () => {
     expect(response.artifact).toMatchObject({ displayName: 'source.qr.jpg', contentType: 'image/jpeg' });
     expect(response.artifact?.bytes).toBeInstanceOf(Uint8Array);
     expect(Array.from((response.artifact?.bytes as Uint8Array).subarray(0, 2))).toEqual([0xff, 0xd8]);
-    expect(Array.from((await readFile(output)).subarray(0, 2))).toEqual([0xff, 0xd8]);
+    expect(mocks.dialog.showSaveDialog).not.toHaveBeenCalled();
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('refreshes snapshots after a confirmed pulse-text source overwrite', async () => {
+  it('overwrites an existing QR artifact after native confirmation', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-save-artifact-'));
+    directories.push(directory);
+    const output = join(directory, 'source.qr.jpg');
+    await writeFile(output, 'existing', 'utf8');
+    mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
+
+    const saved = await mocks.handlers.get('pulse:save-artifact')?.(
+      { senderFrame: { url: TRUSTED_URL } },
+      {
+        artifact: {
+          bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+          displayName: 'source.qr.jpg',
+          contentType: 'image/jpeg'
+        },
+        suggestedName: 'source.qr.jpg'
+      }
+    );
+
+    expect(saved).toMatchObject({
+      operation: 'write-file',
+      status: 'success',
+      result: { displayName: 'source.qr.jpg', byteSize: 3 }
+    });
+    expectNativeOverwriteDialog();
+    expect(Array.from(await readFile(output))).toEqual([0xff, 0xd8, 0xff]);
+  });
+
+  it('overwrites pulse exports targeting the opened source without resetting history', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-overwrite-'));
     directories.push(directory);
     const input = join(directory, 'source.pulse');
@@ -337,7 +400,6 @@ describe('Electron IPC boundary', () => {
     expect(typeof editedDigest).toBe('string');
 
     mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: input });
-    mocks.dialog.showMessageBoxSync.mockReturnValueOnce(1);
     mocks.historyReset.mockClear();
     const exportHandler = mocks.handlers.get('pulse:export');
     const exported = await exportHandler?.(
@@ -345,11 +407,8 @@ describe('Electron IPC boundary', () => {
       { sourceDigest: editedDigest, format: 'pulse-text', mode: 'canonical', displayName: 'source.pulse' }
     );
     expect(exported).toMatchObject({ operation: 'export', status: 'success' });
-    expect(mocks.historyReset).toHaveBeenCalledWith(
-      'pulse:history-reset',
-      expect.objectContaining({ operation: 'inspect', status: 'success' })
-    );
-    expect(JSON.stringify(mocks.historyReset.mock.calls[0]?.[1])).not.toContain(VALID_TEXT);
+    expect(mocks.historyReset).not.toHaveBeenCalled();
+    expect(await readFile(input, 'utf8')).toContain('62');
     const inspected = await mocks.handlers.get('pulse:inspect-current')?.({ senderFrame: { url: TRUSTED_URL } });
     expect(inspected).toMatchObject({ operation: 'inspect', status: 'success' });
     const refreshedDigest = (inspected as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
@@ -358,13 +417,18 @@ describe('Electron IPC boundary', () => {
       { senderFrame: { url: TRUSTED_URL } },
       { sourceDigest: refreshedDigest }
     );
-    expect(undoAfterSave).toMatchObject({ operation: 'undo', status: 'rejected', result: null });
-    mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: join(directory, 'copy.pulse') });
-    const sourceMode = await exportHandler?.(
-      { senderFrame: { url: TRUSTED_URL } },
-      { sourceDigest: refreshedDigest, format: 'pulse-text', mode: 'source', displayName: 'copy.pulse' }
-    );
-    expect(sourceMode).toMatchObject({ operation: 'export', status: 'success' });
+    expect(undoAfterSave).toMatchObject({ operation: 'undo', status: 'success' });
+  });
+
+  it('allows blob URLs for generated QR previews', () => {
+    const registration = mocks.session.defaultSession.webRequest.onHeadersReceived.mock.calls[0]?.[0] as
+      ((details: { responseHeaders: Record<string, string[]> }, callback: (value: { responseHeaders: Record<string, string[]> }) => void) => void) | undefined;
+    expect(registration).toBeDefined();
+    let policy = '';
+    registration?.({ responseHeaders: {} }, (value) => {
+      policy = value.responseHeaders['Content-Security-Policy']?.[0] ?? '';
+    });
+    expect(policy).toContain("img-src 'self' data: blob:");
   });
 
   it('renders SVG, PNG, and JPG previews from the current snapshot without exposing bytes or paths', async () => {
@@ -407,7 +471,7 @@ describe('Electron IPC boundary', () => {
     }
   });
 
-  it('fails closed for unsupported, cancelled, and conflicting preview exports', async () => {
+  it('fails closed for unsupported and cancelled previews and confirms overwrite conflicts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-desktop-preview-failure-'));
     directories.push(directory);
     const input = join(directory, 'source.pulse');
@@ -431,13 +495,18 @@ describe('Electron IPC boundary', () => {
     const conflict = join(directory, 'existing.svg');
     await writeFile(conflict, 'keep', 'utf8');
     mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: conflict });
-    const conflicted = await render?.(
+    const overwritten = await render?.(
       { senderFrame: { url: TRUSTED_URL } },
       { sourceDigest: digest, format: 'svg' }
     );
-    expect(operationEnvelopeSchema.safeParse(conflicted).success).toBe(true);
-    expect(conflicted).toMatchObject({ operation: 'render', status: 'rejected', result: null });
-    expect(await readFile(conflict, 'utf8')).toBe('keep');
+    expect(operationEnvelopeSchema.safeParse(overwritten).success).toBe(true);
+    expect(overwritten).toMatchObject({
+      operation: 'render',
+      status: 'success',
+      result: { displayName: 'existing.svg' }
+    });
+    expectNativeOverwriteDialog();
+    expect(await readFile(conflict, 'utf8')).toContain('<svg');
   });
 
   it('returns contract-safe diff and batch results through the local adapter', async () => {

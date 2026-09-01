@@ -394,7 +394,14 @@ function rejectedExport(
         'Pulse could not be exported.',
         location('$')
       )];
-  return operationResult('export', 'rejected', null, sortDiagnostics(effective));
+  const seen = new Set<string>();
+  const unique = effective.filter((diagnostic) => {
+    const identity = diagnostic.code + '\0' + JSON.stringify(diagnostic.location);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+  return operationResult('export', 'rejected', null, sortDiagnostics(unique));
 }
 
 function unsupportedExportOption(field: 'format' | 'mode', value: unknown): Diagnostic {

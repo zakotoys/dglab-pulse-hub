@@ -2,6 +2,7 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import {
   DIAGNOSTIC_CODES,
   DEFAULT_RULE_SET,
+  DGLAB_QR_MAX_SECTIONS,
   QR_PREFIX,
   QR_SHARE_URL,
   PULSE_PREFIX,
@@ -38,7 +39,6 @@ export interface QrDecodeResult {
   readonly diagnostics: readonly Diagnostic[];
 }
 
-const QR_SECTION_COUNT = 3;
 const QR_GLOBAL_FIELD_COUNT = 20;
 const QR_INTERNAL_INTEGER = /^(?:0|[1-9][0-9]*)$/;
 const QR_INTERNAL_POINT = /^(0|1)-((?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?)$/;
@@ -107,12 +107,12 @@ function pulseTextFromQrInternal(
   diagnostics: Diagnostic[]
 ): string | null {
   const chunks = text.split('+');
-  if (chunks.length !== QR_SECTION_COUNT + 1) {
+  if (chunks.length !== DGLAB_QR_MAX_SECTIONS + 1) {
     return invalidQrInternal(
       diagnostics,
       'DGLAB QR internal data must contain one 20-field header and exactly three section payloads.',
       '$',
-      { expectedSections: QR_SECTION_COUNT, actualChunks: Math.max(0, chunks.length - 1) }
+      { expectedSections: DGLAB_QR_MAX_SECTIONS, actualChunks: Math.max(0, chunks.length - 1) }
     );
   }
   const rawFields = chunks[0]?.split(',') ?? [];
@@ -140,7 +140,7 @@ function pulseTextFromQrInternal(
   }
 
   const sections: QrInternalSection[] = [];
-  for (let sectionIndex = 0; sectionIndex < QR_SECTION_COUNT; sectionIndex += 1) {
+  for (let sectionIndex = 0; sectionIndex < DGLAB_QR_MAX_SECTIONS; sectionIndex += 1) {
     const rawPoints = (chunks[sectionIndex + 1] ?? '').split(',');
     const expectedPointCount = fields[sectionIndex + 6] ?? 0;
     if (rawPoints.length !== expectedPointCount) {
@@ -231,7 +231,7 @@ function qrPulseSections(
   pulse: Pulse,
   diagnostics: Diagnostic[]
 ): readonly QrPulseSection[] | null {
-  if (pulse.sections.length > QR_SECTION_COUNT) {
+  if (pulse.sections.length > DGLAB_QR_MAX_SECTIONS) {
     diagnostics.push(
       makeDiagnostic(
         DIAGNOSTIC_CODES.QR_SECTION_LIMIT,
@@ -239,7 +239,7 @@ function qrPulseSections(
         'qr',
         'DGLAB QR export supports at most three sections; the source contains more.',
         location('sections'),
-        { parameters: { max: QR_SECTION_COUNT, actual: pulse.sections.length } }
+        { parameters: { max: DGLAB_QR_MAX_SECTIONS, actual: pulse.sections.length } }
       )
     );
     return null;
@@ -258,7 +258,7 @@ function qrPulseSections(
     return null;
   }
   const sections: QrPulseSection[] = [];
-  for (let sectionIndex = 0; sectionIndex < QR_SECTION_COUNT; sectionIndex += 1) {
+  for (let sectionIndex = 0; sectionIndex < DGLAB_QR_MAX_SECTIONS; sectionIndex += 1) {
     const source = pulse.sections[sectionIndex];
     if (source === undefined) {
       sections.push(DEFAULT_QR_SECTION);

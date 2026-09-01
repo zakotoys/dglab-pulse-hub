@@ -238,7 +238,7 @@ describe('HTTP adapter', () => {
     const payload = JSON.stringify({
       text: VALID_TEXT,
       format: 'qr-envelope',
-      displayName: '127-猩红告白.pulse'
+      displayName: '132-漂浮之羽.pulse'
     });
     const response = await new Promise<{ statusCode: number; headers: IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
       const request = httpRequest({
@@ -266,11 +266,13 @@ describe('HTTP adapter', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('image/jpeg');
-    expect(response.headers['content-disposition']).toBe('attachment; filename="127-____.qr.jpg"');
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="132-____.qr.jpg"; filename*=UTF-8\'\'132-%E6%BC%82%E6%B5%AE%E4%B9%8B%E7%BE%BD.qr.jpg'
+    );
     expect(response.body.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
     expect(JSON.parse(String(response.headers['x-pulse-result']))).toMatchObject({
       format: 'qr-envelope',
-      displayName: '127-____.qr.jpg',
+      displayName: '132-____.qr.jpg',
       contentType: 'image/jpeg',
       roundTripVerified: true
     });

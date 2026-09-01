@@ -100,6 +100,19 @@ describe('application boundaries', () => {
     expect(encoded.diagnostics.some((item) => item.code === 'PULSE_QR_SECTION_LIMIT')).toBe(true);
   });
 
+  it('deduplicates repeated diagnostics when QR export is unsupported', () => {
+    const section = '0,0,0,1,1/0-1,100-1';
+    const result = exportPulse(
+      'Dungeonlab+pulse:0,1,0=' + Array.from({ length: 4 }, () => section).join('+section+'),
+      { format: 'qr-envelope' }
+    );
+
+    expect(result.status).toBe('rejected');
+    expect(result.diagnostics.filter((item) =>
+      item.code === 'PULSE_SEMANTIC_UNVERIFIED_SECTION_COUNT' && item.location.path === 'sections'
+    )).toHaveLength(1);
+  });
+
   it('rejects intensity values that cannot be represented by the App QR scale', () => {
     const encoded = encodeQr('Dungeonlab+pulse:0,1,0=0,0,0,1,1/0-1,16.67-1');
     expect(encoded.content).toBeNull();

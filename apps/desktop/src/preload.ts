@@ -19,6 +19,11 @@ export interface DesktopExportResponse {
   readonly artifact?: DesktopExportArtifact;
 }
 
+export interface DesktopSaveArtifactRequest {
+  readonly artifact: DesktopExportArtifact;
+  readonly suggestedName: string;
+}
+
 export interface DesktopPreviewRequest {
   readonly sourceDigest: string;
   readonly displayName?: string;
@@ -97,6 +102,8 @@ contextBridge.exposeInMainWorld('pulseDesktop', Object.freeze({
     ipcRenderer.invoke('pulse:render-preview', payload),
   export: (payload: DesktopExportRequest): Promise<OperationEnvelopeDto | DesktopExportResponse> =>
     ipcRenderer.invoke('pulse:export', payload),
+  saveArtifact: (payload: DesktopSaveArtifactRequest): Promise<OperationEnvelopeDto> =>
+    ipcRenderer.invoke('pulse:save-artifact', payload),
   markDirty: (dirty: boolean): Promise<OperationEnvelopeDto> =>
     ipcRenderer.invoke('pulse:mark-dirty', { dirty })
 }));

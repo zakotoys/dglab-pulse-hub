@@ -41,6 +41,7 @@ interface DesktopApi {
   readonly batchExport: (payload?: { readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
   readonly renderPreview: (payload: { readonly sourceDigest: string; readonly displayName?: string; readonly format: 'svg' | 'png' | 'jpg' }) => Promise<unknown>;
   readonly export: (payload: { readonly sourceDigest: string; readonly displayName?: string; readonly format?: 'pulse-text' | 'qr-envelope'; readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
+  readonly saveArtifact: (payload: { readonly artifact: WorkspaceArtifact; readonly suggestedName: string }) => Promise<unknown>;
 }
 
 declare global {
@@ -175,7 +176,12 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async export(document, format, mode, signal) {
       try {
         throwIfAborted(signal);
-        const operation = parseExportResponse(await api.export({ sourceDigest: document.digest, displayName: document.displayName, format, mode }));
+        const operation = parseExportResponse(await api.export({
+          sourceDigest: document.digest,
+          displayName: document.displayName,
+          format,
+          ...(format === 'pulse-text' ? { mode } : {})
+        }));
         throwIfAborted(signal);
         return { ...operation, document };
       } catch (error) {
@@ -295,15 +301,15 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     },
 
     async saveArtifact(artifact: WorkspaceArtifact, suggestedName: string, signal) {
-      throwIfAborted(signal);
-      return {
-        schemaVersion: SCHEMA_VERSION,
-        ruleVersion: RULE_VERSION,
-        operation: 'export',
-        status: 'success',
-        result: { displayName: suggestedName || artifact.displayName, byteSize: artifact.bytes.byteLength },
-        diagnostics: []
-      };
+      try {
+        throwIfAborted(signal);
+        const envelope = parseEnvelope(await api.saveArtifact({ artifact, suggestedName }), 'export');
+        throwIfAborted(signal);
+        return envelope;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return cancelled('export', 'Export');
+        return failureEnvelope('export', 'The exported artifact could not be saved.');
+      }
     },
 
     onHistoryReset(listener) {
