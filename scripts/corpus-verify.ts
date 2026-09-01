@@ -16,6 +16,7 @@ import {
   type BatchInput
 } from '@dglab-pulse-hub/application';
 import {
+  DIAGNOSTIC_CODES,
   parsePulse,
   semanticallyEqual,
   type Diagnostic,
@@ -79,6 +80,12 @@ interface CorpusReport {
   readonly failures: readonly Failure[];
 }
 
+const EXPECTED_QR_UNSUPPORTED_CODES: ReadonlySet<string> = new Set([
+  DIAGNOSTIC_CODES.QR_SECTION_LIMIT,
+  DIAGNOSTIC_CODES.QR_FIRST_SECTION_DISABLED,
+  DIAGNOSTIC_CODES.QR_INTENSITY
+]);
+
 async function pulseFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
@@ -106,6 +113,11 @@ function diagnostics(report: MutableReport, values: readonly Diagnostic[]): void
 function failure(report: MutableReport, kind: string, file: string, detail: string): void {
   report.failureCount += 1;
   if (report.failures.length < 40) report.failures.push({ kind, file, detail });
+}
+
+function isExpectedQrUnsupported(diagnostics: readonly Diagnostic[]): boolean {
+  const errors = diagnostics.filter((item) => item.severity === 'error');
+  return errors.length > 0 && errors.every((item) => EXPECTED_QR_UNSUPPORTED_CODES.has(item.code));
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -319,22 +331,36 @@ export async function verifyCorpus(directory: string): Promise<CorpusReport> {
       const encoded = encodeQr(parsed.pulse);
       diagnostics(report, encoded.diagnostics);
       if (encoded.content === null) {
-        failure(report, 'qr-encode', name, encoded.diagnostics.map((item) => item.code).join(','));
+        if (!isExpectedQrUnsupported(encoded.diagnostics)) {
+          failure(
+            report,
+            'qr-encode',
+            name,
+            encoded.diagnostics.map((item) => item.code).join(',')
+          );
+        }
       } else {
         const decoded = decodeQr(encoded.content);
         diagnostics(report, decoded.diagnostics);
         const roundTrip = decoded.pulseText === null ? null : parsePulse(decoded.pulseText);
+        // The App QR envelope always materializes three sections, so compare
+        // its canonical envelope instead of the source section count.
+        const reencoded =
+          roundTrip?.pulse === null || roundTrip === null ? null : encodeQr(roundTrip.pulse);
         if (
           !decoded.accepted ||
           roundTrip?.pulse === null ||
           roundTrip === null ||
-          !semanticallyEqual(parsed.pulse, roundTrip.pulse)
+          reencoded === null ||
+          reencoded.content !== encoded.content
         ) {
           failure(
             report,
             'qr-round-trip',
             name,
-            decoded.diagnostics.map((item) => item.code).join(',')
+            [...decoded.diagnostics, ...(reencoded?.diagnostics ?? [])]
+              .map((item) => item.code)
+              .join(',')
           );
         } else report.qrRoundTrips += 1;
       }

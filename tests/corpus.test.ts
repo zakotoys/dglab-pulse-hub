@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parsePulse } from '@dglab-pulse-hub/core';
 import { buildReport } from '../scripts/corpus-report.js';
+import { verifyCorpus } from '../scripts/corpus-verify.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixtureRoot = join(root, 'tests', 'fixtures');
@@ -39,5 +40,13 @@ describe('checked-in corpus fixtures', () => {
     expect(first).toEqual(second);
     expect(first.expectationMismatches).toBe(0);
     expect(first.fileCount).toBeGreaterThan(0);
+  });
+
+  it('verifies the canonical fixed-section QR contract', async () => {
+    const report = await verifyCorpus(fixtureRoot);
+
+    expect(report.failureCount).toBe(0);
+    expect(report.qrRoundTrips).toBe(2);
+    expect(report.failures).toEqual([]);
   });
 });
