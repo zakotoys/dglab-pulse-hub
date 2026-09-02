@@ -22,6 +22,8 @@ module.exports = {
       config: {
         name: 'DGLabPulseHub',
         title: 'DGLab Pulse Hub',
+        authors: 'ZakoToys',
+        description: 'DG-LAB .pulse waveform workbench',
         exe: 'DGLab Pulse Hub.exe',
         setupExe: 'DGLab Pulse Hub Setup.exe',
         noMsi: true

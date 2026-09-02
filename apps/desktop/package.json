@@ -3,6 +3,8 @@
   "productName": "DGLab Pulse Hub",
   "version": "0.0.2",
   "private": true,
+  "description": "DG-LAB .pulse waveform workbench",
+  "author": "ZakoToys",
   "type": "module",
   "main": "./dist/main.js",
   "dependencies": {
