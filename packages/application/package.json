@@ -1,6 +1,6 @@
 {
   "name": "@dglab-pulse-hub/application",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,8 +11,8 @@
     }
   },
   "dependencies": {
-    "@dglab-pulse-hub/contracts": "0.0.2",
-    "@dglab-pulse-hub/core": "0.0.2",
+    "@dglab-pulse-hub/contracts": "0.0.3",
+    "@dglab-pulse-hub/core": "0.0.3",
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0",
     "qrcode": "^1.5.4"
