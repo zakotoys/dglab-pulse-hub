@@ -2,14 +2,14 @@
 
 ## 文档信息
 
-| 项目       | 内容                                                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 文档状态   | Draft / 技术约束基线                                                                                                                 |
-| 目标运行时 | TypeScript、Node.js、npm                                                                                                             |
-| 目标客户端 | Electron、Web 浏览器                                                                                                                 |
-| 目标部署   | Docker Compose、Nginx、Node.js API                                                                                                   |
-| 核心格式   | DG-LAB 4 App `.pulse`                                                                                                                |
-| 关联文档   | [PRD](prd.md)、[Glossary](glossary.md)、[格式研究](research/dglab-pulse-format.md)、[交付计划](plan/README.md)、[ADR](adr/README.md) |
+| 项目       | 内容                                                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 文档状态   | Draft / 技术约束基线                                                                                                                                         |
+| 目标运行时 | TypeScript、Node.js、npm                                                                                                                                     |
+| 目标客户端 | Electron、Web 浏览器                                                                                                                                         |
+| 目标部署   | Docker Compose、Nginx、Node.js API                                                                                                                           |
+| 核心格式   | DG-LAB 4 App `.pulse`                                                                                                                                        |
+| 关联文档   | [PRD](prd.md)、[Glossary](glossary.md)、[格式研究](research/dglab-pulse-format.md)、[交付计划](plan/README.md)、[ADR](adr/README.md)、[发布手册](release.md) |
 
 本文规定系统必须提供的技术能力、边界和可验证约束，不规定具体目录结构、UI 框架或第三方库。实现应优先复用项目已有依赖和成熟能力，并保持核心逻辑不依赖 Electron、DOM、Nginx 或具体传输协议。
 
@@ -50,7 +50,8 @@
 1. **领域层**：Pulse、section、脉冲元、曲线点、WaveformStream、metadata、版本和诊断语义。
 2. **应用层**：导入、导出、检查、升级、预览图和修改等用例；负责单文件/批量任务编排、进度、取消和结果聚合。
 3. **适配器层**：本地文件、HTTP 上传下载、QR、图像编码、Electron IPC 和未来设备接入。
-4. **展示层**：Electron renderer 与 Web 前端；只消费应用层结果，不复制解析或校验规则。
+4. **展示层**：Electron
+   renderer 与 Web 前端；只消费应用层结果，不复制解析或校验规则。共享 UI 使用 GSAP 管理可取消的显示动画，动画不得改变领域结果。
 5. **部署层**：Node.js API、静态 Web 和 Nginx；通过 Docker Compose 组合运行。
 
 领域层和应用层不得依赖 Nginx 或浏览器 DOM。适配器失败必须以统一诊断形式返回，不得改变领域结果的语义。
@@ -187,6 +188,8 @@ API 中应产生等价的 Pulse、WaveformStream、诊断和导出结果。允�
 - 环形频谱与颜色映射必须同时提供可读数值或替代文本，满足不可只依赖颜色的要求。
 - SVG、PNG、JPG 导出的同一 stream 应使用同一数据快照和同一坐标语义。
 - 播放模拟应可暂停、停止、定位或显示进度，并明确标记为本地预览，不触发设备输出。
+- 操作状态、结果面板、诊断、拖放和弹层动画必须尊重
+  `prefers-reduced-motion`；动画中断或禁用不能阻止键盘和屏幕阅读器流程。
 
 ## 11. 部署与运行要求
 

@@ -4,12 +4,25 @@
 
 Requirements: Docker Engine with Compose v2 and at least 1 GiB of free memory.
 
+For a local source build:
+
 ```sh
 docker compose build --pull
 docker compose up -d
 docker compose ps
 curl --fail http://127.0.0.1:8080/health/ready
 ```
+
+For a published release, pull immutable images from GHCR first:
+
+```sh
+PULSE_HUB_IMAGE_TAG=0.1.1 docker compose pull
+PULSE_HUB_IMAGE_TAG=0.1.1 docker compose up -d
+```
+
+The release workflow publishes `ghcr.io/zakotoys/dglab-pulse-hub-api` and
+`ghcr.io/zakotoys/dglab-pulse-hub-web`. The Compose file still keeps build definitions so local
+source builds remain available.
 
 Set `PULSE_HUB_PORT` to change the host port. The default is `8080`. The API and static web service
 are internal-only; Nginx is the public entry point.
@@ -40,12 +53,13 @@ next API instance initializes.
 
 ## Upgrade and rollback
 
-Build immutable image tags in the release pipeline before deployment. To upgrade, pull/build the
-target tag and run `docker compose up -d`. There is no persistent application data migration.
+The release pipeline builds immutable version tags before deployment. To upgrade, set
+`PULSE_HUB_IMAGE_TAG` to the target version, pull the images, and run `docker compose up -d`. There
+is no persistent application data migration.
 
-To roll back, restore the previous API and web image tags and run `docker compose up -d` again.
-Confirm `/health/ready`, then inspect one synthetic valid fixture and one invalid fixture through
-the API.
+To roll back, set `PULSE_HUB_IMAGE_TAG` to the previous API and Web image tag and run
+`docker compose pull` followed by `docker compose up -d` again. Confirm `/health/ready`, then
+inspect one synthetic valid fixture and one invalid fixture through the API.
 
 ## Incident checks
 

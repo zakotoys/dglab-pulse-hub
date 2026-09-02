@@ -9,6 +9,8 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
 import {
   SCHEMA_VERSION,
   RULE_VERSION,
@@ -51,7 +53,23 @@ import {
   type QrImageAction
 } from './workflow.js';
 import { createTranslator, detectLocale, localizeDiagnostic, type Locale } from './i18n.js';
+import {
+  animateDiagnostics,
+  animateDropOverlay,
+  animateFileManager,
+  animateFileManagerRows,
+  animateIntensityRing,
+  animateMessage,
+  animateProgress,
+  animateResultPanels,
+  animateTimeline,
+  animateTimelineTooltip,
+  animateWorkspaceIntro,
+  withMotionPreferences
+} from './motion.js';
 import { detectTheme, type Theme } from './preferences.js';
+
+gsap.registerPlugin(useGSAP);
 
 type StreamPoint = NonNullable<InspectDataDto['stream']>['points'][number];
 
@@ -208,6 +226,7 @@ export function WorkspaceApp({
   const [history, setHistory] = useState<readonly WorkspaceDocument[]>([]);
   const [historyCursor, setHistoryCursor] = useState(-1);
   const abortController = useRef<AbortController | null>(null);
+  const shellRef = useRef<HTMLElement | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const interactionGeneration = useRef(0);
   const compareLoadGeneration = useRef(0);
@@ -216,6 +235,8 @@ export function WorkspaceApp({
   const cursorRef = useRef(-1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedPointRef = useRef<number | null>(null);
+  const intensityValueRef = useRef(0);
+  const batchProgressValueRef = useRef(0);
   const dragDepth = useRef(0);
 
   useEffect(() => {
@@ -380,6 +401,148 @@ export function WorkspaceApp({
       }) ?? []
     );
   }, [section, assistPoints, assistStart, assistEnd, assistStartStrength, assistEndStrength]);
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateWorkspaceIntro(root, reducedMotion);
+      });
+    },
+    { scope: shellRef }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null || result === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateResultPanels(root, reducedMotion);
+        animateTimeline(root, reducedMotion);
+      });
+    },
+    {
+      dependencies: [result?.sourceDigest, qrPreviewUrl, diffEnvelope, batchEnvelope],
+      scope: shellRef,
+      revertOnUpdate: true
+    }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateDiagnostics(root, reducedMotion);
+      });
+    },
+    {
+      dependencies: [envelope],
+      scope: shellRef,
+      revertOnUpdate: true
+    }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null || hoveredPoint === undefined) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateTimelineTooltip(root, reducedMotion);
+      });
+    },
+    {
+      dependencies: [hoveredPoint?.index],
+      scope: shellRef,
+      revertOnUpdate: true
+    }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      const nextValue = point?.intensity ?? 0;
+      const previousValue = intensityValueRef.current;
+      intensityValueRef.current = nextValue;
+      if (root === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateIntensityRing(root, previousValue, nextValue, reducedMotion);
+      });
+    },
+    {
+      dependencies: [point?.index, point?.intensity],
+      scope: shellRef,
+      revertOnUpdate: true
+    }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      const total = batchProgress.total;
+      const nextValue = total === 0 ? 0 : batchProgress.completed / total;
+      const previousValue = batchProgressValueRef.current;
+      batchProgressValueRef.current = nextValue;
+      if (root === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateProgress(root, previousValue, nextValue, reducedMotion);
+      });
+    },
+    {
+      dependencies: [batchProgress.completed, batchProgress.total],
+      scope: shellRef,
+      revertOnUpdate: true
+    }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null || message === '') return;
+      return withMotionPreferences((reducedMotion) => {
+        animateMessage(root, reducedMotion);
+      });
+    },
+    { dependencies: [message], scope: shellRef, revertOnUpdate: true }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null || !dragActive) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateDropOverlay(root, reducedMotion);
+      });
+    },
+    { dependencies: [dragActive], scope: shellRef, revertOnUpdate: true }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null || fileManagerPurpose === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateFileManager(root, reducedMotion);
+      });
+    },
+    { dependencies: [fileManagerPurpose], scope: shellRef, revertOnUpdate: true }
+  );
+
+  useGSAP(
+    () => {
+      const root = shellRef.current;
+      if (root === null || fileManagerPurpose === null) return;
+      return withMotionPreferences((reducedMotion) => {
+        animateFileManagerRows(root, reducedMotion);
+      });
+    },
+    {
+      dependencies: [fileManagerPurpose, libraryLoading, localIndex, libraryQuery],
+      scope: shellRef,
+      revertOnUpdate: true
+    }
+  );
 
   function beginRequest(label: string): AbortController {
     interactionGeneration.current += 1;
@@ -1197,7 +1360,13 @@ export function WorkspaceApp({
   }, [stream]);
 
   return (
-    <main className="shell" data-theme={theme} lang={locale}>
+    <main
+      ref={shellRef}
+      className="shell"
+      data-motion-root="workspace"
+      data-theme={theme}
+      lang={locale}
+    >
       <a className="skip-link" href="#workspace-content">
         {t('workspace')}
       </a>
@@ -1440,7 +1609,9 @@ export function WorkspaceApp({
             {batchProgress.total > 0 && (
               <div className="batch-progress" aria-live="polite">
                 <span
-                  style={{ width: (batchProgress.completed / batchProgress.total) * 100 + '%' }}
+                  style={{
+                    transform: `scaleX(${batchProgress.completed / batchProgress.total})`
+                  }}
                 />
                 <small>{t('filesRead', batchProgress)}</small>
               </div>
@@ -1647,7 +1818,7 @@ export function WorkspaceApp({
             </section>
           )}
           {qrPreviewUrl !== null && (
-            <section className="panel qr-preview-panel" aria-live="polite">
+            <section className="panel qr-preview-panel" data-motion-panel aria-live="polite">
               <div className="panel-head">
                 <div>
                   <p className="eyebrow">{t('qrPreview')}</p>
@@ -1660,7 +1831,7 @@ export function WorkspaceApp({
           )}
           {stream !== null ? (
             <>
-              <section className="panel timeline-panel">
+              <section className="panel timeline-panel" data-motion-panel>
                 <div className="panel-head">
                   <div>
                     <p className="eyebrow">{t('waveformStream')}</p>
@@ -1777,7 +1948,7 @@ export function WorkspaceApp({
                 </div>
               </section>
               <section className="visual-grid">
-                <div className="panel intensity-panel">
+                <div className="panel intensity-panel" data-motion-panel>
                   <div className="panel-head">
                     <div>
                       <p className="eyebrow">{t('intensityMap')}</p>
@@ -1808,7 +1979,7 @@ export function WorkspaceApp({
                     </div>
                   </div>
                 </div>
-                <div className="panel stream-stats">
+                <div className="panel stream-stats" data-motion-panel>
                   <div className="panel-head">
                     <div>
                       <p className="eyebrow">{t('streamStats')}</p>
@@ -1849,7 +2020,7 @@ export function WorkspaceApp({
                 </div>
               </section>
               <section className="lower-grid">
-                <div className="panel">
+                <div className="panel" data-motion-panel>
                   <div className="panel-head">
                     <div>
                       <p className="eyebrow">{t('sections')}</p>
@@ -1883,7 +2054,7 @@ export function WorkspaceApp({
                     ))}
                   </div>
                 </div>
-                <div className="panel detail-panel">
+                <div className="panel detail-panel" data-motion-panel>
                   <div className="panel-head">
                     <div>
                       <p className="eyebrow">{t('pointDetail')}</p>
@@ -1990,7 +2161,7 @@ export function WorkspaceApp({
                   )}
                 </div>
               </section>
-              <section className="panel controls-panel">
+              <section className="panel controls-panel" data-motion-panel>
                 <div className="panel-head">
                   <div>
                     <p className="eyebrow">{t('sectionEditor')}</p>
@@ -2122,7 +2293,7 @@ export function WorkspaceApp({
                   </div>
                 )}
               </section>
-              <section className="panel assist-panel">
+              <section className="panel assist-panel" data-motion-panel>
                 <div className="panel-head">
                   <div>
                     <p className="eyebrow">{t('reviewedAssist')}</p>
@@ -2217,14 +2388,14 @@ export function WorkspaceApp({
             </>
           ) : (
             result !== null && (
-              <section className="panel empty-panel">
+              <section className="panel empty-panel" data-motion-panel>
                 <h2>{t('noStream')}</h2>
                 <p>{t('resolveDiagnostics')}</p>
               </section>
             )
           )}
           {diffEnvelope !== null && (
-            <section className="panel diff-panel">
+            <section className="panel diff-panel" data-motion-panel>
               <div className="panel-head">
                 <div>
                   <p className="eyebrow">{t('documentDiff')}</p>
@@ -2277,7 +2448,7 @@ export function WorkspaceApp({
             </section>
           )}
           {batchEnvelope !== null && (
-            <section className="panel batch-results">
+            <section className="panel batch-results" data-motion-panel>
               <div className="panel-head">
                 <div>
                   <p className="eyebrow">{t('batchResults')}</p>

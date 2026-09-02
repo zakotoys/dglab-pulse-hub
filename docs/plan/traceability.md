@@ -6,14 +6,14 @@
 必须有 PDR/ADR 依据；`P2` 不进入当前发布承诺。`Not verified`
 只表示人工互操作尚未执行，永远不是通过状态。
 
-## 证据快照（2026-08-31）
+## 证据快照（2026-09-03）
 
 以下结果在当前工作区完成；命令输出未包含路径或完整波形内容：
 
 | 门禁                                                                   | 结果                                                                                                                                                                                   |
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npx tsc -b --force --pretty false`                                    | 通过                                                                                                                                                                                   |
-| `npm test -- --run`                                                    | 通过：14 个文件、140 个测试                                                                                                                                                            |
+| `npm test`                                                             | 通过：22 个文件、192 个测试                                                                                                                                                            |
 | `npm run test:coverage -- --run`                                       | 通过；V8 coverage provider/report 已启用（当前无阈值门禁）                                                                                                                             |
 | `npm audit --omit=dev --audit-level=high`                              | 通过；production dependency tree 未报告 high/critical vulnerability                                                                                                                    |
 | `npm run build`                                                        | 通过                                                                                                                                                                                   |
@@ -26,6 +26,7 @@
 | `docker compose config --quiet`                                        | 通过                                                                                                                                                                                   |
 | `docker compose build api web`                                         | 通过；api 与 web 镜像构建完成                                                                                                                                                          |
 | `git diff --check`                                                     | 通过                                                                                                                                                                                   |
+| `release.yml` 静态检查                                                 | 已配置：tag 校验、完整质量门禁、GHCR API/Web 多架构镜像、Windows/macOS ZIP、Release 附件和 SHA-256 校验和；GitHub hosted runner 尚未在本地执行                                         |
 | Compose smoke：`/health/ready`、静态 `/`、API inspect（有效/无效输入） | 通过（`127.0.0.1:8080`）；精简 runtime image 后 readiness/静态首页/有效 inspect 返回 200，无效输入返回 422 和稳定诊断，安全响应头存在                                                  |
 
 测试文件覆盖范围为 core 语法/数值/展开/编辑/播放/渲染、application/contract、CLI、HTTP、Electron
@@ -87,21 +88,22 @@ App 接受性仍未验证。
 
 ## 任务、交付和横切要求
 
-| PRD ID                   | 里程碑     | 主要实现证据                           | 最低测试证据                                                                          | 状态                                                                                           |
-| ------------------------ | ---------- | -------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| TASK-001                 | M1         | single task result/state               | 成功、失败、取消、非法转换                                                            | Verified（状态转换、非协作取消、timeout race）                                                 |
-| TASK-002                 | M4.2       | batch progress                         | 计数、警告、取消竞态、顺序                                                            | Verified（application/API batch 自动化覆盖）                                                   |
-| TASK-003                 | M1/M4.2    | result envelope + operation record     | status、成功加 warning、取消、input/output 摘要、rule version、下载描述、脱敏且无路径 | Verified                                                                                       |
-| 跨端一致性               | M2-M3      | HTTP/IPC/CLI contract                  | 同语料 golden response、schema/rule version 拒绝、状态和诊断映射                      | Verified（合法/非法 synthetic fixture 的 direct/CLI/HTTP/IPC envelope 逐字段比较）             |
-| FileMetadata 公共边界    | M0-M1      | public DTO + local file adapter        | `displayName`、format profile、ruleVersion、证据和状态；无路径/临时路径/伪造 version  | Verified                                                                                       |
-| Corpus 证据与 provenance | M0         | metadata manifest + synthetic fixtures | 16 个样例统计、干净 clone 行为、来源/再分发权、缺失样例处理                           | Verified（合成夹具/report 行为；原始 corpus provenance 未验证）                                |
-| Web 临时处理             | M2/M4.2/M5 | request/task-scoped lifecycle          | 成功/失败/取消/断开/过期/进程停止/重启清理；下载生命周期与 PDR-0003 一致              | Verified（过期/消费、部分/全失败 staging、断连清理、异常停止后重启清理、API close 自动化覆盖） |
-| 资源与访问边界           | M2/M5      | application limits + task isolation    | 字节/点数/时长/并发/超时、信任边界、跨任务隔离、日志脱敏                              | Verified（应用限额、QR 解压限额、超时/取消、路径与 payload 脱敏自动化覆盖）                    |
-| Electron 发布打包        | M3/M5      | Electron Forge + bundled main/preload  | package/make、sandbox preload、启动和目标平台验证                                     | In progress（本机 macOS arm64 package/make/启动已通过；Windows、签名和安装升级仍未验证）       |
-| 体验与无障碍             | M2-M4      | workspace/view model/E2E               | 首屏导入、文字诊断、层级浏览、键盘操作、恢复和预览/设备语义区分                       | Not verified（未完成浏览器人工 UI/无障碍检查）                                                 |
-| Compose/Nginx            | M5         | production deployment                  | health、shutdown、proxy limits、runbook                                               | In progress（构建、health 和 smoke 已通过；完整生产故障注入门禁未完成）                        |
-| 账户/长期保存            | M5 后      | 独立 PDR/威胁模型                      | 未定义前不得实现                                                                      | P2                                                                                             |
-| 设备 adapter             | 独立立项   | 独立 PDR/ADR/安全评审                  | 不得由预览路径触发                                                                    | P2                                                                                             |
+| PRD ID                   | 里程碑     | 主要实现证据                           | 最低测试证据                                                                          | 状态                                                                                                                  |
+| ------------------------ | ---------- | -------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| TASK-001                 | M1         | single task result/state               | 成功、失败、取消、非法转换                                                            | Verified（状态转换、非协作取消、timeout race）                                                                        |
+| TASK-002                 | M4.2       | batch progress                         | 计数、警告、取消竞态、顺序                                                            | Verified（application/API batch 自动化覆盖）                                                                          |
+| TASK-003                 | M1/M4.2    | result envelope + operation record     | status、成功加 warning、取消、input/output 摘要、rule version、下载描述、脱敏且无路径 | Verified                                                                                                              |
+| 跨端一致性               | M2-M3      | HTTP/IPC/CLI contract                  | 同语料 golden response、schema/rule version 拒绝、状态和诊断映射                      | Verified（合法/非法 synthetic fixture 的 direct/CLI/HTTP/IPC envelope 逐字段比较）                                    |
+| FileMetadata 公共边界    | M0-M1      | public DTO + local file adapter        | `displayName`、format profile、ruleVersion、证据和状态；无路径/临时路径/伪造 version  | Verified                                                                                                              |
+| Corpus 证据与 provenance | M0         | metadata manifest + synthetic fixtures | 16 个样例统计、干净 clone 行为、来源/再分发权、缺失样例处理                           | Verified（合成夹具/report 行为；原始 corpus provenance 未验证）                                                       |
+| Web 临时处理             | M2/M4.2/M5 | request/task-scoped lifecycle          | 成功/失败/取消/断开/过期/进程停止/重启清理；下载生命周期与 PDR-0003 一致              | Verified（过期/消费、部分/全失败 staging、断连清理、异常停止后重启清理、API close 自动化覆盖）                        |
+| 资源与访问边界           | M2/M5      | application limits + task isolation    | 字节/点数/时长/并发/超时、信任边界、跨任务隔离、日志脱敏                              | Verified（应用限额、QR 解压限额、超时/取消、路径与 payload 脱敏自动化覆盖）                                           |
+| Electron 发布打包        | M3/M5      | Electron Forge + bundled main/preload  | package/make、sandbox preload、启动和目标平台验证                                     | In progress（本机 macOS arm64 package/make/启动已通过；CI 已配置 Windows/macOS ZIP；Windows、签名和安装升级仍未验证） |
+| CI/CD 发布流水线         | M5         | `.github/workflows/release.yml`        | tag/version 校验、质量门禁、GHCR、Windows/macOS 产物、Release 和校验和                | In progress（配置已完成；GitHub hosted runner 发布尚未执行）                                                          |
+| 体验与无障碍             | M2-M4      | workspace/view model/E2E               | 首屏导入、文字诊断、层级浏览、键盘操作、恢复和预览/设备语义区分                       | Not verified（未完成浏览器人工 UI/无障碍检查）                                                                        |
+| Compose/Nginx            | M5         | production deployment                  | health、shutdown、proxy limits、runbook                                               | In progress（构建、health 和 smoke 已通过；完整生产故障注入门禁未完成）                                               |
+| 账户/长期保存            | M5 后      | 独立 PDR/威胁模型                      | 未定义前不得实现                                                                      | P2                                                                                                                    |
+| 设备 adapter             | 独立立项   | 独立 PDR/ADR/安全评审                  | 不得由预览路径触发                                                                    | P2                                                                                                                    |
 
 VAL-006 的“编辑插值”和“升级复用”是计划层面的作用域拆分，必须在 M4.5 开始前通过 PDR-0002 的决策更新确认；在确认前，原有
 `Conditional` 门槛同时适用于两者。

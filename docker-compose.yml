@@ -1,5 +1,6 @@
 services:
   api:
+    image: ghcr.io/zakotoys/dglab-pulse-hub-api:${PULSE_HUB_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -26,6 +27,7 @@ services:
       retries: 3
 
   web:
+    image: ghcr.io/zakotoys/dglab-pulse-hub-web:${PULSE_HUB_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.web

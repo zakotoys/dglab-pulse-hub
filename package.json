@@ -51,6 +51,7 @@
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down --timeout 20",
     "docker:logs": "docker compose logs --follow api web nginx",
+    "release:version": "node scripts/set-version.mjs",
     "corpus:report": "tsx scripts/corpus-report.ts",
     "corpus:verify": "tsx scripts/corpus-verify.ts"
   },

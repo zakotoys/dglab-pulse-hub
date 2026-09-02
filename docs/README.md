@@ -18,6 +18,11 @@
 - [产品决策记录](pdr/README.md)：支持承诺、发布范围和数据生命周期。
 - [架构决策记录](adr/README.md)：workspace、处理 pipeline 和跨端契约。
 
+## 发布与运维
+
+- [发布与分发](release.md)：版本同步、tag 发布、GHCR 镜像、Windows/macOS 产物和回滚。
+- [生产运行手册](../ops/runbook.md)：Compose 启动、健康检查、升级和故障处理。
+
 ## 文档职责
 
 ```text

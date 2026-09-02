@@ -1,0 +1,238 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+
+jobs:
+  prepare:
+    name: Validate release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.package.outputs.version }}
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          RELEASE_TAG:
+            ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          const tag = process.env.RELEASE_TAG;
+          const pattern = /^v\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
+          if (tag === undefined || !pattern.test(tag)) {
+            console.error('Release tag must be vX.Y.Z or vX.Y.Z-prerelease.');
+            process.exit(1);
+          }
+          NODE
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify package version
+        id: package
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Run release quality gates
+        run: npm run check
+
+      - name: Validate corpus tools
+        run: |
+          npm run corpus:report -- --json
+          npm run corpus:verify -- tests/fixtures --json
+
+  desktop:
+    name: Desktop (${{ matrix.platform }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+          - platform: macos
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Make desktop archive
+        run: npm run desktop:make
+
+      - name: Normalize desktop archive name
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p release-assets
+          archive="$(find apps/desktop/out -type f -name '*.zip' -print -quit)"
+          test -n "$archive"
+          cp "$archive" "release-assets/pulse-hub-${{ matrix.platform }}-${RELEASE_VERSION}.zip"
+
+      - name: Upload desktop archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: release-assets/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  containers:
+    name: Container (${{ matrix.image }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            file: ./Dockerfile
+            target: api
+          - image: web
+            file: ./Dockerfile.web
+            target: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image name
+        id: image
+        env:
+          IMAGE_SUFFIX: ${{ matrix.image }}
+        run: |
+          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/$repository-$IMAGE_SUFFIX"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Extract Docker metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.prepare.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.tag }}
+            type=raw,value=latest,enable=${{ !contains(needs.prepare.outputs.tag, '-') }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  publish:
+    name: Publish GitHub release
+    needs: [prepare, desktop, containers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download desktop archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release checksums
+        run: |
+          test "$(find release-assets -type f -name '*.zip' | wc -l | tr -d ' ')" = 2
+          find release-assets -type f -name '*.zip' -print0 |
+            sort -z |
+            xargs -0 sha256sum > release-assets/SHA256SUMS.txt
+
+      - name: Create and publish release
+        uses: softprops/action-gh-release@e598afbe1493e6b1bafb1f389cabb956eab91231 # v3.0.3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Pulse Hub ${{ needs.prepare.outputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*.zip
+            release-assets/SHA256SUMS.txt

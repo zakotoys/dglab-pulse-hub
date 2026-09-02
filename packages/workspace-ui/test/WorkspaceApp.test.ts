@@ -58,6 +58,7 @@ describe('WorkspaceApp QR image controls', () => {
     const client = { fileMode: 'browser' } as WorkspaceClient;
     const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
 
+    expect(markup).toContain('data-motion-root="workspace"');
     expect(markup).not.toContain('Open local file');
     expect(markup).not.toContain('file-manager');
   });

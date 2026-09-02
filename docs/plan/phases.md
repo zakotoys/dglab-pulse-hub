@@ -204,6 +204,10 @@ M4 以小增量逐项加入，每项都在 M2/M3 已工作的单文件产品上�
 6. Electron 完成签名/更新策略决策；未决定自动更新时只提供明确的手动发布流程。
 7. 发布 runbook、运维检查表、已知限制、精确版本配对和拒绝不匹配 schema/rule 的兼容性矩阵。
 
+当前仓库已落地的发布自动化包括：`vX.Y.Z` tag 校验、完整质量门禁、GHCR
+API/Web 多架构镜像、Windows/macOS Electron ZIP 和 GitHub Release 附件。代码签名、macOS
+notarization、SBOM 和完整目标平台人工互操作仍需独立验证，不能由工作流配置本身替代。
+
 ### 退出标准
 
 - 新环境可仅凭文档和版本化配置完成构建与部署。

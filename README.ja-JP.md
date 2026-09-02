@@ -1,6 +1,7 @@
 # DG-LAB Pulse Hub
 
 [![CI](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/ci.yml)
+[![Release](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/release.yml/badge.svg)](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/release.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
@@ -9,8 +10,8 @@ DG-LAB `.pulse` 波形を検査、プレビュー、編集、書き出しする�
 
 > [!IMPORTANT]
 >
-> 現在、このリポジトリではソースコード、Docker
-> Web デプロイ、ローカルでのデスクトップビルド手順を提供しています。署名済みデスクトップインストーラーはまだ提供していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
+> このリポジトリではソースコード、Docker Web デプロイ、GitHub
+> Releases からダウンロードできる Windows/macOS 向け未署名デスクトップ ZIP を提供します。コード署名と notarization はまだ設定していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
 
 ## 機能
 
@@ -21,6 +22,8 @@ DG-LAB `.pulse` 波形を検査、プレビュー、編集、書き出しする�
 - 提案値を確認した後、二次曲線による編集支援を適用できます。
 - 元のスナップショットまたは正規化した `.pulse`、QR 画像、SVG/PNG/JPG プレビューを書き出せます。
 - 複数ファイルの一括検査と一括書き出しに対応しています。
+- デスクトップ版では `Documents/Pulse Hub`
+  のローカルワークスペース、検索、複数選択、安全な取り込み、ドラッグ＆ドロップに対応しています。
 - 簡体字中国語、英語、日本語の UI とライト/ダークテーマを利用できます。
 
 デスクトップ版はファイルをローカルで処理します。Web 版では、自分で運用または選択した API サービスへファイルを送信します。標準の Docker 構成にはアカウントやデータベースがなく、アップロードはメモリ上で処理されます。一時ダウンロードファイルは最長 15 分間、かつ最初のダウンロードまで保持されます。
@@ -43,7 +46,16 @@ npm run desktop:make
 ```
 
 成果物は `apps/desktop/out/`
-に出力されます。未署名のビルドは OS によってブロックされる場合があります。
+に出力されます。未署名のビルドは OS によってブロックされる場合があります。デスクトップ版が管理する
+`.pulse` ファイルは `Documents/Pulse Hub`
+に保存されます。外部から取り込む場合は既存ファイルを上書きせずにコピーします。
+
+### リリースのダウンロード
+
+`vX.Y.Z` tag を push するとリリースパイプラインが実行され、Windows/macOS
+ZIP、API/Web コンテナイメージ、生成されたリリースノート、`SHA256SUMS.txt`
+が公開されます。バージョン更新とロールバックは [`docs/release.md`](docs/release.md)
+を参照してください。
 
 ### ローカル Web 開発
 
@@ -69,6 +81,13 @@ docker compose up -d --build
 PULSE_HUB_PORT=9080 docker compose up -d --build
 ```
 
+ソースからビルドせず、GHCR の公開済みバージョンを使用する場合：
+
+```sh
+PULSE_HUB_IMAGE_TAG=0.1.1 docker compose pull
+PULSE_HUB_IMAGE_TAG=0.1.1 docker compose up -d
+```
+
 サービスの確認と停止：
 
 ```sh
@@ -82,7 +101,8 @@ docker compose down --timeout 20
 
 ## 基本的な使い方
 
-1. **Open pulse file** を選ぶか、DG-LAB の QR テキスト/共有 URL を貼り付けてデコードします。
+1. Web 版では **Open pulse file**
+   を選ぶか、DG-LAB の QR テキスト/共有 URL を貼り付けてデコードします。デスクトップ版ではローカルワークスペースまたはファイルマネージャーから選択できます。
 2. 最初に Diagnostics を確認します。エラーがある文書はプレビューや書き出しへ進めません。
 3. タイムラインを再生またはポイントを選択し、エディターで波形を調整します。
 4. Compare、Undo、Redo で変更を確認します。
@@ -122,24 +142,25 @@ npm run cli:run -- qr-encode input.pulse
 
 ## 開発コマンド
 
-| コマンド                   | 用途                                                 |
-| -------------------------- | ---------------------------------------------------- |
-| `npm run dev`              | TypeScript、API、Web UI を同時に watch。             |
-| `npm run api:dev`          | TypeScript workspace と API のみ watch。             |
-| `npm run web:dev`          | TypeScript workspace と Web UI のみ watch。          |
-| `npm run web:preview`      | 本番用 Web バンドルをビルドしてプレビュー。          |
-| `npm run desktop:dev`      | デスクトップアプリをビルドして起動。                 |
-| `npm run desktop:make`     | 現在のプラットフォーム向けデスクトップ配布物を作成。 |
-| `npm run cli:run -- <...>` | CLI をソースから実行。                               |
-| `npm run check`            | フォーマット、型、テスト、完全ビルドを実行。         |
-| `npm run test:watch`       | テストを watch モードで実行。                        |
-| `npm run test:coverage`    | カバレッジ付きでテストを実行。                       |
-| `npm run docker:up`        | Docker サービスをビルドしてフォアグラウンドで起動。  |
-| `npm run docker:down`      | Docker サービスを停止。                              |
+| コマンド                           | 用途                                                 |
+| ---------------------------------- | ---------------------------------------------------- |
+| `npm run dev`                      | TypeScript、API、Web UI を同時に watch。             |
+| `npm run api:dev`                  | TypeScript workspace と API のみ watch。             |
+| `npm run web:dev`                  | TypeScript workspace と Web UI のみ watch。          |
+| `npm run web:preview`              | 本番用 Web バンドルをビルドしてプレビュー。          |
+| `npm run desktop:dev`              | デスクトップアプリをビルドして起動。                 |
+| `npm run desktop:make`             | 現在のプラットフォーム向けデスクトップ配布物を作成。 |
+| `npm run cli:run -- <...>`         | CLI をソースから実行。                               |
+| `npm run check`                    | フォーマット、型、テスト、完全ビルドを実行。         |
+| `npm run test:watch`               | テストを watch モードで実行。                        |
+| `npm run test:coverage`            | カバレッジ付きでテストを実行。                       |
+| `npm run docker:up`                | Docker サービスをビルドしてフォアグラウンドで起動。  |
+| `npm run docker:down`              | Docker サービスを停止。                              |
+| `npm run release:version -- X.Y.Z` | すべてのパッケージと lockfile のバージョンを更新。   |
 
-アーキテクチャ、プロダクト判断、品質ゲート、調査資料は [`docs/README.md`](docs/README.md)
-から参照できます。UI 翻訳は `packages/workspace-ui/src/locales/` にあります。変更後は
-`npm test -- packages/workspace-ui/test/i18n.test.ts` を実行してください。
+アーキテクチャ、プロダクト判断、品質ゲート、リリース運用、調査資料は
+[`docs/README.md`](docs/README.md) から参照できます。UI 翻訳は `packages/workspace-ui/src/locales/`
+にあります。変更後は `npm test -- packages/workspace-ui/test/i18n.test.ts` を実行してください。
 
 ## ライセンス
 

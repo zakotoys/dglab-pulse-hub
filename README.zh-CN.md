@@ -1,6 +1,7 @@
 # DG-LAB Pulse Hub
 
 [![CI](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/ci.yml)
+[![Release](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/release.yml/badge.svg)](https://github.com/zakotoys/dglab-pulse-hub/actions/workflows/release.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 [English](README.md) | **简体中文** | [日本語](README.ja-JP.md)
@@ -9,8 +10,8 @@
 
 > [!IMPORTANT]
 >
-> 当前仓库提供源码、Docker
-> Web 部署和本地桌面构建流程，尚未提供经过签名的桌面安装包。本项目是独立的社区项目，并非 DG-LAB 官方应用。
+> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub
+> Releases 下载的 Windows/macOS 未签名桌面 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
 
 ## 功能
 
@@ -21,6 +22,7 @@
 - 在确认预览值后应用二次曲线辅助编辑。
 - 导出原始快照或规范化 `.pulse`、QR 图片以及 SVG/PNG/JPG 波形预览。
 - 批量检查和导出多个文件。
+- 桌面端提供 `Documents/Pulse Hub` 本地工作区，支持搜索、多选、安全导入和拖放归档。
 - 提供简体中文、English、日本語界面以及明暗主题。
 
 桌面应用在本机处理文件。Web 版本会把文件发送到你运行或选择的 API 服务；默认 Docker 部署不使用账号或数据库，上传内容仅在内存中处理，临时下载文件最多保留 15 分钟并在下载后失效。
@@ -42,7 +44,13 @@ npm run desktop:dev
 npm run desktop:make
 ```
 
-产物位于 `apps/desktop/out/`。未签名构建可能被操作系统的安全机制拦截。
+产物位于 `apps/desktop/out/`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse`
+文件保存在 `Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
+
+### 下载发布版本
+
+推送 `vX.Y.Z` tag 后会运行发布流水线，自动生成 Windows/macOS ZIP、API/Web 容器镜像、Release 说明和
+`SHA256SUMS.txt`。版本同步和回滚流程见 [`docs/release.md`](docs/release.md)。
 
 ### 本地 Web 开发
 
@@ -68,6 +76,13 @@ docker compose up -d --build
 PULSE_HUB_PORT=9080 docker compose up -d --build
 ```
 
+使用 GHCR 中的已发布版本而不是从源码构建：
+
+```sh
+PULSE_HUB_IMAGE_TAG=0.1.1 docker compose pull
+PULSE_HUB_IMAGE_TAG=0.1.1 docker compose up -d
+```
+
 检查和停止服务：
 
 ```sh
@@ -81,7 +96,8 @@ docker compose down --timeout 20
 
 ## 基本使用
 
-1. 选择 **打开 pulse 文件**，或粘贴 DG-LAB QR 文本/分享 URL 并解码。
+1. Web 端选择 **打开 pulse 文件**，或粘贴 DG-LAB
+   QR 文本/分享 URL 并解码；桌面端可从本地工作区选择，或通过文件管理器导入。
 2. 先检查 Diagnostics；有错误的文档不会进入预览或导出流程。
 3. 在时间轴上播放或选择点位，并在编辑器中调整波形。
 4. 使用 Compare、Undo 和 Redo 检查改动。
@@ -119,23 +135,24 @@ npm run cli:run -- qr-encode input.pulse
 
 ## 开发命令
 
-| 命令                       | 用途                                    |
-| -------------------------- | --------------------------------------- |
-| `npm run dev`              | 同时监听 TypeScript、API 和 Web UI。    |
-| `npm run api:dev`          | 仅监听 TypeScript workspace 和 API。    |
-| `npm run web:dev`          | 仅监听 TypeScript workspace 和 Web UI。 |
-| `npm run web:preview`      | 构建并预览生产 Web 包。                 |
-| `npm run desktop:dev`      | 构建并启动桌面应用。                    |
-| `npm run desktop:make`     | 创建当前平台的桌面分发文件。            |
-| `npm run cli:run -- <...>` | 从源码运行 CLI。                        |
-| `npm run check`            | 运行格式、类型、测试和完整构建检查。    |
-| `npm run test:watch`       | 在监听模式运行测试。                    |
-| `npm run test:coverage`    | 运行带覆盖率的测试。                    |
-| `npm run docker:up`        | 在前台构建并启动 Docker 服务。          |
-| `npm run docker:down`      | 停止 Docker 服务。                      |
+| 命令                               | 用途                                    |
+| ---------------------------------- | --------------------------------------- |
+| `npm run dev`                      | 同时监听 TypeScript、API 和 Web UI。    |
+| `npm run api:dev`                  | 仅监听 TypeScript workspace 和 API。    |
+| `npm run web:dev`                  | 仅监听 TypeScript workspace 和 Web UI。 |
+| `npm run web:preview`              | 构建并预览生产 Web 包。                 |
+| `npm run desktop:dev`              | 构建并启动桌面应用。                    |
+| `npm run desktop:make`             | 创建当前平台的桌面分发文件。            |
+| `npm run cli:run -- <...>`         | 从源码运行 CLI。                        |
+| `npm run check`                    | 运行格式、类型、测试和完整构建检查。    |
+| `npm run test:watch`               | 在监听模式运行测试。                    |
+| `npm run test:coverage`            | 运行带覆盖率的测试。                    |
+| `npm run docker:up`                | 在前台构建并启动 Docker 服务。          |
+| `npm run docker:down`              | 停止 Docker 服务。                      |
+| `npm run release:version -- X.Y.Z` | 同步所有包版本和 lockfile。             |
 
-架构、产品决策、质量门禁和研究资料从 [`docs/README.md`](docs/README.md) 开始阅读。界面翻译位于
-`packages/workspace-ui/src/locales/`；新增或修改翻译后运行
+架构、产品决策、质量门禁、发布运维和研究资料从 [`docs/README.md`](docs/README.md)
+开始阅读。界面翻译位于 `packages/workspace-ui/src/locales/`；新增或修改翻译后运行
 `npm test -- packages/workspace-ui/test/i18n.test.ts`。
 
 ## 许可证
