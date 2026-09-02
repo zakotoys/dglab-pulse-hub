@@ -36,8 +36,10 @@
 | 设备传输不属于当前核心范围                                                       | M0-M4 不生成或发送 BLE/V3/V4 帧，不让设备能力阻塞文件工作台                                                                                                             |
 
 当前 Electron 发布入口使用 Electron Forge；主进程和 sandbox
-preload 在构建时分别 bundle，已在本机 macOS
-arm64 完成 package/make/启动检查。Windows 安装、签名和跨平台发布仍属于 M5 发布门禁，不能由本机结果代替。
+preload 在构建时分别 bundle，已在本机 macOS arm64 完成 package/make/启动检查。Release
+workflow 已配置 Windows x86/x64/ARM64 和 macOS Intel（Electron
+x64）/ARM64 的独立安装包与便携 ZIP 任务；Windows/macOS hosted
+runner 的实际安装、启动、签名和升级验证仍属于 M5 发布门禁，不能由本机结果代替。
 
 样例统计和证据边界见 [本地语料分析](../research/pulse-corpus.md)。
 

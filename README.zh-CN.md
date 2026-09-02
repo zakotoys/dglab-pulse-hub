@@ -10,8 +10,8 @@
 
 > [!IMPORTANT]
 >
-> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub
-> Releases 下载的 Windows/macOS 未签名桌面安装包。每个版本同时提供规范命名的便携 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
+> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub Releases 下载的 Windows x86/x64/ARM64 和 macOS
+> Intel（x86_64）/ARM64 未签名桌面安装包。每种架构同时提供规范命名的便携 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
 
 ## 功能
 
@@ -44,15 +44,27 @@ npm run desktop:dev
 npm run desktop:make
 ```
 
-产物位于 `apps/desktop/out/`。Windows 会生成 Squirrel `.exe` 安装程序和便携 `.zip`，macOS 会生成
-`.dmg` 安装包和便携 `.zip`。解压后的应用和可执行文件名称为
-`DGLab Pulse Hub`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse` 文件保存在
-`Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
+如需构建其他架构，可以显式传入 Electron 目标：
+
+```sh
+npm run desktop:make -- --platform=win32 --arch=ia32   # Windows x86
+npm run desktop:make -- --platform=win32 --arch=x64    # Windows x64
+npm run desktop:make -- --platform=win32 --arch=arm64  # Windows ARM64
+npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
+npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
+```
+
+产物位于 `apps/desktop/out/`。Windows 会为 x86、x64 和 ARM64 生成 Squirrel `.exe` 安装程序及便携
+`.zip`，macOS 会为 Intel 和 Apple silicon 生成 `.dmg` 安装包及便携 `.zip`。macOS
+Intel 标签对应 Electron `x64`，不是 32 位 macOS。解压后的应用和可执行文件名称为
+`DGLab Pulse Hub`，macOS 应用包名称为
+`DGLab Pulse Hub.app`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse`
+文件保存在 `Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
 
 ### 下载发布版本
 
 推送 `vX.Y.Z` tag 后会运行发布流水线，自动创建名为 `DGLab Pulse Hub vX.Y.Z`
-的 Release，生成 Windows/macOS 安装包、便携 ZIP、API/Web 容器镜像、Release 说明和
+的 Release，生成覆盖全部支持架构的 10 个 Windows/macOS 安装包和便携 ZIP、API/Web 容器镜像、Release 说明以及
 `SHA256SUMS.txt`。版本同步和回滚流程见 [`docs/release.md`](docs/release.md)。
 
 ### 本地 Web 开发
@@ -138,21 +150,21 @@ npm run cli:run -- qr-encode input.pulse
 
 ## 开发命令
 
-| 命令                               | 用途                                    |
-| ---------------------------------- | --------------------------------------- |
-| `npm run dev`                      | 同时监听 TypeScript、API 和 Web UI。    |
-| `npm run api:dev`                  | 仅监听 TypeScript workspace 和 API。    |
-| `npm run web:dev`                  | 仅监听 TypeScript workspace 和 Web UI。 |
-| `npm run web:preview`              | 构建并预览生产 Web 包。                 |
-| `npm run desktop:dev`              | 构建并启动桌面应用。                    |
-| `npm run desktop:make`             | 创建当前平台的安装包和便携归档。        |
-| `npm run cli:run -- <...>`         | 从源码运行 CLI。                        |
-| `npm run check`                    | 运行格式、类型、测试和完整构建检查。    |
-| `npm run test:watch`               | 在监听模式运行测试。                    |
-| `npm run test:coverage`            | 运行带覆盖率的测试。                    |
-| `npm run docker:up`                | 在前台构建并启动 Docker 服务。          |
-| `npm run docker:down`              | 停止 Docker 服务。                      |
-| `npm run release:version -- X.Y.Z` | 同步所有包版本和 lockfile。             |
+| 命令                               | 用途                                                               |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| `npm run dev`                      | 同时监听 TypeScript、API 和 Web UI。                               |
+| `npm run api:dev`                  | 仅监听 TypeScript workspace 和 API。                               |
+| `npm run web:dev`                  | 仅监听 TypeScript workspace 和 Web UI。                            |
+| `npm run web:preview`              | 构建并预览生产 Web 包。                                            |
+| `npm run desktop:dev`              | 构建并启动桌面应用。                                               |
+| `npm run desktop:make`             | 创建桌面安装包和便携归档，可传入 `--platform`、`--arch` 指定目标。 |
+| `npm run cli:run -- <...>`         | 从源码运行 CLI。                                                   |
+| `npm run check`                    | 运行格式、类型、测试和完整构建检查。                               |
+| `npm run test:watch`               | 在监听模式运行测试。                                               |
+| `npm run test:coverage`            | 运行带覆盖率的测试。                                               |
+| `npm run docker:up`                | 在前台构建并启动 Docker 服务。                                     |
+| `npm run docker:down`              | 停止 Docker 服务。                                                 |
+| `npm run release:version -- X.Y.Z` | 同步所有包版本和 lockfile。                                        |
 
 架构、产品决策、质量门禁、发布运维和研究资料从 [`docs/README.md`](docs/README.md)
 开始阅读。界面翻译位于 `packages/workspace-ui/src/locales/`；新增或修改翻译后运行

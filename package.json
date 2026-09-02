@@ -48,7 +48,7 @@
     "desktop:start": "npm --workspace @dglab-pulse-hub/desktop run start",
     "desktop:dev": "npm run desktop:build && npm run desktop:start",
     "desktop:package": "npm run desktop:build && npm run desktop:clean && npm --workspace @dglab-pulse-hub/desktop run package",
-    "desktop:make": "npm run desktop:build && npm run desktop:clean && npm --workspace @dglab-pulse-hub/desktop run make",
+    "desktop:make": "npm run desktop:build && npm run desktop:clean && npm --workspace @dglab-pulse-hub/desktop run make --",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down --timeout 20",

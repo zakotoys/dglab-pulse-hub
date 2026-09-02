@@ -20,7 +20,7 @@
 
 ## 发布与运维
 
-- [发布与分发](release.md)：版本同步、tag 发布、GHCR 镜像、Windows/macOS 产物和回滚。
+- [发布与分发](release.md)：版本同步、tag 发布、GHCR 镜像、Windows/macOS 多架构安装包和回滚。
 - [生产运行手册](../ops/runbook.md)：Compose 启动、健康检查、升级和故障处理。
 
 ## 文档职责

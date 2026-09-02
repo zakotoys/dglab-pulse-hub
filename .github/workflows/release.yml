@@ -81,15 +81,36 @@ jobs:
           npm run corpus:verify -- tests/fixtures --json
 
   desktop:
-    name: Desktop (${{ matrix.platform }})
+    name: Desktop (${{ matrix.platform }} ${{ matrix.architecture }})
     needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: windows
+            architecture: x86
+            forge_platform: win32
+            forge_arch: ia32
+            runner: windows-latest
+          - platform: windows
+            architecture: x64
+            forge_platform: win32
+            forge_arch: x64
+            runner: windows-latest
+          - platform: windows
+            architecture: arm64
+            forge_platform: win32
+            forge_arch: arm64
             runner: windows-latest
           - platform: macos
+            architecture: x86
+            forge_platform: darwin
+            forge_arch: x64
+            runner: macos-latest
+          - platform: macos
+            architecture: arm64
+            forge_platform: darwin
+            forge_arch: arm64
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -112,47 +133,51 @@ jobs:
         run: npm ci --prefer-offline
 
       - name: Make desktop installers and archives
-        run: npm run desktop:make
+        run: >-
+          npm run desktop:make -- --platform=${{ matrix.forge_platform }} --arch=${{
+          matrix.forge_arch }}
 
       - name: Collect desktop installers and archives
         shell: bash
         env:
           RELEASE_PLATFORM: ${{ matrix.platform }}
+          RELEASE_ARCHITECTURE: ${{ matrix.architecture }}
+          RELEASE_FORGE_ARCH: ${{ matrix.forge_arch }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir -p release-assets
+          release_prefix="dglab-pulse-hub-${RELEASE_PLATFORM}-${RELEASE_ARCHITECTURE}-"
+          release_prefix+="v${RELEASE_VERSION}"
           if [ "$RELEASE_PLATFORM" = windows ]; then
-            installer="$(
-              find apps/desktop/out/make/squirrel.windows \
-                -type f -name 'DGLab Pulse Hub Setup.exe' -print -quit
-            )"
+            installer="apps/desktop/out/make/squirrel.windows/${RELEASE_FORGE_ARCH}/"
+            installer+="DGLab Pulse Hub Setup.exe"
             archive="$(
-              find apps/desktop/out/make/zip/win32 \
+              find "apps/desktop/out/make/zip/win32/${RELEASE_FORGE_ARCH}" \
+                -maxdepth 1 \
                 -type f -name "DGLab Pulse Hub-*-${RELEASE_VERSION}.zip" -print -quit
             )"
             test -f "$installer"
             test -f "$archive"
-            cp "$installer" "release-assets/dglab-pulse-hub-windows-v${RELEASE_VERSION}-setup.exe"
-            cp "$archive" "release-assets/dglab-pulse-hub-windows-v${RELEASE_VERSION}.zip"
+            cp "$installer" "release-assets/${release_prefix}-setup.exe"
+            cp "$archive" "release-assets/${release_prefix}.zip"
           else
-            installer="$(
-              find apps/desktop/out/make -maxdepth 1 \
-                -type f -name "DGLab Pulse Hub-${RELEASE_VERSION}-*.dmg" -print -quit
-            )"
+            installer="apps/desktop/out/make/DGLab Pulse Hub-${RELEASE_VERSION}-"
+            installer+="${RELEASE_FORGE_ARCH}.dmg"
             archive="$(
-              find apps/desktop/out/make/zip/darwin \
+              find "apps/desktop/out/make/zip/darwin/${RELEASE_FORGE_ARCH}" \
+                -maxdepth 1 \
                 -type f -name "DGLab Pulse Hub-*-${RELEASE_VERSION}.zip" -print -quit
             )"
             test -f "$installer"
             test -f "$archive"
-            cp "$installer" "release-assets/dglab-pulse-hub-macos-v${RELEASE_VERSION}.dmg"
-            cp "$archive" "release-assets/dglab-pulse-hub-macos-v${RELEASE_VERSION}.zip"
+            cp "$installer" "release-assets/${release_prefix}.dmg"
+            cp "$archive" "release-assets/${release_prefix}.zip"
           fi
 
       - name: Upload desktop packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: desktop-${{ matrix.platform }}
+          name: desktop-${{ matrix.platform }}-${{ matrix.architecture }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 7
@@ -244,10 +269,27 @@ jobs:
           merge-multiple: true
 
       - name: Create release checksums
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" = 1
-          test "$(find release-assets -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = 1
-          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 2
+          expected_assets=(
+            "dglab-pulse-hub-windows-x86-v${RELEASE_VERSION}-setup.exe"
+            "dglab-pulse-hub-windows-x86-v${RELEASE_VERSION}.zip"
+            "dglab-pulse-hub-windows-x64-v${RELEASE_VERSION}-setup.exe"
+            "dglab-pulse-hub-windows-x64-v${RELEASE_VERSION}.zip"
+            "dglab-pulse-hub-windows-arm64-v${RELEASE_VERSION}-setup.exe"
+            "dglab-pulse-hub-windows-arm64-v${RELEASE_VERSION}.zip"
+            "dglab-pulse-hub-macos-x86-v${RELEASE_VERSION}.dmg"
+            "dglab-pulse-hub-macos-x86-v${RELEASE_VERSION}.zip"
+            "dglab-pulse-hub-macos-arm64-v${RELEASE_VERSION}.dmg"
+            "dglab-pulse-hub-macos-arm64-v${RELEASE_VERSION}.zip"
+          )
+          for asset in "${expected_assets[@]}"; do
+            test -f "release-assets/$asset"
+          done
+          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" = 3
+          test "$(find release-assets -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = 2
+          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 5
           find release-assets -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 |
             sort -z |
             xargs -0 sha256sum > release-assets/SHA256SUMS.txt
