@@ -33,6 +33,17 @@ function io(): {
 }
 
 describe('CLI adapter', () => {
+  it('reports the version from the package manifest', async () => {
+    const capture = io();
+    const code = await runCli(['--version'], capture.adapter);
+    const packageJson = JSON.parse(
+      await readFile(join(process.cwd(), 'apps/cli/package.json'), 'utf8')
+    ) as { version: string };
+
+    expect(code).toBe(0);
+    expect(capture.stdout.join('')).toBe('dglab-pulse-hub ' + packageJson.version + '\n');
+  });
+
   it('uses the public envelope for JSON inspect output', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pulse-cli-'));
     directories.push(directory);

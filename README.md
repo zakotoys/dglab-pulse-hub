@@ -12,8 +12,9 @@ waveforms.
 > [!IMPORTANT]
 >
 > This repository provides source code, a Docker Web deployment, and downloadable unsigned Windows
-> and macOS desktop ZIP archives through GitHub Releases. Code signing and notarization are not
-> configured yet. This is an independent community project, not an official DG-LAB application.
+> and macOS desktop installers through GitHub Releases. Each release also includes a named portable
+> ZIP archive. Code signing and notarization are not configured yet. This is an independent
+> community project, not an official DG-LAB application.
 
 ## Features
 
@@ -43,21 +44,25 @@ npm ci
 npm run desktop:dev
 ```
 
-This builds and starts the Electron app. To create a distributable for the current platform:
+This builds and starts the Electron app. To create the current platform installer and portable
+archive:
 
 ```sh
 npm run desktop:make
 ```
 
-Artifacts are written under `apps/desktop/out/`. Your operating system may block unsigned builds.
-The desktop app keeps its managed `.pulse` files under `Documents/Pulse Hub`; files imported from
+Artifacts are written under `apps/desktop/out/`. Windows produces a Squirrel `.exe` installer and a
+portable `.zip`; macOS produces a `.dmg` installer and a portable `.zip`. The packaged application
+and executable are named `DGLab Pulse Hub`. Your operating system may block unsigned builds. The
+desktop app keeps its managed `.pulse` files under `Documents/Pulse Hub`; files imported from
 outside that directory are copied there without overwriting an existing file.
 
 ### Download a release
 
-Push a `vX.Y.Z` tag to run the release pipeline. It publishes Windows and macOS ZIP archives, API
-and Web container images, generated release notes, and `SHA256SUMS.txt`. See
-[`docs/release.md`](docs/release.md) for the versioning and rollback procedure.
+Push a `vX.Y.Z` tag to run the release pipeline. It creates a `DGLab Pulse Hub vX.Y.Z` release with
+Windows and macOS installers, named portable ZIP archives, API and Web container images, generated
+release notes, and `SHA256SUMS.txt`. See [`docs/release.md`](docs/release.md) for the versioning and
+rollback procedure.
 
 ### Local Web development
 
@@ -146,21 +151,21 @@ known boundaries.
 
 ## Development commands
 
-| Command                            | Purpose                                                  |
-| ---------------------------------- | -------------------------------------------------------- |
-| `npm run dev`                      | Watch TypeScript, the API, and the Web UI together.      |
-| `npm run api:dev`                  | Watch the TypeScript workspace and API only.             |
-| `npm run web:dev`                  | Watch the TypeScript workspace and Web UI only.          |
-| `npm run web:preview`              | Build and preview the production Web bundle.             |
-| `npm run desktop:dev`              | Build and start the desktop app.                         |
-| `npm run desktop:make`             | Create a desktop distributable for the current platform. |
-| `npm run cli:run -- <...>`         | Run the CLI from source.                                 |
-| `npm run check`                    | Run formatting, types, tests, and the complete build.    |
-| `npm run test:watch`               | Run tests in watch mode.                                 |
-| `npm run test:coverage`            | Run tests with coverage.                                 |
-| `npm run docker:up`                | Build and start Docker services in the foreground.       |
-| `npm run docker:down`              | Stop Docker services.                                    |
-| `npm run release:version -- X.Y.Z` | Update all package versions and the lockfile.            |
+| Command                            | Purpose                                                     |
+| ---------------------------------- | ----------------------------------------------------------- |
+| `npm run dev`                      | Watch TypeScript, the API, and the Web UI together.         |
+| `npm run api:dev`                  | Watch the TypeScript workspace and API only.                |
+| `npm run web:dev`                  | Watch the TypeScript workspace and Web UI only.             |
+| `npm run web:preview`              | Build and preview the production Web bundle.                |
+| `npm run desktop:dev`              | Build and start the desktop app.                            |
+| `npm run desktop:make`             | Create the current platform installer and portable archive. |
+| `npm run cli:run -- <...>`         | Run the CLI from source.                                    |
+| `npm run check`                    | Run formatting, types, tests, and the complete build.       |
+| `npm run test:watch`               | Run tests in watch mode.                                    |
+| `npm run test:coverage`            | Run tests with coverage.                                    |
+| `npm run docker:up`                | Build and start Docker services in the foreground.          |
+| `npm run docker:down`              | Stop Docker services.                                       |
+| `npm run release:version -- X.Y.Z` | Update all package versions and the lockfile.               |
 
 Start with [`docs/README.md`](docs/README.md) for architecture, product decisions, quality gates,
 release operations, and research. UI translations live in `packages/workspace-ui/src/locales/`;

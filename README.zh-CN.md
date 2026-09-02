@@ -11,7 +11,7 @@
 > [!IMPORTANT]
 >
 > 当前仓库提供源码、Docker Web 部署，以及通过 GitHub
-> Releases 下载的 Windows/macOS 未签名桌面 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
+> Releases 下载的 Windows/macOS 未签名桌面安装包。每个版本同时提供规范命名的便携 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
 
 ## 功能
 
@@ -38,18 +38,21 @@ npm ci
 npm run desktop:dev
 ```
 
-该命令构建并启动 Electron 应用。创建当前平台的分发文件：
+该命令构建并启动 Electron 应用。创建当前平台的安装包和便携归档：
 
 ```sh
 npm run desktop:make
 ```
 
-产物位于 `apps/desktop/out/`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse`
-文件保存在 `Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
+产物位于 `apps/desktop/out/`。Windows 会生成 Squirrel `.exe` 安装程序和便携 `.zip`，macOS 会生成
+`.dmg` 安装包和便携 `.zip`。解压后的应用和可执行文件名称为
+`DGLab Pulse Hub`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse` 文件保存在
+`Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
 
 ### 下载发布版本
 
-推送 `vX.Y.Z` tag 后会运行发布流水线，自动生成 Windows/macOS ZIP、API/Web 容器镜像、Release 说明和
+推送 `vX.Y.Z` tag 后会运行发布流水线，自动创建名为 `DGLab Pulse Hub vX.Y.Z`
+的 Release，生成 Windows/macOS 安装包、便携 ZIP、API/Web 容器镜像、Release 说明和
 `SHA256SUMS.txt`。版本同步和回滚流程见 [`docs/release.md`](docs/release.md)。
 
 ### 本地 Web 开发
@@ -142,7 +145,7 @@ npm run cli:run -- qr-encode input.pulse
 | `npm run web:dev`                  | 仅监听 TypeScript workspace 和 Web UI。 |
 | `npm run web:preview`              | 构建并预览生产 Web 包。                 |
 | `npm run desktop:dev`              | 构建并启动桌面应用。                    |
-| `npm run desktop:make`             | 创建当前平台的桌面分发文件。            |
+| `npm run desktop:make`             | 创建当前平台的安装包和便携归档。        |
 | `npm run cli:run -- <...>`         | 从源码运行 CLI。                        |
 | `npm run check`                    | 运行格式、类型、测试和完整构建检查。    |
 | `npm run test:watch`               | 在监听模式运行测试。                    |

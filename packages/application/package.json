@@ -12,7 +12,10 @@
   },
   "dependencies": {
     "@dglab-pulse-hub/contracts": "0.0.1",
-    "@dglab-pulse-hub/core": "0.0.1"
+    "@dglab-pulse-hub/core": "0.0.1",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4"
   },
   "scripts": {
     "build": "tsc -b",

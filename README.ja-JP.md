@@ -11,7 +11,7 @@ DG-LAB `.pulse` 波形を検査、プレビュー、編集、書き出しする�
 > [!IMPORTANT]
 >
 > このリポジトリではソースコード、Docker Web デプロイ、GitHub
-> Releases からダウンロードできる Windows/macOS 向け未署名デスクトップ ZIP を提供します。コード署名と notarization はまだ設定していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
+> Releases からダウンロードできる Windows/macOS 向け未署名デスクトップインストーラーを提供します。各リリースには名前付きのポータブル ZIP も含まれます。コード署名と notarization はまだ設定していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
 
 ## 機能
 
@@ -39,21 +39,23 @@ npm ci
 npm run desktop:dev
 ```
 
-Electron アプリをビルドして起動します。現在のプラットフォーム向け配布ファイルを作成するには、次を実行します。
+Electron アプリをビルドして起動します。現在のプラットフォーム向けインストーラーとポータブルアーカイブを作成するには、次を実行します。
 
 ```sh
 npm run desktop:make
 ```
 
-成果物は `apps/desktop/out/`
-に出力されます。未署名のビルドは OS によってブロックされる場合があります。デスクトップ版が管理する
-`.pulse` ファイルは `Documents/Pulse Hub`
+成果物は `apps/desktop/out/` に出力されます。Windows では Squirrel の `.exe`
+インストーラーとポータブル `.zip`、macOS では `.dmg` インストーラーとポータブル `.zip`
+が生成されます。展開後のアプリと実行ファイルの名前は `DGLab Pulse Hub`
+です。未署名のビルドは OS によってブロックされる場合があります。デスクトップ版が管理する `.pulse`
+ファイルは `Documents/Pulse Hub`
 に保存されます。外部から取り込む場合は既存ファイルを上書きせずにコピーします。
 
 ### リリースのダウンロード
 
-`vX.Y.Z` tag を push するとリリースパイプラインが実行され、Windows/macOS
-ZIP、API/Web コンテナイメージ、生成されたリリースノート、`SHA256SUMS.txt`
+`vX.Y.Z` tag を push するとリリースパイプラインが実行され、`DGLab Pulse Hub vX.Y.Z`
+という Release、Windows/macOS インストーラー、ポータブル ZIP、API/Web コンテナイメージ、生成されたリリースノート、`SHA256SUMS.txt`
 が公開されます。バージョン更新とロールバックは [`docs/release.md`](docs/release.md)
 を参照してください。
 
@@ -142,21 +144,21 @@ npm run cli:run -- qr-encode input.pulse
 
 ## 開発コマンド
 
-| コマンド                           | 用途                                                 |
-| ---------------------------------- | ---------------------------------------------------- |
-| `npm run dev`                      | TypeScript、API、Web UI を同時に watch。             |
-| `npm run api:dev`                  | TypeScript workspace と API のみ watch。             |
-| `npm run web:dev`                  | TypeScript workspace と Web UI のみ watch。          |
-| `npm run web:preview`              | 本番用 Web バンドルをビルドしてプレビュー。          |
-| `npm run desktop:dev`              | デスクトップアプリをビルドして起動。                 |
-| `npm run desktop:make`             | 現在のプラットフォーム向けデスクトップ配布物を作成。 |
-| `npm run cli:run -- <...>`         | CLI をソースから実行。                               |
-| `npm run check`                    | フォーマット、型、テスト、完全ビルドを実行。         |
-| `npm run test:watch`               | テストを watch モードで実行。                        |
-| `npm run test:coverage`            | カバレッジ付きでテストを実行。                       |
-| `npm run docker:up`                | Docker サービスをビルドしてフォアグラウンドで起動。  |
-| `npm run docker:down`              | Docker サービスを停止。                              |
-| `npm run release:version -- X.Y.Z` | すべてのパッケージと lockfile のバージョンを更新。   |
+| コマンド                           | 用途                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------- |
+| `npm run dev`                      | TypeScript、API、Web UI を同時に watch。                               |
+| `npm run api:dev`                  | TypeScript workspace と API のみ watch。                               |
+| `npm run web:dev`                  | TypeScript workspace と Web UI のみ watch。                            |
+| `npm run web:preview`              | 本番用 Web バンドルをビルドしてプレビュー。                            |
+| `npm run desktop:dev`              | デスクトップアプリをビルドして起動。                                   |
+| `npm run desktop:make`             | 現在のプラットフォーム向けインストーラーとポータブルアーカイブを作成。 |
+| `npm run cli:run -- <...>`         | CLI をソースから実行。                                                 |
+| `npm run check`                    | フォーマット、型、テスト、完全ビルドを実行。                           |
+| `npm run test:watch`               | テストを watch モードで実行。                                          |
+| `npm run test:coverage`            | カバレッジ付きでテストを実行。                                         |
+| `npm run docker:up`                | Docker サービスをビルドしてフォアグラウンドで起動。                    |
+| `npm run docker:down`              | Docker サービスを停止。                                                |
+| `npm run release:version -- X.Y.Z` | すべてのパッケージと lockfile のバージョンを更新。                     |
 
 アーキテクチャ、プロダクト判断、品質ゲート、リリース運用、調査資料は
 [`docs/README.md`](docs/README.md) から参照できます。UI 翻訳は `packages/workspace-ui/src/locales/`

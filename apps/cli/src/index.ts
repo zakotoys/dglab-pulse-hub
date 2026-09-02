@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -29,6 +30,7 @@ export interface CliIo {
 
 const stdout = (io: CliIo): { write: (text: string) => void } => io.stdout ?? process.stdout;
 const stderr = (io: CliIo): { write: (text: string) => void } => io.stderr ?? process.stderr;
+const packageJson = createRequire(import.meta.url)('../package.json') as { version: string };
 
 export async function runCli(argv: readonly string[], io: CliIo = {}): Promise<number> {
   const command = argv[0];
@@ -37,7 +39,7 @@ export async function runCli(argv: readonly string[], io: CliIo = {}): Promise<n
     return command === undefined ? 2 : 0;
   }
   if (command === '--version' || command === 'version') {
-    stdout(io).write('dglab-pulse-hub 0.1.0\n');
+    stdout(io).write('dglab-pulse-hub ' + packageJson.version + '\n');
     return 0;
   }
   try {

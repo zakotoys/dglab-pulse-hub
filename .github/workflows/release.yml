@@ -111,24 +111,49 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline
 
-      - name: Make desktop archive
+      - name: Make desktop installers and archives
         run: npm run desktop:make
 
-      - name: Normalize desktop archive name
+      - name: Collect desktop installers and archives
         shell: bash
         env:
+          RELEASE_PLATFORM: ${{ matrix.platform }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir -p release-assets
-          archive="$(find apps/desktop/out -type f -name '*.zip' -print -quit)"
-          test -n "$archive"
-          cp "$archive" "release-assets/pulse-hub-${{ matrix.platform }}-${RELEASE_VERSION}.zip"
+          if [ "$RELEASE_PLATFORM" = windows ]; then
+            installer="$(
+              find apps/desktop/out/make/squirrel.windows \
+                -type f -name 'DGLab Pulse Hub Setup.exe' -print -quit
+            )"
+            archive="$(
+              find apps/desktop/out/make/zip/win32 \
+                -type f -name "DGLab Pulse Hub-*-${RELEASE_VERSION}.zip" -print -quit
+            )"
+            test -f "$installer"
+            test -f "$archive"
+            cp "$installer" "release-assets/dglab-pulse-hub-windows-v${RELEASE_VERSION}-setup.exe"
+            cp "$archive" "release-assets/dglab-pulse-hub-windows-v${RELEASE_VERSION}.zip"
+          else
+            installer="$(
+              find apps/desktop/out/make -maxdepth 1 \
+                -type f -name "DGLab Pulse Hub-${RELEASE_VERSION}-*.dmg" -print -quit
+            )"
+            archive="$(
+              find apps/desktop/out/make/zip/darwin \
+                -type f -name "DGLab Pulse Hub-*-${RELEASE_VERSION}.zip" -print -quit
+            )"
+            test -f "$installer"
+            test -f "$archive"
+            cp "$installer" "release-assets/dglab-pulse-hub-macos-v${RELEASE_VERSION}.dmg"
+            cp "$archive" "release-assets/dglab-pulse-hub-macos-v${RELEASE_VERSION}.zip"
+          fi
 
-      - name: Upload desktop archive
+      - name: Upload desktop packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-${{ matrix.platform }}
-          path: release-assets/*.zip
+          path: release-assets/*
           if-no-files-found: error
           retention-days: 7
 
@@ -211,7 +236,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download desktop archives
+      - name: Download desktop packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: desktop-*
@@ -220,8 +245,10 @@ jobs:
 
       - name: Create release checksums
         run: |
-          test "$(find release-assets -type f -name '*.zip' | wc -l | tr -d ' ')" = 2
-          find release-assets -type f -name '*.zip' -print0 |
+          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" = 1
+          test "$(find release-assets -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = 1
+          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 2
+          find release-assets -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 |
             sort -z |
             xargs -0 sha256sum > release-assets/SHA256SUMS.txt
 
@@ -229,10 +256,10 @@ jobs:
         uses: softprops/action-gh-release@e598afbe1493e6b1bafb1f389cabb956eab91231 # v3.0.3
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          name: Pulse Hub ${{ needs.prepare.outputs.version }}
+          name: DGLab Pulse Hub v${{ needs.prepare.outputs.version }}
           generate_release_notes: true
           prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
           fail_on_unmatched_files: true
           files: |
-            release-assets/*.zip
+            release-assets/dglab-pulse-hub-*
             release-assets/SHA256SUMS.txt

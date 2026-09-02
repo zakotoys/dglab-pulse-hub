@@ -1,7 +1,8 @@
 module.exports = {
   packagerConfig: {
     asar: true,
-    executableName: 'pulse-hub',
+    appBundleId: 'com.zakotoys.dglab-pulse-hub',
+    executableName: 'DGLab Pulse Hub',
     ignore: [
       /^\/src(?:\/|$)/,
       /^\/test(?:\/|$)/,
@@ -16,6 +17,19 @@ module.exports = {
     ]
   },
   makers: [
+    {
+      name: '@electron-forge/maker-squirrel',
+      config: {
+        name: 'DGLabPulseHub',
+        title: 'DGLab Pulse Hub',
+        exe: 'DGLab Pulse Hub.exe',
+        setupExe: 'DGLab Pulse Hub Setup.exe',
+        noMsi: true
+      }
+    },
+    {
+      name: '@electron-forge/maker-dmg'
+    },
     {
       name: '@electron-forge/maker-zip'
     }

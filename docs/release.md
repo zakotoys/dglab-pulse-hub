@@ -12,9 +12,10 @@ Before publishing, the workflow:
 2. Runs the full format, type, test, build, audit, and corpus gates.
 3. Builds and pushes the API and Web images to GitHub Container Registry for `linux/amd64` and
    `linux/arm64`.
-4. Builds the Electron ZIP archive on `windows-latest` and `macos-latest`.
-5. Creates a published GitHub Release with generated notes, both desktop archives, and
-   `SHA256SUMS.txt`.
+4. Builds a Windows Squirrel installer and portable ZIP on `windows-latest`, plus a macOS DMG
+   installer and portable ZIP on `macos-latest`.
+5. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, the four
+   desktop packages, and `SHA256SUMS.txt`.
 
 The workflow uses the repository `GITHUB_TOKEN`; the release job needs `contents: write`, and the
 container job needs `packages: write`. No long-lived registry credential is required.
@@ -45,9 +46,20 @@ is published.
 
 ## Published artifacts
 
-Each release contains archives named `pulse-hub-windows-X.Y.Z.zip` and `pulse-hub-macos-X.Y.Z.zip`.
-They are unsigned Electron distributions. Windows SmartScreen and macOS Gatekeeper may warn until
-code-signing and notarization are configured.
+Each release is named `DGLab Pulse Hub vX.Y.Z` and contains these desktop packages:
+
+```text
+dglab-pulse-hub-windows-vX.Y.Z-setup.exe
+dglab-pulse-hub-windows-vX.Y.Z.zip
+dglab-pulse-hub-macos-vX.Y.Z.dmg
+dglab-pulse-hub-macos-vX.Y.Z.zip
+```
+
+The `.exe` and `.dmg` files are the primary unsigned installers. The ZIP files are portable
+archives; their packaged application and executable are named `DGLab Pulse Hub` (the macOS app is
+`DGLab Pulse Hub.app`). Windows SmartScreen and macOS Gatekeeper may warn until code-signing and
+notarization are configured. Squirrel update metadata and NuGet packages are used during the build
+but are not uploaded to the Release.
 
 The container images are:
 

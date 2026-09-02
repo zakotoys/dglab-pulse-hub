@@ -1,18 +1,17 @@
+# syntax=docker/dockerfile:1.7
 FROM node:24-bookworm-slim AS build
 WORKDIR /workspace
 
 COPY package.json package-lock.json .npmrc ./
-COPY apps/api/package.json apps/api/package.json
-COPY apps/cli/package.json apps/cli/package.json
-COPY apps/desktop/package.json apps/desktop/package.json
 COPY apps/web/package.json apps/web/package.json
-COPY packages/application/package.json packages/application/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/core/package.json packages/core/package.json
-RUN npm ci --ignore-scripts
+COPY packages/workspace-ui/package.json packages/workspace-ui/package.json
+RUN --mount=type=cache,id=dglab-pulse-hub-npm,target=/root/.npm \
+  npm ci --workspace @dglab-pulse-hub/web --include-workspace-root=true \
+    --ignore-scripts --no-audit --fund=false
 
 COPY . .
-RUN npm run build
 RUN npm run web:build
 
 FROM nginx:1.29-alpine AS web
