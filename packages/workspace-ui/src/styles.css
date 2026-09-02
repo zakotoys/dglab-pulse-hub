@@ -394,18 +394,6 @@ textarea:focus-visible,
   line-height: 1;
   box-shadow: 0 3px 0 var(--accent-soft);
 }
-.open-local-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: 100%;
-  margin: -7px 0 18px;
-}
-.open-local-button span {
-  font-size: 15px;
-}
-
 .drop-overlay {
   position: fixed;
   inset: 0;

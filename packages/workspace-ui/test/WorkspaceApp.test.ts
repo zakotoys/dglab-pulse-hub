@@ -51,11 +51,12 @@ describe('WorkspaceApp QR image controls', () => {
     expect(markup).not.toContain('file-manager');
   });
 
-  it('renders the native local-file action only for Electron clients', () => {
+  it('routes native comparison and batch selection through the file manager', () => {
     const client = { fileMode: 'native' } as WorkspaceClient;
     const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
 
-    expect(markup).toContain('Open local file');
-    expect(markup).toContain('open-local-button');
+    expect(markup).toContain('Select a second file');
+    expect(markup).toContain('Choose multiple files');
+    expect(markup).not.toContain('Open local file');
   });
 });

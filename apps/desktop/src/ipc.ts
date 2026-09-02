@@ -28,7 +28,6 @@ import {
   onlyKeys,
   plainObject,
   previewDisplayName,
-  readSelectedBatchFiles,
   rejectedIpc,
   rejectedOperation,
   trustedSender,
@@ -54,8 +53,7 @@ export function registerIpc({
 
   const openPulsePath = async (
     selectedPath: string,
-    requestSequence: number,
-    archive: boolean
+    requestSequence: number
   ): Promise<OperationEnvelopeDto> => {
     const read = await readInputFile(selectedPath);
     if (read.status !== 'success' || read.data === null) return toOperationDto(read);
@@ -64,7 +62,7 @@ export function registerIpc({
     });
     if (validation.status !== 'success' || validation.data === null)
       return toOperationDto(validation);
-    const documentPath = archive ? await workspace.archive(selectedPath) : resolve(selectedPath);
+    const documentPath = resolve(selectedPath);
     const displayName = sanitizeDisplayName(basename(documentPath));
     const inspected = inspectPulse(read.data.content, {
       input: { displayName, bytes: read.data.byteSize }
@@ -90,27 +88,40 @@ export function registerIpc({
     envelope: OperationEnvelopeDto
   ): OperationEnvelopeDto => Object.freeze({ ...envelope, operation });
 
-  ipcMain.handle('pulse:open-local', async (event) => {
-    if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
-    if (!confirmClose()) return cancelledIpc('inspect');
-    const requestSequence = ++openSequence;
-    try {
-      const selected = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [{ name: 'Pulse files', extensions: ['pulse'] }]
+  const importPaths = async (paths: readonly string[]) => {
+    const archivedPaths: string[] = [];
+    for (const path of paths) {
+      const read = await readInputFile(path);
+      if (read.status !== 'success' || read.data === null) continue;
+      const validation = inspectPulse(read.data.content, {
+        input: { displayName: read.data.displayName, bytes: read.data.byteSize }
       });
-      if (selected.canceled || selected.filePaths[0] === undefined) {
-        return cancelledIpc('inspect');
-      }
-      return await openPulsePath(selected.filePaths[0], requestSequence, true);
-    } catch {
-      return failedIpc(
-        'inspect',
-        DIAGNOSTIC_CODES.ADAPTER_READ,
-        'adapter',
-        'Unable to open the selected pulse file.'
-      );
+      if (validation.status !== 'success') continue;
+      archivedPaths.push(await workspace.archive(path));
     }
+    const index = await workspace.list();
+    const archived = new Set(archivedPaths.map((path) => resolve(path)));
+    const imported = [];
+    for (const file of index.files) {
+      if (archived.has(resolve(await workspace.resolveFile(file.relativePath))))
+        imported.push(file);
+    }
+    return Object.freeze({ index, imported: Object.freeze(imported) });
+  };
+
+  ipcMain.handle('pulse:workspace-import', async (event, payload: unknown) => {
+    if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
+    if (
+      !plainObject(payload) ||
+      !onlyKeys(payload, ['multiple']) ||
+      typeof payload.multiple !== 'boolean'
+    )
+      throw new Error('A file-manager import mode is required.');
+    const selected = await dialog.showOpenDialog({
+      properties: payload.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+      filters: [{ name: 'Pulse files', extensions: ['pulse'] }]
+    });
+    return importPaths(selected.canceled ? [] : selected.filePaths);
   });
 
   ipcMain.handle('pulse:workspace-list', async (event) => {
@@ -130,7 +141,7 @@ export function registerIpc({
     const requestSequence = ++openSequence;
     try {
       const selectedPath = await workspace.resolveFile(payload.relativePath);
-      return await openPulsePath(selectedPath, requestSequence, false);
+      return await openPulsePath(selectedPath, requestSequence);
     } catch {
       return failedIpc(
         'inspect',
@@ -145,17 +156,10 @@ export function registerIpc({
     if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
     if (!plainObject(payload) || !onlyKeys(payload, ['path']) || typeof payload.path !== 'string')
       return rejectedOperation('inspect', 'A dropped pulse file path is required.');
-    if (!confirmClose()) return cancelledIpc('inspect');
-    const requestSequence = ++openSequence;
     try {
-      return await openPulsePath(payload.path, requestSequence, true);
+      return await importPaths([payload.path]);
     } catch {
-      return failedIpc(
-        'inspect',
-        DIAGNOSTIC_CODES.ADAPTER_READ,
-        'adapter',
-        'Unable to import the dropped pulse file.'
-      );
+      return importPaths([]);
     }
   });
 
@@ -458,7 +462,7 @@ export function registerIpc({
 
   ipcMain.handle('pulse:diff', async (event, payload: unknown) => {
     if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
-    if (!plainObject(payload) || !onlyKeys(payload, ['sourceDigest']))
+    if (!plainObject(payload) || !onlyKeys(payload, ['sourceDigest', 'relativePath']))
       return rejectedOperation(
         'diff',
         'Diff request contains unsupported fields.',
@@ -481,13 +485,11 @@ export function registerIpc({
         DIAGNOSTIC_CODES.EXPORT_SOURCE_UNAVAILABLE,
         'adapter'
       );
+    if (typeof payload.relativePath !== 'string')
+      return rejectedOperation('diff', 'A managed comparison file is required.');
     try {
-      const selected = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [{ name: 'Pulse files', extensions: ['pulse', 'txt'] }]
-      });
-      if (selected.canceled || selected.filePaths[0] === undefined) return cancelledIpc('diff');
-      const read = await readInputFile(selected.filePaths[0]);
+      const selectedPath = await workspace.resolveFile(payload.relativePath);
+      const read = await readInputFile(selectedPath);
       if (read.status !== 'success' || read.data === null) return toOperationDto(read);
       return toOperationDto(diffPulses(snapshot.content, read.data.content));
     } catch {
@@ -500,19 +502,36 @@ export function registerIpc({
     }
   });
 
-  ipcMain.handle('pulse:batch-inspect', async (event) => {
+  const readManagedInputs = async (payload: unknown) => {
+    if (
+      !plainObject(payload) ||
+      !onlyKeys(payload, ['relativePaths']) ||
+      !Array.isArray(payload.relativePaths) ||
+      payload.relativePaths.length === 0 ||
+      payload.relativePaths.some((path) => typeof path !== 'string')
+    )
+      return null;
+    return Promise.all(
+      payload.relativePaths.map(async (relativePath) => {
+        const path = await workspace.resolveFile(relativePath as string);
+        const read = await readInputFile(path);
+        return read.status === 'success' && read.data !== null
+          ? { displayName: read.data.displayName, content: read.data.content }
+          : {
+              displayName: sanitizeDisplayName(basename(path)),
+              content: new Uint8Array(),
+              diagnostics: read.diagnostics
+            };
+      })
+    );
+  };
+
+  ipcMain.handle('pulse:batch-inspect', async (event, payload: unknown) => {
     if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
     try {
-      const selected = await readSelectedBatchFiles();
-      if ('cancelled' in selected) return cancelledIpc('batch');
-      if ('error' in selected)
-        return failedIpc(
-          'batch',
-          DIAGNOSTIC_CODES.ADAPTER_READ,
-          'adapter',
-          'Batch files could not be read.'
-        );
-      return toOperationDto(await inspectBatch(selected.inputs));
+      const inputs = await readManagedInputs(payload);
+      if (inputs === null) return rejectedOperation('batch', 'Managed batch files are required.');
+      return toOperationDto(await inspectBatch(inputs));
     } catch {
       return failedIpc(
         'batch',
@@ -525,7 +544,7 @@ export function registerIpc({
 
   ipcMain.handle('pulse:batch-export', async (event, payload: unknown) => {
     if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
-    if (!plainObject(payload) || !onlyKeys(payload, ['mode', 'overwrite']))
+    if (!plainObject(payload) || !onlyKeys(payload, ['relativePaths', 'mode', 'overwrite']))
       return rejectedOperation(
         'batch',
         'Batch export request contains unsupported fields.',
@@ -551,16 +570,9 @@ export function registerIpc({
     }
     const overwrite = value.overwrite === true;
     try {
-      const selected = await readSelectedBatchFiles();
-      if ('cancelled' in selected) return cancelledIpc('batch');
-      if ('error' in selected)
-        return failedIpc(
-          'batch',
-          DIAGNOSTIC_CODES.ADAPTER_READ,
-          'adapter',
-          'Batch files could not be read.'
-        );
-      const exported = await exportBatch(selected.inputs, { mode });
+      const inputs = await readManagedInputs({ relativePaths: value.relativePaths });
+      if (inputs === null) return rejectedOperation('batch', 'Managed batch files are required.');
+      const exported = await exportBatch(inputs, { mode });
       if (exported.data === null) return toOperationDto(exported);
       const directory = await dialog.showOpenDialog({ properties: ['openDirectory'] });
       if (directory.canceled || directory.filePaths[0] === undefined)

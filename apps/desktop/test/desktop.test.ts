@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { operationEnvelopeSchema } from '@dglab-pulse-hub/contracts';
@@ -72,6 +72,18 @@ function expectNativeOverwriteDialog(): void {
   }
 }
 
+const trustedEvent = { senderFrame: { url: TRUSTED_URL } };
+
+async function importAndOpen(input: string): Promise<unknown> {
+  mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
+  const imported = (await mocks.handlers.get('pulse:workspace-import')?.(trustedEvent, {
+    multiple: false
+  })) as { imported?: Array<{ relativePath: string }> };
+  const relativePath = imported.imported?.[0]?.relativePath;
+  expect(relativePath).toBeDefined();
+  return mocks.handlers.get('pulse:workspace-open')?.(trustedEvent, { relativePath });
+}
+
 describe('Electron IPC boundary', () => {
   beforeAll(async () => {
     await rm(WORKSPACE_ROOT, { recursive: true, force: true });
@@ -118,27 +130,29 @@ describe('Electron IPC boundary', () => {
     const importDropped = mocks.handlers.get('pulse:import-dropped');
 
     const imported = await importDropped?.({ senderFrame: { url: TRUSTED_URL } }, { path: valid });
-    expect(imported).toMatchObject({ operation: 'inspect', status: 'success' });
+    expect(imported).toMatchObject({
+      imported: [{ name: 'dropped.pulse', relativePath: 'dropped.pulse' }]
+    });
     await expect(readFile(join(WORKSPACE_ROOT, 'dropped.pulse'), 'utf8')).resolves.toBe(VALID_TEXT);
 
     const rejected = await importDropped?.(
       { senderFrame: { url: TRUSTED_URL } },
       { path: invalid }
     );
-    expect(rejected).toMatchObject({ operation: 'inspect', status: 'rejected' });
+    expect(rejected).toMatchObject({ imported: [] });
     await expect(readFile(join(WORKSPACE_ROOT, 'invalid.pulse'))).rejects.toMatchObject({
       code: 'ENOENT'
     });
   });
 
-  it('returns a validated cancellation envelope without source content', async () => {
+  it('returns an empty import result when native selection is cancelled', async () => {
     mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
-    const handler = mocks.handlers.get('pulse:open-local');
+    const handler = mocks.handlers.get('pulse:workspace-import');
     expect(handler).toBeDefined();
-    const result = await handler?.({ senderFrame: { url: TRUSTED_URL } });
-    expect(operationEnvelopeSchema.safeParse(result).success).toBe(true);
-    expect(result).toMatchObject({ status: 'cancelled', result: null });
+    const result = await handler?.(trustedEvent, { multiple: false });
+    expect(result).toMatchObject({ imported: [] });
     expect(JSON.stringify(result)).not.toContain('sourceText');
+    expect(mocks.handlers.has('pulse:open-local')).toBe(false);
   });
 
   it('binds export to the opened digest and validates the returned envelope', async () => {
@@ -147,9 +161,7 @@ describe('Electron IPC boundary', () => {
     const input = join(directory, 'source.pulse');
     const output = join(directory, 'exported.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     expect(operationEnvelopeSchema.safeParse(opened).success).toBe(true);
     expect(opened).not.toHaveProperty('sourceText');
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
@@ -173,10 +185,7 @@ describe('Electron IPC boundary', () => {
     const output = join(directory, 'exported.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
     await writeFile(output, 'existing', 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const opened = await mocks.handlers.get('pulse:open-local')?.({
-      senderFrame: { url: TRUSTED_URL }
-    });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     mocks.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: output });
 
@@ -201,7 +210,7 @@ describe('Electron IPC boundary', () => {
   });
 
   it('does not trust file-like remote IPC senders', async () => {
-    const handler = mocks.handlers.get('pulse:open-local');
+    const handler = mocks.handlers.get('pulse:workspace-list');
     await expect(
       handler?.({ senderFrame: { url: 'file://remote-host/app/index.html' } })
     ).rejects.toThrow('Untrusted IPC sender.');
@@ -212,9 +221,7 @@ describe('Electron IPC boundary', () => {
     directories.push(directory);
     const input = join(directory, 'source.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     expect(typeof digest).toBe('string');
     const edit = mocks.handlers.get('pulse:edit');
@@ -296,10 +303,7 @@ describe('Electron IPC boundary', () => {
     directories.push(directory);
     const input = join(directory, 'history.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest0 = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     expect(typeof digest0).toBe('string');
 
@@ -422,9 +426,7 @@ describe('Electron IPC boundary', () => {
     directories.push(directory);
     const input = join(directory, 'source.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     expect(typeof digest).toBe('string');
 
@@ -442,7 +444,9 @@ describe('Electron IPC boundary', () => {
     await markDirty?.({ senderFrame: { url: TRUSTED_URL } }, { dirty: false });
     mocks.dialog.showMessageBoxSync.mockReturnValueOnce(0);
     mocks.dialog.showOpenDialog.mockClear();
-    const attemptedOpen = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const attemptedOpen = await mocks.handlers.get('pulse:workspace-open')?.(trustedEvent, {
+      relativePath: basename(input)
+    });
     expect(attemptedOpen).toMatchObject({
       operation: 'inspect',
       status: 'cancelled',
@@ -457,9 +461,7 @@ describe('Electron IPC boundary', () => {
     const input = join(directory, 'source.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
     const before = await readFile(input);
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     expect(typeof digest).toBe('string');
 
@@ -483,9 +485,7 @@ describe('Electron IPC boundary', () => {
     const input = join(directory, 'source.pulse');
     const output = join(directory, 'source.qr.jpg');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     mocks.dialog.showSaveDialog.mockClear();
     const exported = await mocks.handlers.get('pulse:export')?.(
@@ -543,9 +543,7 @@ describe('Electron IPC boundary', () => {
     directories.push(directory);
     const input = join(directory, 'source.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     const edit = mocks.handlers.get('pulse:edit');
     const edited = await edit?.(
@@ -616,9 +614,7 @@ describe('Electron IPC boundary', () => {
       directories.push(directory);
       const input = join(directory, 'source.pulse');
       await writeFile(input, VALID_TEXT, 'utf8');
-      mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-      const open = mocks.handlers.get('pulse:open-local');
-      const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+      const opened = await importAndOpen(input);
       const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
       expect(typeof digest).toBe('string');
       const streamDigest = (opened as { result?: { stream?: { digest?: unknown } } }).result?.stream
@@ -658,9 +654,7 @@ describe('Electron IPC boundary', () => {
     directories.push(directory);
     const input = join(directory, 'source.pulse');
     await writeFile(input, VALID_TEXT, 'utf8');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [input] });
-    const open = mocks.handlers.get('pulse:open-local');
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    const opened = await importAndOpen(input);
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
     const render = mocks.handlers.get('pulse:render-preview');
     const unsupported = await render?.(
@@ -699,49 +693,56 @@ describe('Electron IPC boundary', () => {
     await writeFile(first, VALID_TEXT, 'utf8');
     await writeFile(second, VALID_TEXT.replace('50-0', '42-0'), 'utf8');
 
-    const open = mocks.handlers.get('pulse:open-local');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [first] });
-    const opened = await open?.({ senderFrame: { url: TRUSTED_URL } });
+    mocks.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [first, second]
+    });
+    const imported = (await mocks.handlers.get('pulse:workspace-import')?.(trustedEvent, {
+      multiple: true
+    })) as { imported: Array<{ name: string; relativePath: string }> };
+    const firstReference = imported.imported.find((file) => file.name === 'one.pulse');
+    const secondReference = imported.imported.find((file) => file.name === 'two.pulse');
+    const opened = await mocks.handlers.get('pulse:workspace-open')?.(trustedEvent, {
+      relativePath: firstReference?.relativePath
+    });
     const digest = (opened as { result?: { sourceDigest?: unknown } }).result?.sourceDigest;
 
     const diff = mocks.handlers.get('pulse:diff');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [second] });
-    const compared = await diff?.({ senderFrame: { url: TRUSTED_URL } }, { sourceDigest: digest });
+    const compared = await diff?.(trustedEvent, {
+      sourceDigest: digest,
+      relativePath: secondReference?.relativePath
+    });
     expect(operationEnvelopeSchema.safeParse(compared).success).toBe(true);
     expect(compared).toMatchObject({ operation: 'diff', status: 'success' });
     expect(JSON.stringify(compared)).not.toContain(VALID_TEXT);
 
     const batchInspect = mocks.handlers.get('pulse:batch-inspect');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({
-      canceled: false,
-      filePaths: [first, second]
+    const relativePaths = imported.imported.map((file) => file.relativePath);
+    const batch = await batchInspect?.(trustedEvent, {
+      relativePaths
     });
-    const batch = await batchInspect?.({ senderFrame: { url: TRUSTED_URL } });
     expect(operationEnvelopeSchema.safeParse(batch).success).toBe(true);
     expect(batch).toMatchObject({ operation: 'batch', status: 'success' });
     expect((batch as { result?: { items?: unknown[] } }).result?.items).toHaveLength(2);
 
     const batchExport = mocks.handlers.get('pulse:batch-export');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [first] });
     mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [directory] });
     const exported = await batchExport?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { mode: 'canonical', overwrite: true }
+      { relativePaths: [firstReference?.relativePath], mode: 'canonical', overwrite: true }
     );
     expect(operationEnvelopeSchema.safeParse(exported).success).toBe(true);
     expect(exported).toMatchObject({ operation: 'batch', status: 'success' });
   });
 
-  it('uses the batch operation name when batch selection is cancelled', async () => {
+  it('rejects batch requests without managed file references', async () => {
     const batchInspect = mocks.handlers.get('pulse:batch-inspect');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
-    const inspected = await batchInspect?.({ senderFrame: { url: TRUSTED_URL } });
-    expect(inspected).toMatchObject({ operation: 'batch', status: 'cancelled', result: null });
+    const inspected = await batchInspect?.(trustedEvent, {});
+    expect(inspected).toMatchObject({ operation: 'batch', status: 'rejected', result: null });
 
     const batchExport = mocks.handlers.get('pulse:batch-export');
-    mocks.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
-    const exported = await batchExport?.({ senderFrame: { url: TRUSTED_URL } }, {});
-    expect(exported).toMatchObject({ operation: 'batch', status: 'cancelled', result: null });
+    const exported = await batchExport?.(trustedEvent, {});
+    expect(exported).toMatchObject({ operation: 'batch', status: 'rejected', result: null });
     expect(operationEnvelopeSchema.safeParse(inspected).success).toBe(true);
     expect(operationEnvelopeSchema.safeParse(exported).success).toBe(true);
   });
@@ -751,7 +752,7 @@ describe('Electron IPC boundary', () => {
     mocks.dialog.showOpenDialog.mockClear();
     const rejected = await batchExport?.(
       { senderFrame: { url: TRUSTED_URL } },
-      { overwrite: 'yes' }
+      { relativePaths: ['source.pulse'], overwrite: 'yes' }
     );
     expect(operationEnvelopeSchema.safeParse(rejected).success).toBe(true);
     expect(rejected).toMatchObject({ operation: 'batch', status: 'rejected', result: null });

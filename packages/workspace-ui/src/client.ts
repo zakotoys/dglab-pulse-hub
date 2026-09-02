@@ -12,13 +12,18 @@ import type {
 export type EditPayload = EditCommandDto;
 export type AssistPayload = ReviewedAssistCommandDto;
 
-export interface WorkspaceFile {
+export interface BrowserWorkspaceFile {
   readonly name: string;
   readonly bytes: Uint8Array;
   readonly type?: string;
-  /** Original File object, available only to native Electron adapters for path resolution. */
-  readonly source?: File;
 }
+
+export interface ManagedWorkspaceFile {
+  readonly name: string;
+  readonly relativePath: string;
+}
+
+export type WorkspaceFile = BrowserWorkspaceFile | ManagedWorkspaceFile;
 
 export interface LocalPulseFile {
   readonly name: string;
@@ -30,6 +35,18 @@ export interface LocalPulseFile {
 export interface LocalPulseIndex {
   readonly rootPath: string;
   readonly files: readonly LocalPulseFile[];
+}
+
+export interface LocalPulseImportResult {
+  readonly index: LocalPulseIndex;
+  readonly imported: readonly LocalPulseFile[];
+}
+
+export interface LocalFileManagerClient {
+  readonly list: (signal?: AbortSignal) => Promise<LocalPulseIndex>;
+  readonly import: (multiple: boolean, signal?: AbortSignal) => Promise<LocalPulseImportResult>;
+  readonly importDropped: (file: File, signal?: AbortSignal) => Promise<LocalPulseImportResult>;
+  readonly open: (relativePath: string, signal?: AbortSignal) => Promise<WorkspaceOperation>;
 }
 
 export interface WorkspaceDocument {
@@ -59,11 +76,7 @@ export interface WorkspaceClient {
   readonly fileMode: 'browser' | 'native';
   readonly open: (signal?: AbortSignal) => Promise<WorkspaceOperation>;
   readonly importFile: (file: WorkspaceFile, signal?: AbortSignal) => Promise<WorkspaceOperation>;
-  readonly listLocalFiles?: (signal?: AbortSignal) => Promise<LocalPulseIndex>;
-  readonly openLocalFile?: (
-    relativePath: string,
-    signal?: AbortSignal
-  ) => Promise<WorkspaceOperation>;
+  readonly localFiles?: LocalFileManagerClient;
   readonly inspect: (
     text: string,
     displayName: string,

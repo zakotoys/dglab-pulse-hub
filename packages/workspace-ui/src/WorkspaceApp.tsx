@@ -197,12 +197,14 @@ export function WorkspaceApp({
   const [batchMode, setBatchMode] = useState<'inspect' | 'export'>('inspect');
   const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
   const [dragActive, setDragActive] = useState(false);
-  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [fileManagerPurpose, setFileManagerPurpose] = useState<
+    'source' | 'compare' | 'batch' | null
+  >(null);
   const [localIndex, setLocalIndex] = useState<LocalPulseIndex | null>(null);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState('');
   const [libraryQuery, setLibraryQuery] = useState('');
-  const [selectedLocalPath, setSelectedLocalPath] = useState<string | null>(null);
+  const [selectedLocalPaths, setSelectedLocalPaths] = useState<readonly string[]>([]);
   const [history, setHistory] = useState<readonly WorkspaceDocument[]>([]);
   const [historyCursor, setHistoryCursor] = useState(-1);
   const abortController = useRef<AbortController | null>(null);
@@ -551,52 +553,23 @@ export function WorkspaceApp({
     }
   }
 
-  async function openNativeDocument(): Promise<void> {
-    const controller = beginRequest(t('opening'));
-    try {
-      const operation = await client.open(controller.signal);
-      if (!isCurrentRequest(controller)) return;
-      if (operation.envelope.status !== 'success' || operation.document === undefined) {
-        clearDocumentState();
-        setEnvelope(operation.envelope);
-        return;
-      }
-      applyOperationView(operation);
-      setExportMode('source');
-      resetHistory(operation.document);
-      if (client.fileMode === 'native') void refreshLocalFiles();
-    } catch (error) {
-      if (!isCurrentRequest(controller)) return;
-      clearDocumentState();
-      setEnvelope(
-        error instanceof DOMException && error.name === 'AbortError'
-          ? failureEnvelope('inspect', t('openCancelled'), 'PULSE_TASK_CANCELLED', 'cancelled')
-          : failureEnvelope('inspect', t('openFailed'))
-      );
-    } finally {
-      endRequest(controller);
-    }
-  }
-
   function openDocument(): void {
     if (client.fileMode === 'native') {
-      void openNativeDocument();
+      openFileManager('source');
     } else {
       fileInputRef.current?.click();
     }
   }
 
   async function refreshLocalFiles(): Promise<void> {
-    if (client.fileMode !== 'native' || client.listLocalFiles === undefined) return;
+    if (client.fileMode !== 'native' || client.localFiles === undefined) return;
     setLibraryLoading(true);
     setLibraryError('');
     try {
-      const index = await client.listLocalFiles();
+      const index = await client.localFiles.list();
       setLocalIndex(index);
-      setSelectedLocalPath((selected) =>
-        selected !== null && index.files.some((file) => file.relativePath === selected)
-          ? selected
-          : (index.files[0]?.relativePath ?? null)
+      setSelectedLocalPaths((selected) =>
+        selected.filter((path) => index.files.some((file) => file.relativePath === path))
       );
     } catch {
       setLibraryError(t('localFilesFailed'));
@@ -605,17 +578,24 @@ export function WorkspaceApp({
     }
   }
 
-  function openFileManager(): void {
-    if (client.fileMode !== 'native' || client.listLocalFiles === undefined) return;
-    setFileManagerOpen(true);
+  function openFileManager(purpose: 'source' | 'compare' | 'batch'): void {
+    if (client.fileMode !== 'native' || client.localFiles === undefined) return;
+    setFileManagerPurpose(purpose);
+    setSelectedLocalPaths(
+      purpose === 'compare' && compareFile !== null && 'relativePath' in compareFile
+        ? [compareFile.relativePath]
+        : purpose === 'batch'
+          ? batchFiles.flatMap((file) => ('relativePath' in file ? [file.relativePath] : []))
+          : []
+    );
     void refreshLocalFiles();
   }
 
   async function openWorkspaceDocument(relativePath: string): Promise<void> {
-    if (client.openLocalFile === undefined) return;
+    if (client.localFiles === undefined) return;
     const controller = beginRequest(t('opening'));
     try {
-      const operation = await client.openLocalFile(relativePath, controller.signal);
+      const operation = await client.localFiles.open(relativePath, controller.signal);
       if (!isCurrentRequest(controller)) return;
       if (operation.envelope.status !== 'success' || operation.document === undefined) {
         clearDocumentState();
@@ -625,10 +605,59 @@ export function WorkspaceApp({
       applyOperationView(operation);
       setExportMode('source');
       resetHistory(operation.document);
-      setFileManagerOpen(false);
+      setFileManagerPurpose(null);
     } finally {
       endRequest(controller);
     }
+  }
+
+  async function importLocalFiles(): Promise<void> {
+    if (client.localFiles === undefined || fileManagerPurpose === null) return;
+    setLibraryLoading(true);
+    setLibraryError('');
+    try {
+      const result = await client.localFiles.import(fileManagerPurpose === 'batch');
+      setLocalIndex(result.index);
+      setSelectedLocalPaths(result.imported.map((file) => file.relativePath));
+    } catch {
+      setLibraryError(t('localImportFailed'));
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  function toggleManagedFile(relativePath: string): void {
+    setSelectedLocalPaths((current) =>
+      fileManagerPurpose === 'batch'
+        ? current.includes(relativePath)
+          ? current.filter((path) => path !== relativePath)
+          : [...current, relativePath]
+        : [relativePath]
+    );
+  }
+
+  function confirmManagedSelection(): void {
+    if (fileManagerPurpose === null || selectedLocalPaths.length === 0) return;
+    if (fileManagerPurpose === 'source') {
+      void openWorkspaceDocument(selectedLocalPaths[0] ?? '');
+      return;
+    }
+    const files = (localIndex?.files ?? []).filter((file) =>
+      selectedLocalPaths.includes(file.relativePath)
+    );
+    if (fileManagerPurpose === 'compare') {
+      const file = files[0];
+      if (file !== undefined) {
+        setCompareFile(file);
+        setCompareName(file.name);
+        setDiffEnvelope(null);
+      }
+    } else {
+      setBatchFiles(files);
+      setBatchEnvelope(null);
+      setBatchProgress({ completed: 0, total: files.length });
+    }
+    setFileManagerPurpose(null);
   }
 
   const visibleLocalFiles = useMemo(() => {
@@ -666,7 +695,17 @@ export function WorkspaceApp({
     setDragActive(false);
     if (busy) return;
     const file = event.dataTransfer.files?.[0];
-    if (file !== undefined) void importFile(file);
+    if (file === undefined) return;
+    if (client.fileMode === 'browser') {
+      void importFile(file);
+      return;
+    }
+    void (async () => {
+      if (client.localFiles === undefined) return;
+      const imported = await client.localFiles.importDropped(file);
+      const first = imported.imported[0];
+      if (first !== undefined) await openWorkspaceDocument(first.relativePath);
+    })();
   }
 
   function handleDropzoneKeyDown(event: React.KeyboardEvent<HTMLLabelElement>): void {
@@ -890,7 +929,7 @@ export function WorkspaceApp({
     try {
       const operation = await client.diff(
         workspaceDocument,
-        client.fileMode === 'browser' ? (compareFile ?? undefined) : undefined,
+        compareFile ?? undefined,
         controller.signal
       );
       if (!isCurrentRequest(controller)) return;
@@ -971,7 +1010,7 @@ export function WorkspaceApp({
   }
 
   async function runBatch(): Promise<void> {
-    if (client.fileMode === 'browser' && batchFiles.length === 0) return;
+    if (batchFiles.length === 0) return;
     const controller = beginRequest(
       batchMode === 'inspect' ? t('inspectingBatch') : t('exportingBatch')
     );
@@ -979,15 +1018,8 @@ export function WorkspaceApp({
     try {
       const operation =
         batchMode === 'inspect'
-          ? await client.batchInspect(
-              client.fileMode === 'browser' ? batchFiles : undefined,
-              controller.signal
-            )
-          : await client.batchExport(
-              client.fileMode === 'browser' ? batchFiles : undefined,
-              exportMode,
-              controller.signal
-            );
+          ? await client.batchInspect(batchFiles, controller.signal)
+          : await client.batchExport(batchFiles, exportMode, controller.signal);
       if (!isCurrentRequest(controller)) return;
       setBatchEnvelope(operation.envelope);
       if (operation.envelope.status === 'success') {
@@ -1239,7 +1271,7 @@ export function WorkspaceApp({
             onClick={(event) => {
               if (client.fileMode === 'native') {
                 event.preventDefault();
-                openFileManager();
+                openFileManager('source');
               }
             }}
             onKeyDown={handleDropzoneKeyDown}
@@ -1267,17 +1299,6 @@ export function WorkspaceApp({
             <b>{busy ? busyLabel : t('openPulseFile')}</b>
             <small>{t('inputHint')}</small>
           </label>
-          {client.fileMode === 'native' && (
-            <button
-              type="button"
-              className="secondary open-local-button"
-              disabled={busy}
-              onClick={() => void openNativeDocument()}
-            >
-              <span aria-hidden="true">＋</span>
-              {t('openLocalFile')}
-            </button>
-          )}
           <div className="qr-import">
             <label htmlFor="qr-input">{t('qrContent')}</label>
             <textarea
@@ -1315,9 +1336,21 @@ export function WorkspaceApp({
                 />
               </label>
             )}
+            {client.fileMode === 'native' && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => openFileManager('compare')}
+              >
+                {t('selectSecondFile')}
+              </button>
+            )}
             <small className="field-note">
               {client.fileMode === 'native'
-                ? t('chooseDiffFile')
+                ? compareFile === null
+                  ? t('noComparison')
+                  : compareName
                 : compareText === ''
                   ? t('noComparison')
                   : compareName}
@@ -1365,6 +1398,16 @@ export function WorkspaceApp({
                 />
               </label>
             )}
+            {client.fileMode === 'native' && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => openFileManager('batch')}
+              >
+                {t('chooseFiles')}
+              </button>
+            )}
             <div className="segmented" role="group" aria-label={t('batchOperation')}>
               <button
                 type="button"
@@ -1393,7 +1436,7 @@ export function WorkspaceApp({
             )}
             <button
               className="secondary sidebar-run-button"
-              disabled={busy || (client.fileMode === 'browser' && batchFiles.length === 0)}
+              disabled={busy || batchFiles.length === 0}
               onClick={() => void runBatch()}
             >
               {t('runBatch')}
@@ -2321,8 +2364,8 @@ export function WorkspaceApp({
           </div>
         </div>
       )}
-      {client.fileMode === 'native' && fileManagerOpen && (
-        <div className="file-manager-backdrop" onMouseDown={() => setFileManagerOpen(false)}>
+      {client.fileMode === 'native' && fileManagerPurpose !== null && (
+        <div className="file-manager-backdrop" onMouseDown={() => setFileManagerPurpose(null)}>
           <section
             className="file-manager"
             role="dialog"
@@ -2332,7 +2375,13 @@ export function WorkspaceApp({
           >
             <header>
               <div>
-                <h2 id="file-manager-title">{t('localFileManager')}</h2>
+                <h2 id="file-manager-title">
+                  {fileManagerPurpose === 'source'
+                    ? t('selectSourceFile')
+                    : fileManagerPurpose === 'compare'
+                      ? t('selectComparisonFile')
+                      : t('selectBatchFiles')}
+                </h2>
                 <p title={localIndex?.rootPath}>{localIndex?.rootPath ?? t('defaultWorkspace')}</p>
               </div>
               <button
@@ -2340,12 +2389,20 @@ export function WorkspaceApp({
                 className="icon-button"
                 aria-label={t('close')}
                 title={t('close')}
-                onClick={() => setFileManagerOpen(false)}
+                onClick={() => setFileManagerPurpose(null)}
               >
                 ×
               </button>
             </header>
             <div className="file-manager-toolbar">
+              <button
+                type="button"
+                className="secondary"
+                disabled={libraryLoading}
+                onClick={() => void importLocalFiles()}
+              >
+                {fileManagerPurpose === 'batch' ? t('importLocalFiles') : t('importLocalFile')}
+              </button>
               <input
                 type="search"
                 value={libraryQuery}
@@ -2364,7 +2421,12 @@ export function WorkspaceApp({
                 ↻
               </button>
             </div>
-            <div className="file-list" role="listbox" aria-label={t('localPulseFiles')}>
+            <div
+              className="file-list"
+              role="listbox"
+              aria-label={t('localPulseFiles')}
+              aria-multiselectable={fileManagerPurpose === 'batch'}
+            >
               {libraryLoading ? (
                 <div className="file-list-empty">{t('loadingLocalFiles')}</div>
               ) : libraryError !== '' ? (
@@ -2376,11 +2438,26 @@ export function WorkspaceApp({
                   <button
                     type="button"
                     role="option"
-                    aria-selected={selectedLocalPath === file.relativePath}
+                    aria-selected={selectedLocalPaths.includes(file.relativePath)}
                     className="file-list-row"
                     key={file.relativePath}
-                    onClick={() => setSelectedLocalPath(file.relativePath)}
-                    onDoubleClick={() => void openWorkspaceDocument(file.relativePath)}
+                    onClick={() => toggleManagedFile(file.relativePath)}
+                    onDoubleClick={() => {
+                      if (fileManagerPurpose === 'source') {
+                        void openWorkspaceDocument(file.relativePath);
+                      } else if (fileManagerPurpose === 'compare') {
+                        setCompareFile(file);
+                        setCompareName(file.name);
+                        setDiffEnvelope(null);
+                        setFileManagerPurpose(null);
+                      } else {
+                        setSelectedLocalPaths((current) =>
+                          current.includes(file.relativePath)
+                            ? current
+                            : [...current, file.relativePath]
+                        );
+                      }
+                    }}
                   >
                     <span className="file-type-icon" aria-hidden="true">
                       ∿
@@ -2400,16 +2477,16 @@ export function WorkspaceApp({
               )}
             </div>
             <footer>
-              <span>{t('doubleClickToOpen')}</span>
+              <span>
+                {fileManagerPurpose === 'batch' ? t('multipleSelection') : t('doubleClickToOpen')}
+              </span>
               <button
                 type="button"
                 className="primary"
-                disabled={busy || selectedLocalPath === null}
-                onClick={() =>
-                  selectedLocalPath !== null && void openWorkspaceDocument(selectedLocalPath)
-                }
+                disabled={busy || selectedLocalPaths.length === 0}
+                onClick={confirmManagedSelection}
               >
-                {t('openSelectedFile')}
+                {fileManagerPurpose === 'source' ? t('openSelectedFile') : t('selectFiles')}
               </button>
             </footer>
           </section>

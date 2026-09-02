@@ -9,10 +9,8 @@ import { fileURLToPath } from 'node:url';
 import {
   atomicWriteFile,
   operationResult,
-  readInputFile,
   sanitizeDisplayName,
-  toOperationDto,
-  type BatchInput
+  toOperationDto
 } from '@dglab-pulse-hub/application';
 import { DIAGNOSTIC_CODES, location, makeDiagnostic, type Diagnostic } from '@dglab-pulse-hub/core';
 import type { OperationEnvelopeDto } from '@dglab-pulse-hub/contracts';
@@ -172,34 +170,6 @@ export function digestPayload(payload: unknown): string | null {
   )
     return null;
   return payload.sourceDigest;
-}
-
-export async function readSelectedBatchFiles(
-  properties: ('openFile' | 'multiSelections')[] = ['openFile', 'multiSelections']
-): Promise<
-  | { readonly inputs: readonly BatchInput[]; readonly paths: readonly string[] }
-  | { readonly cancelled: true }
-  | { readonly error: unknown }
-> {
-  const selected = await dialog.showOpenDialog({
-    properties,
-    filters: [{ name: 'Pulse files', extensions: ['pulse', 'txt'] }]
-  });
-  if (selected.canceled || selected.filePaths.length === 0) return { cancelled: true };
-  const inputs: BatchInput[] = [];
-  for (const path of selected.filePaths) {
-    const read = await readInputFile(path);
-    if (read.status === 'success' && read.data !== null) {
-      inputs.push({ displayName: read.data.displayName, content: read.data.content });
-    } else {
-      inputs.push({
-        displayName: sanitizeDisplayName(path.split(/[\\/]/).pop() ?? 'pulse.pulse'),
-        content: new Uint8Array(),
-        diagnostics: read.diagnostics
-      });
-    }
-  }
-  return { inputs: Object.freeze(inputs), paths: Object.freeze([...selected.filePaths]) };
 }
 
 function cancellationMessage(

@@ -45,6 +45,7 @@ export type DesktopAssistRequest = ReviewedAssistCommandDto & {
 
 export interface DesktopDiffRequest {
   readonly sourceDigest: string;
+  readonly relativePath: string;
 }
 
 export interface DesktopQrRequest {
@@ -58,8 +59,13 @@ export interface DesktopHistoryRequest {
 export type DesktopHistoryResetListener = (envelope: OperationEnvelopeDto) => void;
 
 export interface DesktopBatchExportRequest {
+  readonly relativePaths: readonly string[];
   readonly mode?: 'canonical' | 'source';
   readonly overwrite?: boolean;
+}
+
+export interface DesktopBatchRequest {
+  readonly relativePaths: readonly string[];
 }
 
 export interface DesktopWorkspaceFile {
@@ -74,14 +80,20 @@ export interface DesktopWorkspaceIndex {
   readonly files: readonly DesktopWorkspaceFile[];
 }
 
+export interface DesktopWorkspaceImportResult {
+  readonly index: DesktopWorkspaceIndex;
+  readonly imported: readonly DesktopWorkspaceFile[];
+}
+
 contextBridge.exposeInMainWorld(
   'pulseDesktop',
   Object.freeze({
-    openLocal: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:open-local'),
     listWorkspace: (): Promise<DesktopWorkspaceIndex> => ipcRenderer.invoke('pulse:workspace-list'),
+    importLocalFiles: (multiple: boolean): Promise<DesktopWorkspaceImportResult> =>
+      ipcRenderer.invoke('pulse:workspace-import', { multiple }),
     openWorkspaceFile: (relativePath: string): Promise<OperationEnvelopeDto> =>
       ipcRenderer.invoke('pulse:workspace-open', { relativePath }),
-    importDroppedFile: (file: File): Promise<OperationEnvelopeDto> =>
+    importDroppedFile: (file: File): Promise<DesktopWorkspaceImportResult> =>
       ipcRenderer.invoke('pulse:import-dropped', { path: webUtils.getPathForFile(file) }),
     inspectCurrent: (): Promise<OperationEnvelopeDto> =>
       ipcRenderer.invoke('pulse:inspect-current'),
@@ -104,8 +116,9 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on('pulse:history-reset', handler);
       return () => ipcRenderer.removeListener('pulse:history-reset', handler);
     },
-    batchInspect: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:batch-inspect'),
-    batchExport: (payload: DesktopBatchExportRequest = {}): Promise<OperationEnvelopeDto> =>
+    batchInspect: (payload: DesktopBatchRequest): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:batch-inspect', payload),
+    batchExport: (payload: DesktopBatchExportRequest): Promise<OperationEnvelopeDto> =>
       ipcRenderer.invoke('pulse:batch-export', payload),
     renderPreview: (payload: DesktopPreviewRequest): Promise<OperationEnvelopeDto> =>
       ipcRenderer.invoke('pulse:render-preview', payload),

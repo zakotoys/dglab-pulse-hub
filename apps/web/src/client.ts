@@ -289,6 +289,7 @@ async function decodeQrText(text: string, signal?: AbortSignal): Promise<Workspa
 }
 
 async function readFile(file: WorkspaceFile): Promise<string | null> {
+  if (!('bytes' in file)) return null;
   return decodeUtf8(file.bytes);
 }
 
@@ -309,6 +310,8 @@ export function createWebWorkspaceClient(): WorkspaceClient {
     },
 
     async importFile(file, signal) {
+      if (!('bytes' in file))
+        return { envelope: failureEnvelope('inspect', 'A browser file is required.') };
       const decoded = await readFile(file);
       if (decoded === null) {
         try {
@@ -628,6 +631,8 @@ async function batchRequest(
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
     if (file === undefined) continue;
+    if (!('bytes' in file))
+      return { envelope: failureEnvelope('batch', 'Browser files are required.') };
     const text = decodeUtf8(file.bytes);
     if (text === null)
       return {

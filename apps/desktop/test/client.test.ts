@@ -6,7 +6,7 @@ afterEach(() => {
 });
 
 describe('Electron workspace client', () => {
-  it('uses the preload file boundary for workspace browsing and dropped files', async () => {
+  it('uses one preload file-manager boundary for list, import and open', async () => {
     const listWorkspace = vi.fn().mockResolvedValue({
       rootPath: '/managed',
       files: [
@@ -19,26 +19,58 @@ describe('Electron workspace client', () => {
       ]
     });
     const openWorkspaceFile = vi.fn().mockResolvedValue({});
-    const importDroppedFile = vi.fn().mockResolvedValue({});
+    const importLocalFiles = vi.fn().mockResolvedValue({
+      index: { rootPath: '/managed', files: [] },
+      imported: []
+    });
+    const importDroppedFile = vi.fn().mockResolvedValue({
+      index: { rootPath: '/managed', files: [] },
+      imported: []
+    });
     vi.stubGlobal('window', {
-      pulseDesktop: { listWorkspace, openWorkspaceFile, importDroppedFile }
+      pulseDesktop: { listWorkspace, importLocalFiles, openWorkspaceFile, importDroppedFile }
     });
     const client = createElectronWorkspaceClient();
     const droppedFile = { name: 'external.pulse' } as File;
 
-    await expect(client.listLocalFiles()).resolves.toMatchObject({
+    await expect(client.localFiles?.list()).resolves.toMatchObject({
       rootPath: '/managed',
       files: [{ relativePath: 'saved.pulse', byteSize: 42 }]
     });
-    await client.openLocalFile('saved.pulse');
-    await client.importFile({
-      name: droppedFile.name,
-      bytes: new Uint8Array(),
-      source: droppedFile
-    });
+    await client.localFiles?.import(false);
+    await client.localFiles?.importDropped(droppedFile);
+    await client.localFiles?.open('saved.pulse');
 
+    expect(importLocalFiles).toHaveBeenCalledWith(false);
     expect(openWorkspaceFile).toHaveBeenCalledWith('saved.pulse');
     expect(importDroppedFile).toHaveBeenCalledWith(droppedFile);
+  });
+
+  it('passes managed file references to diff and batch operations', async () => {
+    const diff = vi.fn().mockResolvedValue({});
+    const batchInspect = vi.fn().mockResolvedValue({});
+    const batchExport = vi.fn().mockResolvedValue({});
+    vi.stubGlobal('window', { pulseDesktop: { diff, batchInspect, batchExport } });
+    const client = createElectronWorkspaceClient();
+    const document = { displayName: 'source.pulse', digest: '0123456789abcdef' };
+    const comparison = { name: 'compare.pulse', relativePath: 'compare.pulse' };
+    const files = [comparison, { name: 'other.pulse', relativePath: 'archive/other.pulse' }];
+
+    await client.diff(document, comparison);
+    await client.batchInspect(files);
+    await client.batchExport(files, 'canonical');
+
+    expect(diff).toHaveBeenCalledWith({
+      sourceDigest: document.digest,
+      relativePath: 'compare.pulse'
+    });
+    expect(batchInspect).toHaveBeenCalledWith({
+      relativePaths: ['compare.pulse', 'archive/other.pulse']
+    });
+    expect(batchExport).toHaveBeenCalledWith({
+      relativePaths: ['compare.pulse', 'archive/other.pulse'],
+      mode: 'canonical'
+    });
   });
 
   it('omits text export mode from QR export IPC requests', async () => {

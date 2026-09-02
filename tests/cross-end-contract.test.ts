@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
@@ -95,10 +95,15 @@ async function httpEnvelope(text: string, displayName: string): Promise<Operatio
 }
 
 async function ipcEnvelope(path: string): Promise<OperationEnvelopeDto> {
-  electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [path] });
-  const handler = electronMock.handlers.get('pulse:open-local');
+  const workspaceRoot = join(desktopWorkspace, 'Pulse Hub');
+  await mkdir(workspaceRoot, { recursive: true });
+  await copyFile(path, join(workspaceRoot, 'sample.pulse'));
+  const handler = electronMock.handlers.get('pulse:workspace-open');
   expect(handler).toBeDefined();
-  const value: unknown = await handler?.({ senderFrame: { url: trustedSenderUrl } });
+  const value: unknown = await handler?.(
+    { senderFrame: { url: trustedSenderUrl } },
+    { relativePath: 'sample.pulse' }
+  );
   expect(operationEnvelopeSchema.safeParse(value).success).toBe(true);
   return value as OperationEnvelopeDto;
 }

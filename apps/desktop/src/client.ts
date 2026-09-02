@@ -16,14 +16,15 @@ import {
   type WorkspaceArtifact,
   type WorkspaceClient,
   type WorkspaceDocument,
+  type LocalPulseImportResult,
   type LocalPulseIndex,
   type WorkspaceFile,
   type WorkspaceOperation
 } from '@dglab-pulse-hub/workspace-ui';
 
 interface DesktopApi {
-  readonly openLocal: () => Promise<unknown>;
   readonly listWorkspace: () => Promise<unknown>;
+  readonly importLocalFiles: (multiple: boolean) => Promise<unknown>;
   readonly openWorkspaceFile: (relativePath: string) => Promise<unknown>;
   readonly importDroppedFile: (file: File) => Promise<unknown>;
   readonly inspectCurrent: () => Promise<unknown>;
@@ -33,12 +34,20 @@ interface DesktopApi {
     readonly command: EditPayload;
   }) => Promise<unknown>;
   readonly assist: (payload: { readonly sourceDigest: string } & AssistPayload) => Promise<unknown>;
-  readonly diff: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
+  readonly diff: (payload: {
+    readonly sourceDigest: string;
+    readonly relativePath: string;
+  }) => Promise<unknown>;
   readonly undo: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
   readonly redo: (payload: { readonly sourceDigest: string }) => Promise<unknown>;
   readonly onHistoryReset: (listener: (value: unknown) => void) => () => void;
-  readonly batchInspect: () => Promise<unknown>;
-  readonly batchExport: (payload?: { readonly mode?: 'source' | 'canonical' }) => Promise<unknown>;
+  readonly batchInspect: (payload: {
+    readonly relativePaths: readonly string[];
+  }) => Promise<unknown>;
+  readonly batchExport: (payload: {
+    readonly relativePaths: readonly string[];
+    readonly mode?: 'source' | 'canonical';
+  }) => Promise<unknown>;
   readonly renderPreview: (payload: {
     readonly sourceDigest: string;
     readonly displayName?: string;
@@ -196,63 +205,93 @@ function parseLocalPulseIndex(value: unknown): LocalPulseIndex {
   return Object.freeze({ rootPath: value.rootPath, files: Object.freeze(files) });
 }
 
+function parseLocalPulseImport(value: unknown): LocalPulseImportResult {
+  if (!isRecord(value) || !Array.isArray(value.imported))
+    throw new Error('The desktop workspace import result was invalid.');
+  const index = parseLocalPulseIndex(value.index);
+  const importedPaths = new Set(
+    value.imported.map((file) => {
+      if (!isRecord(file) || typeof file.relativePath !== 'string')
+        throw new Error('The desktop imported file entry was invalid.');
+      return file.relativePath;
+    })
+  );
+  return Object.freeze({
+    index,
+    imported: Object.freeze(index.files.filter((file) => importedPaths.has(file.relativePath)))
+  });
+}
+
+function managedPaths(files: readonly WorkspaceFile[] | undefined): readonly string[] {
+  if (files === undefined || files.some((file) => !('relativePath' in file)))
+    throw new Error('Managed file references are required.');
+  return files.map((file) => ('relativePath' in file ? file.relativePath : ''));
+}
+
 export function createElectronWorkspaceClient(): WorkspaceClient {
   const api = apiOrThrow();
   const client: WorkspaceClient = {
     fileMode: 'native',
 
     async open(signal) {
-      try {
-        throwIfAborted(signal);
-        const operation = inspectOperation(parseEnvelope(await api.openLocal(), 'inspect'));
-        throwIfAborted(signal);
-        return operation;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError')
-          return { envelope: cancelled('inspect', 'Open') };
-        return { envelope: failureEnvelope('inspect', 'The selected file could not be opened.') };
-      }
+      throwIfAborted(signal);
+      return { envelope: failureEnvelope('inspect', 'Choose a file from the file manager.') };
     },
 
-    async listLocalFiles(signal) {
-      throwIfAborted(signal);
-      const index = parseLocalPulseIndex(await api.listWorkspace());
-      throwIfAborted(signal);
-      return index;
-    },
-
-    async openLocalFile(relativePath, signal) {
-      try {
+    localFiles: {
+      async list(signal) {
         throwIfAborted(signal);
-        const operation = inspectOperation(
-          parseEnvelope(await api.openWorkspaceFile(relativePath), 'inspect')
-        );
+        const index = parseLocalPulseIndex(await api.listWorkspace());
         throwIfAborted(signal);
-        return operation;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError')
-          return { envelope: cancelled('inspect', 'Open') };
-        return { envelope: failureEnvelope('inspect', 'The workspace file could not be opened.') };
+        return index;
+      },
+      async import(multiple, signal) {
+        throwIfAborted(signal);
+        const result = parseLocalPulseImport(await api.importLocalFiles(multiple));
+        throwIfAborted(signal);
+        return result;
+      },
+      async importDropped(file, signal) {
+        throwIfAborted(signal);
+        const result = parseLocalPulseImport(await api.importDroppedFile(file));
+        throwIfAborted(signal);
+        return result;
+      },
+      async open(relativePath, signal) {
+        try {
+          throwIfAborted(signal);
+          const operation = inspectOperation(
+            parseEnvelope(await api.openWorkspaceFile(relativePath), 'inspect')
+          );
+          throwIfAborted(signal);
+          return operation;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError')
+            return { envelope: cancelled('inspect', 'Open') };
+          return {
+            envelope: failureEnvelope('inspect', 'The workspace file could not be opened.')
+          };
+        }
       }
     },
 
     async importFile(file: WorkspaceFile, signal) {
       try {
         throwIfAborted(signal);
-        if (file.source === undefined)
+        if (!('relativePath' in file))
           return {
             envelope: failureEnvelope(
               'inspect',
-              'The native adapter requires the original dropped file.',
+              'The native adapter requires a managed file reference.',
               'PULSE_ADAPTER_READ_FAILED',
               'rejected'
             )
           };
-        const operation = inspectOperation(
-          parseEnvelope(await api.importDroppedFile(file.source), 'inspect')
-        );
+        const operation = await client.localFiles?.open(file.relativePath, signal);
         throwIfAborted(signal);
-        return operation;
+        return (
+          operation ?? { envelope: failureEnvelope('inspect', 'The file manager is unavailable.') }
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError')
           return { envelope: cancelled('inspect', 'Import') };
@@ -373,10 +412,15 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
       }
     },
 
-    async diff(document, _comparison, signal) {
+    async diff(document, comparison, signal) {
       try {
         throwIfAborted(signal);
-        const envelope = parseEnvelope(await api.diff({ sourceDigest: document.digest }), 'diff');
+        if (comparison === undefined || !('relativePath' in comparison))
+          return { envelope: failureEnvelope('diff', 'A managed comparison file is required.') };
+        const envelope = parseEnvelope(
+          await api.diff({ sourceDigest: document.digest, relativePath: comparison.relativePath }),
+          'diff'
+        );
         if (envelope.status === 'success' && !diffDataSchema.safeParse(envelope.result).success)
           return {
             envelope: failureEnvelope(
@@ -394,10 +438,11 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
       }
     },
 
-    async batchInspect(_files, signal) {
+    async batchInspect(files, signal) {
       try {
         throwIfAborted(signal);
-        const envelope = parseEnvelope(await api.batchInspect(), 'batch');
+        const relativePaths = managedPaths(files);
+        const envelope = parseEnvelope(await api.batchInspect({ relativePaths }), 'batch');
         if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success)
           return {
             envelope: failureEnvelope(
@@ -414,11 +459,14 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
       }
     },
 
-    async batchExport(_files, mode, signal) {
+    async batchExport(files, mode, signal) {
       try {
         throwIfAborted(signal);
         const envelope = parseEnvelope(
-          await api.batchExport(mode === undefined ? {} : { mode }),
+          await api.batchExport({
+            relativePaths: managedPaths(files),
+            ...(mode === undefined ? {} : { mode })
+          }),
           'batch'
         );
         if (envelope.status === 'success' && !batchDataSchema.safeParse(envelope.result).success)
