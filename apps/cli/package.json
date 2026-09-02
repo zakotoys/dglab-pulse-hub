@@ -1,14 +1,14 @@
 {
   "name": "@dglab-pulse-hub/cli",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "bin": {
     "pulse": "./dist/index.js"
   },
   "dependencies": {
-    "@dglab-pulse-hub/application": "0.1.0",
-    "@dglab-pulse-hub/contracts": "0.1.0"
+    "@dglab-pulse-hub/application": "0.0.1",
+    "@dglab-pulse-hub/contracts": "0.0.1"
   },
   "scripts": {
     "build": "tsc -b",
