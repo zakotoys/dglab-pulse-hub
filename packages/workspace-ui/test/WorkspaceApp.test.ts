@@ -42,4 +42,20 @@ describe('WorkspaceApp QR image controls', () => {
     expect(markup).toContain('class="secondary sidebar-run-button"');
     expect(markup.match(/class="secondary sidebar-run-button"/g)).toHaveLength(2);
   });
+
+  it('keeps the local file manager out of the browser UI', () => {
+    const client = { fileMode: 'browser' } as WorkspaceClient;
+    const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
+
+    expect(markup).not.toContain('Open local file');
+    expect(markup).not.toContain('file-manager');
+  });
+
+  it('renders the native local-file action only for Electron clients', () => {
+    const client = { fileMode: 'native' } as WorkspaceClient;
+    const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
+
+    expect(markup).toContain('Open local file');
+    expect(markup).toContain('open-local-button');
+  });
 });

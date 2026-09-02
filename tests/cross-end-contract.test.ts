@@ -42,7 +42,8 @@ const electronMock = vi.hoisted(() => {
     app: {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
-      quit: vi.fn()
+      quit: vi.fn(),
+      getPath: vi.fn(() => join(tmpdir(), 'pulse-hub-cross-end-workspace'))
     },
     session: {
       defaultSession: {
@@ -56,6 +57,7 @@ vi.mock('electron', () => electronMock);
 
 const temporaryDirectories: string[] = [];
 const trustedSenderUrl = new URL('../apps/desktop/src/index.html', import.meta.url).toString();
+const desktopWorkspace = join(tmpdir(), 'pulse-hub-cross-end-workspace');
 
 async function cliEnvelope(path: string, expectedExitCode: number): Promise<OperationEnvelopeDto> {
   let output = '';
@@ -94,7 +96,7 @@ async function httpEnvelope(text: string, displayName: string): Promise<Operatio
 
 async function ipcEnvelope(path: string): Promise<OperationEnvelopeDto> {
   electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [path] });
-  const handler = electronMock.handlers.get('pulse:open');
+  const handler = electronMock.handlers.get('pulse:open-local');
   expect(handler).toBeDefined();
   const value: unknown = await handler?.({ senderFrame: { url: trustedSenderUrl } });
   expect(operationEnvelopeSchema.safeParse(value).success).toBe(true);
@@ -113,6 +115,7 @@ function directEnvelope(text: string, displayName: string): OperationEnvelopeDto
 
 describe('cross-end operation contract', () => {
   beforeAll(async () => {
+    await rm(desktopWorkspace, { recursive: true, force: true });
     await import('../apps/desktop/src/main.js');
     await Promise.resolve();
   });
@@ -122,6 +125,7 @@ describe('cross-end operation contract', () => {
       const directory = temporaryDirectories.pop();
       if (directory !== undefined) await rm(directory, { recursive: true, force: true });
     }
+    await rm(desktopWorkspace, { recursive: true, force: true });
   });
 
   it.each([

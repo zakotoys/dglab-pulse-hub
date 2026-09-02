@@ -6,6 +6,41 @@ afterEach(() => {
 });
 
 describe('Electron workspace client', () => {
+  it('uses the preload file boundary for workspace browsing and dropped files', async () => {
+    const listWorkspace = vi.fn().mockResolvedValue({
+      rootPath: '/managed',
+      files: [
+        {
+          name: 'saved.pulse',
+          relativePath: 'saved.pulse',
+          byteSize: 42,
+          modifiedAt: '2026-09-02T00:00:00.000Z'
+        }
+      ]
+    });
+    const openWorkspaceFile = vi.fn().mockResolvedValue({});
+    const importDroppedFile = vi.fn().mockResolvedValue({});
+    vi.stubGlobal('window', {
+      pulseDesktop: { listWorkspace, openWorkspaceFile, importDroppedFile }
+    });
+    const client = createElectronWorkspaceClient();
+    const droppedFile = { name: 'external.pulse' } as File;
+
+    await expect(client.listLocalFiles()).resolves.toMatchObject({
+      rootPath: '/managed',
+      files: [{ relativePath: 'saved.pulse', byteSize: 42 }]
+    });
+    await client.openLocalFile('saved.pulse');
+    await client.importFile({
+      name: droppedFile.name,
+      bytes: new Uint8Array(),
+      source: droppedFile
+    });
+
+    expect(openWorkspaceFile).toHaveBeenCalledWith('saved.pulse');
+    expect(importDroppedFile).toHaveBeenCalledWith(droppedFile);
+  });
+
   it('omits text export mode from QR export IPC requests', async () => {
     const exportPulse = vi.fn().mockResolvedValue({});
     vi.stubGlobal('window', {

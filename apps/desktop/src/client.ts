@@ -16,12 +16,16 @@ import {
   type WorkspaceArtifact,
   type WorkspaceClient,
   type WorkspaceDocument,
+  type LocalPulseIndex,
   type WorkspaceFile,
   type WorkspaceOperation
 } from '@dglab-pulse-hub/workspace-ui';
 
 interface DesktopApi {
-  readonly open: () => Promise<unknown>;
+  readonly openLocal: () => Promise<unknown>;
+  readonly listWorkspace: () => Promise<unknown>;
+  readonly openWorkspaceFile: (relativePath: string) => Promise<unknown>;
+  readonly importDroppedFile: (file: File) => Promise<unknown>;
   readonly inspectCurrent: () => Promise<unknown>;
   readonly decodeQr: (payload: { readonly text: string }) => Promise<unknown>;
   readonly edit: (payload: {
@@ -170,6 +174,28 @@ function apiOrThrow(): DesktopApi {
   return api;
 }
 
+function parseLocalPulseIndex(value: unknown): LocalPulseIndex {
+  if (!isRecord(value) || typeof value.rootPath !== 'string' || !Array.isArray(value.files))
+    throw new Error('The desktop workspace index was invalid.');
+  const files = value.files.map((file) => {
+    if (
+      !isRecord(file) ||
+      typeof file.name !== 'string' ||
+      typeof file.relativePath !== 'string' ||
+      typeof file.byteSize !== 'number' ||
+      typeof file.modifiedAt !== 'string'
+    )
+      throw new Error('The desktop workspace file entry was invalid.');
+    return Object.freeze({
+      name: file.name,
+      relativePath: file.relativePath,
+      byteSize: file.byteSize,
+      modifiedAt: file.modifiedAt
+    });
+  });
+  return Object.freeze({ rootPath: value.rootPath, files: Object.freeze(files) });
+}
+
 export function createElectronWorkspaceClient(): WorkspaceClient {
   const api = apiOrThrow();
   const client: WorkspaceClient = {
@@ -178,7 +204,7 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
     async open(signal) {
       try {
         throwIfAborted(signal);
-        const operation = inspectOperation(parseEnvelope(await api.open(), 'inspect'));
+        const operation = inspectOperation(parseEnvelope(await api.openLocal(), 'inspect'));
         throwIfAborted(signal);
         return operation;
       } catch (error) {
@@ -188,19 +214,53 @@ export function createElectronWorkspaceClient(): WorkspaceClient {
       }
     },
 
-    async importFile(_file: WorkspaceFile, signal) {
+    async listLocalFiles(signal) {
       throwIfAborted(signal);
-      return {
-        envelope: failureEnvelope(
-          'inspect',
-          'File import is provided by the native file dialog.',
-          'PULSE_ADAPTER_READ_FAILED',
-          'rejected'
-        )
-      };
+      const index = parseLocalPulseIndex(await api.listWorkspace());
+      throwIfAborted(signal);
+      return index;
     },
 
-    async inspect(_text: string, _displayName: string, signal) {
+    async openLocalFile(relativePath, signal) {
+      try {
+        throwIfAborted(signal);
+        const operation = inspectOperation(
+          parseEnvelope(await api.openWorkspaceFile(relativePath), 'inspect')
+        );
+        throwIfAborted(signal);
+        return operation;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('inspect', 'Open') };
+        return { envelope: failureEnvelope('inspect', 'The workspace file could not be opened.') };
+      }
+    },
+
+    async importFile(file: WorkspaceFile, signal) {
+      try {
+        throwIfAborted(signal);
+        if (file.source === undefined)
+          return {
+            envelope: failureEnvelope(
+              'inspect',
+              'The native adapter requires the original dropped file.',
+              'PULSE_ADAPTER_READ_FAILED',
+              'rejected'
+            )
+          };
+        const operation = inspectOperation(
+          parseEnvelope(await api.importDroppedFile(file.source), 'inspect')
+        );
+        throwIfAborted(signal);
+        return operation;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError')
+          return { envelope: cancelled('inspect', 'Import') };
+        return { envelope: failureEnvelope('inspect', 'The dropped file could not be imported.') };
+      }
+    },
+
+    async inspect(_text, _displayName, signal) {
       throwIfAborted(signal);
       return {
         envelope: failureEnvelope(

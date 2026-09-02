@@ -1,5 +1,5 @@
 import { dialog, ipcMain } from 'electron';
-import { join, parse, resolve } from 'node:path';
+import { basename, join, parse, resolve } from 'node:path';
 import {
   applyPulseAssist,
   applyPulseEdit,
@@ -35,59 +35,126 @@ import {
   writeAvailableOutput
 } from './ipc-support.js';
 import { DocumentStore } from './document-store.js';
+import { LocalPulseWorkspace } from './local-workspace.js';
 
 export interface IpcContext {
   readonly currentDirectory: string;
   readonly documents: DocumentStore;
+  readonly workspace: LocalPulseWorkspace;
   readonly confirmClose: () => boolean;
 }
 
-export function registerIpc({ currentDirectory, documents, confirmClose }: IpcContext): void {
+export function registerIpc({
+  currentDirectory,
+  documents,
+  workspace,
+  confirmClose
+}: IpcContext): void {
   let openSequence = 0;
+
+  const openPulsePath = async (
+    selectedPath: string,
+    requestSequence: number,
+    archive: boolean
+  ): Promise<OperationEnvelopeDto> => {
+    const read = await readInputFile(selectedPath);
+    if (read.status !== 'success' || read.data === null) return toOperationDto(read);
+    const validation = inspectPulse(read.data.content, {
+      input: { displayName: read.data.displayName, bytes: read.data.byteSize }
+    });
+    if (validation.status !== 'success' || validation.data === null)
+      return toOperationDto(validation);
+    const documentPath = archive ? await workspace.archive(selectedPath) : resolve(selectedPath);
+    const displayName = sanitizeDisplayName(basename(documentPath));
+    const inspected = inspectPulse(read.data.content, {
+      input: { displayName, bytes: read.data.byteSize }
+    });
+    if (
+      inspected.status === 'success' &&
+      inspected.data !== null &&
+      requestSequence === openSequence
+    ) {
+      documents.reset(
+        Object.freeze({
+          digest: inspected.data.sourceDigest,
+          content: new Uint8Array(read.data.content),
+          path: documentPath
+        })
+      );
+    }
+    return toOperationDto(inspected);
+  };
 
   const renameOperation = (
     operation: 'undo' | 'redo',
     envelope: OperationEnvelopeDto
   ): OperationEnvelopeDto => Object.freeze({ ...envelope, operation });
 
-  ipcMain.handle('pulse:open', async (event) => {
+  ipcMain.handle('pulse:open-local', async (event) => {
     if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
     if (!confirmClose()) return cancelledIpc('inspect');
     const requestSequence = ++openSequence;
     try {
       const selected = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [{ name: 'Pulse files', extensions: ['pulse', 'txt'] }]
+        filters: [{ name: 'Pulse files', extensions: ['pulse'] }]
       });
       if (selected.canceled || selected.filePaths[0] === undefined) {
         return cancelledIpc('inspect');
       }
-      const selectedPath = selected.filePaths[0];
-      const read = await readInputFile(selectedPath);
-      if (read.status !== 'success' || read.data === null) {
-        return toOperationDto(read);
-      }
-      const inspected = inspectPulse(read.data.content, {
-        input: { displayName: read.data.displayName, bytes: read.data.byteSize }
-      });
-      if (inspected.status === 'success' && inspected.data !== null) {
-        if (requestSequence === openSequence) {
-          documents.reset(
-            Object.freeze({
-              digest: inspected.data.sourceDigest,
-              content: new Uint8Array(read.data.content),
-              path: resolve(selectedPath)
-            })
-          );
-        }
-      }
-      return toOperationDto(inspected);
+      return await openPulsePath(selected.filePaths[0], requestSequence, true);
     } catch {
       return failedIpc(
         'inspect',
         DIAGNOSTIC_CODES.ADAPTER_READ,
         'adapter',
         'Unable to open the selected pulse file.'
+      );
+    }
+  });
+
+  ipcMain.handle('pulse:workspace-list', async (event) => {
+    if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
+    return workspace.list();
+  });
+
+  ipcMain.handle('pulse:workspace-open', async (event, payload: unknown) => {
+    if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
+    if (
+      !plainObject(payload) ||
+      !onlyKeys(payload, ['relativePath']) ||
+      typeof payload.relativePath !== 'string'
+    )
+      return rejectedOperation('inspect', 'A workspace-relative pulse path is required.');
+    if (!confirmClose()) return cancelledIpc('inspect');
+    const requestSequence = ++openSequence;
+    try {
+      const selectedPath = await workspace.resolveFile(payload.relativePath);
+      return await openPulsePath(selectedPath, requestSequence, false);
+    } catch {
+      return failedIpc(
+        'inspect',
+        DIAGNOSTIC_CODES.ADAPTER_READ,
+        'adapter',
+        'Unable to open the workspace pulse file.'
+      );
+    }
+  });
+
+  ipcMain.handle('pulse:import-dropped', async (event, payload: unknown) => {
+    if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
+    if (!plainObject(payload) || !onlyKeys(payload, ['path']) || typeof payload.path !== 'string')
+      return rejectedOperation('inspect', 'A dropped pulse file path is required.');
+    if (!confirmClose()) return cancelledIpc('inspect');
+    const requestSequence = ++openSequence;
+    try {
+      return await openPulsePath(payload.path, requestSequence, true);
+    } catch {
+      return failedIpc(
+        'inspect',
+        DIAGNOSTIC_CODES.ADAPTER_READ,
+        'adapter',
+        'Unable to import the dropped pulse file.'
       );
     }
   });

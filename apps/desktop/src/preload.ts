@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   EditCommandDto,
   OperationEnvelopeDto,
@@ -62,10 +62,27 @@ export interface DesktopBatchExportRequest {
   readonly overwrite?: boolean;
 }
 
+export interface DesktopWorkspaceFile {
+  readonly name: string;
+  readonly relativePath: string;
+  readonly byteSize: number;
+  readonly modifiedAt: string;
+}
+
+export interface DesktopWorkspaceIndex {
+  readonly rootPath: string;
+  readonly files: readonly DesktopWorkspaceFile[];
+}
+
 contextBridge.exposeInMainWorld(
   'pulseDesktop',
   Object.freeze({
-    open: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:open'),
+    openLocal: (): Promise<OperationEnvelopeDto> => ipcRenderer.invoke('pulse:open-local'),
+    listWorkspace: (): Promise<DesktopWorkspaceIndex> => ipcRenderer.invoke('pulse:workspace-list'),
+    openWorkspaceFile: (relativePath: string): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:workspace-open', { relativePath }),
+    importDroppedFile: (file: File): Promise<OperationEnvelopeDto> =>
+      ipcRenderer.invoke('pulse:import-dropped', { path: webUtils.getPathForFile(file) }),
     inspectCurrent: (): Promise<OperationEnvelopeDto> =>
       ipcRenderer.invoke('pulse:inspect-current'),
     decodeQr: (payload: DesktopQrRequest): Promise<OperationEnvelopeDto> =>

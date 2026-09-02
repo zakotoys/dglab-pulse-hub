@@ -16,6 +16,20 @@ export interface WorkspaceFile {
   readonly name: string;
   readonly bytes: Uint8Array;
   readonly type?: string;
+  /** Original File object, available only to native Electron adapters for path resolution. */
+  readonly source?: File;
+}
+
+export interface LocalPulseFile {
+  readonly name: string;
+  readonly relativePath: string;
+  readonly byteSize: number;
+  readonly modifiedAt: string;
+}
+
+export interface LocalPulseIndex {
+  readonly rootPath: string;
+  readonly files: readonly LocalPulseFile[];
 }
 
 export interface WorkspaceDocument {
@@ -45,6 +59,11 @@ export interface WorkspaceClient {
   readonly fileMode: 'browser' | 'native';
   readonly open: (signal?: AbortSignal) => Promise<WorkspaceOperation>;
   readonly importFile: (file: WorkspaceFile, signal?: AbortSignal) => Promise<WorkspaceOperation>;
+  readonly listLocalFiles?: (signal?: AbortSignal) => Promise<LocalPulseIndex>;
+  readonly openLocalFile?: (
+    relativePath: string,
+    signal?: AbortSignal
+  ) => Promise<WorkspaceOperation>;
   readonly inspect: (
     text: string,
     displayName: string,

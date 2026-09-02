@@ -34,6 +34,7 @@ import {
 } from './timeline.js';
 import {
   type EditPayload,
+  type LocalPulseIndex,
   type WorkspaceArtifact,
   type WorkspaceClient,
   type WorkspaceDocument,
@@ -196,6 +197,12 @@ export function WorkspaceApp({
   const [batchMode, setBatchMode] = useState<'inspect' | 'export'>('inspect');
   const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
   const [dragActive, setDragActive] = useState(false);
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [localIndex, setLocalIndex] = useState<LocalPulseIndex | null>(null);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState('');
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [selectedLocalPath, setSelectedLocalPath] = useState<string | null>(null);
   const [history, setHistory] = useState<readonly WorkspaceDocument[]>([]);
   const [historyCursor, setHistoryCursor] = useState(-1);
   const abortController = useRef<AbortController | null>(null);
@@ -207,6 +214,7 @@ export function WorkspaceApp({
   const cursorRef = useRef(-1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedPointRef = useRef<number | null>(null);
+  const dragDepth = useRef(0);
 
   useEffect(() => {
     sidebarRef.current?.scrollTo({ top: 0, behavior: 'auto' });
@@ -515,7 +523,8 @@ export function WorkspaceApp({
         {
           name: file.name,
           bytes: new Uint8Array(await file.arrayBuffer()),
-          ...(file.type === '' ? {} : { type: file.type })
+          ...(file.type === '' ? {} : { type: file.type }),
+          ...(client.fileMode === 'native' ? { source: file } : {})
         },
         controller.signal
       );
@@ -528,6 +537,7 @@ export function WorkspaceApp({
       applyOperationView(operation);
       setExportMode('source');
       resetHistory(operation.document);
+      if (client.fileMode === 'native') void refreshLocalFiles();
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       clearDocumentState();
@@ -554,6 +564,7 @@ export function WorkspaceApp({
       applyOperationView(operation);
       setExportMode('source');
       resetHistory(operation.document);
+      if (client.fileMode === 'native') void refreshLocalFiles();
     } catch (error) {
       if (!isCurrentRequest(controller)) return;
       clearDocumentState();
@@ -575,14 +586,65 @@ export function WorkspaceApp({
     }
   }
 
+  async function refreshLocalFiles(): Promise<void> {
+    if (client.fileMode !== 'native' || client.listLocalFiles === undefined) return;
+    setLibraryLoading(true);
+    setLibraryError('');
+    try {
+      const index = await client.listLocalFiles();
+      setLocalIndex(index);
+      setSelectedLocalPath((selected) =>
+        selected !== null && index.files.some((file) => file.relativePath === selected)
+          ? selected
+          : (index.files[0]?.relativePath ?? null)
+      );
+    } catch {
+      setLibraryError(t('localFilesFailed'));
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  function openFileManager(): void {
+    if (client.fileMode !== 'native' || client.listLocalFiles === undefined) return;
+    setFileManagerOpen(true);
+    void refreshLocalFiles();
+  }
+
+  async function openWorkspaceDocument(relativePath: string): Promise<void> {
+    if (client.openLocalFile === undefined) return;
+    const controller = beginRequest(t('opening'));
+    try {
+      const operation = await client.openLocalFile(relativePath, controller.signal);
+      if (!isCurrentRequest(controller)) return;
+      if (operation.envelope.status !== 'success' || operation.document === undefined) {
+        clearDocumentState();
+        setEnvelope(operation.envelope);
+        return;
+      }
+      applyOperationView(operation);
+      setExportMode('source');
+      resetHistory(operation.document);
+      setFileManagerOpen(false);
+    } finally {
+      endRequest(controller);
+    }
+  }
+
+  const visibleLocalFiles = useMemo(() => {
+    const query = libraryQuery.trim().toLocaleLowerCase(locale);
+    return (localIndex?.files ?? []).filter((file) =>
+      query === '' ? true : file.relativePath.toLocaleLowerCase(locale).includes(query)
+    );
+  }, [libraryQuery, localIndex, locale]);
+
   function handleDropzoneDragEnter(event: ReactDragEvent<HTMLLabelElement>): void {
-    if (client.fileMode !== 'browser') return;
     event.preventDefault();
+    dragDepth.current += 1;
     if (!busy) setDragActive(true);
   }
 
   function handleDropzoneDragOver(event: ReactDragEvent<HTMLLabelElement>): void {
-    if (client.fileMode !== 'browser') return;
     event.preventDefault();
     if (!busy) {
       event.dataTransfer.dropEffect = 'copy';
@@ -591,17 +653,16 @@ export function WorkspaceApp({
   }
 
   function handleDropzoneDragLeave(event: ReactDragEvent<HTMLLabelElement>): void {
-    if (client.fileMode !== 'browser') return;
     event.preventDefault();
-    const related = event.relatedTarget;
-    if (related === null || !(related instanceof Node) || !event.currentTarget.contains(related)) {
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) {
       setDragActive(false);
     }
   }
 
   function handleDropzoneDrop(event: ReactDragEvent<HTMLLabelElement>): void {
-    if (client.fileMode !== 'browser') return;
     event.preventDefault();
+    dragDepth.current = 0;
     setDragActive(false);
     if (busy) return;
     const file = event.dataTransfer.files?.[0];
@@ -1178,7 +1239,7 @@ export function WorkspaceApp({
             onClick={(event) => {
               if (client.fileMode === 'native') {
                 event.preventDefault();
-                openDocument();
+                openFileManager();
               }
             }}
             onKeyDown={handleDropzoneKeyDown}
@@ -1206,6 +1267,17 @@ export function WorkspaceApp({
             <b>{busy ? busyLabel : t('openPulseFile')}</b>
             <small>{t('inputHint')}</small>
           </label>
+          {client.fileMode === 'native' && (
+            <button
+              type="button"
+              className="secondary open-local-button"
+              disabled={busy}
+              onClick={() => void openNativeDocument()}
+            >
+              <span aria-hidden="true">＋</span>
+              {t('openLocalFile')}
+            </button>
+          )}
           <div className="qr-import">
             <label htmlFor="qr-input">{t('qrContent')}</label>
             <textarea
@@ -2240,6 +2312,109 @@ export function WorkspaceApp({
           )}
         </div>
       </section>
+      {client.fileMode === 'native' && dragActive && (
+        <div className="drop-overlay" role="status">
+          <div>
+            <span aria-hidden="true">↓</span>
+            <strong>{t('dropPulseFile')}</strong>
+            <small>{t('dropArchiveHint')}</small>
+          </div>
+        </div>
+      )}
+      {client.fileMode === 'native' && fileManagerOpen && (
+        <div className="file-manager-backdrop" onMouseDown={() => setFileManagerOpen(false)}>
+          <section
+            className="file-manager"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="file-manager-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2 id="file-manager-title">{t('localFileManager')}</h2>
+                <p title={localIndex?.rootPath}>{localIndex?.rootPath ?? t('defaultWorkspace')}</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t('close')}
+                title={t('close')}
+                onClick={() => setFileManagerOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="file-manager-toolbar">
+              <input
+                type="search"
+                value={libraryQuery}
+                aria-label={t('searchLocalFiles')}
+                placeholder={t('searchLocalFiles')}
+                onChange={(event) => setLibraryQuery(event.target.value)}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={t('refreshLocalFiles')}
+                title={t('refreshLocalFiles')}
+                disabled={libraryLoading}
+                onClick={() => void refreshLocalFiles()}
+              >
+                ↻
+              </button>
+            </div>
+            <div className="file-list" role="listbox" aria-label={t('localPulseFiles')}>
+              {libraryLoading ? (
+                <div className="file-list-empty">{t('loadingLocalFiles')}</div>
+              ) : libraryError !== '' ? (
+                <div className="file-list-empty error">{libraryError}</div>
+              ) : visibleLocalFiles.length === 0 ? (
+                <div className="file-list-empty">{t('noLocalFiles')}</div>
+              ) : (
+                visibleLocalFiles.map((file) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selectedLocalPath === file.relativePath}
+                    className="file-list-row"
+                    key={file.relativePath}
+                    onClick={() => setSelectedLocalPath(file.relativePath)}
+                    onDoubleClick={() => void openWorkspaceDocument(file.relativePath)}
+                  >
+                    <span className="file-type-icon" aria-hidden="true">
+                      ∿
+                    </span>
+                    <span>
+                      <b>{file.name}</b>
+                      <small>{file.relativePath}</small>
+                    </span>
+                    <small>
+                      {file.byteSize} {t('bytes')}
+                    </small>
+                    <time dateTime={file.modifiedAt}>
+                      {new Date(file.modifiedAt).toLocaleString(locale)}
+                    </time>
+                  </button>
+                ))
+              )}
+            </div>
+            <footer>
+              <span>{t('doubleClickToOpen')}</span>
+              <button
+                type="button"
+                className="primary"
+                disabled={busy || selectedLocalPath === null}
+                onClick={() =>
+                  selectedLocalPath !== null && void openWorkspaceDocument(selectedLocalPath)
+                }
+              >
+                {t('openSelectedFile')}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

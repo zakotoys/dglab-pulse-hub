@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { confirmClose } from './ipc-support.js';
 import { DocumentStore } from './document-store.js';
 import { registerIpc } from './ipc.js';
+import { LocalPulseWorkspace } from './local-workspace.js';
 
 const currentDirectory = fileURLToPath(new URL('.', import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -61,7 +62,8 @@ app.whenReady().then(() => {
       }
     });
   });
-  registerIpc({ currentDirectory, documents, confirmClose: canClose });
+  const workspace = new LocalPulseWorkspace(join(app.getPath('documents'), 'Pulse Hub'));
+  registerIpc({ currentDirectory, documents, workspace, confirmClose: canClose });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
