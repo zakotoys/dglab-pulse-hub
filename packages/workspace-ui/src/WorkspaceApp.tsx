@@ -1321,31 +1321,44 @@ export function WorkspaceApp({
               <span>{t('compare')}</span>
               <span className="muted">{t('semantic')}</span>
             </div>
-            {client.fileMode === 'browser' && (
-              <label className="file-picker">
-                <span>{t('selectSecondFile')}</span>
-                <input
-                  type="file"
-                  accept=".pulse,.txt,text/plain"
+            <div className="file-select-row">
+              {client.fileMode === 'browser' && (
+                <label className="file-picker">
+                  <span>{t('selectSecondFile')}</span>
+                  <input
+                    type="file"
+                    accept=".pulse,.txt,text/plain"
+                    disabled={busy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file !== undefined) void loadCompareFile(file);
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                </label>
+              )}
+              {client.fileMode === 'native' && (
+                <button
+                  type="button"
+                  className="secondary"
                   disabled={busy}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file !== undefined) void loadCompareFile(file);
-                    event.currentTarget.value = '';
-                  }}
-                />
-              </label>
-            )}
-            {client.fileMode === 'native' && (
+                  onClick={() => openFileManager('compare')}
+                >
+                  {t('selectSecondFile')}
+                </button>
+              )}
               <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => openFileManager('compare')}
+                className="secondary sidebar-run-button"
+                disabled={
+                  busy ||
+                  workspaceDocument === null ||
+                  (client.fileMode === 'browser' && compareFile === null)
+                }
+                onClick={() => void runDiff()}
               >
-                {t('selectSecondFile')}
+                {t('runDiff')}
               </button>
-            )}
+            </div>
             <small className="field-note">
               {client.fileMode === 'native'
                 ? compareFile === null
@@ -1355,59 +1368,57 @@ export function WorkspaceApp({
                   ? t('noComparison')
                   : compareName}
             </small>
-            <button
-              className="secondary sidebar-run-button"
-              disabled={
-                busy ||
-                workspaceDocument === null ||
-                (client.fileMode === 'browser' && compareFile === null)
-              }
-              onClick={() => void runDiff()}
-            >
-              {t('runDiff')}
-            </button>
           </div>
           <div className="sidebar-block batch-block">
             <div className="section-heading">
               <span>{t('batch')}</span>
               <span className="muted">{batchFiles.length || t('none')}</span>
             </div>
-            {client.fileMode === 'browser' && (
-              <label className="file-picker">
-                <span>{t('chooseFiles')}</span>
-                <input
-                  type="file"
-                  multiple
-                  accept=".pulse,.txt,text/plain"
+            <div className="file-select-row">
+              {client.fileMode === 'browser' && (
+                <label className="file-picker">
+                  <span>{t('chooseFiles')}</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pulse,.txt,text/plain"
+                    disabled={busy}
+                    onChange={(event) => {
+                      const selected = Array.from(event.target.files ?? []).slice(0, 100);
+                      void Promise.all(
+                        selected.map(async (file) => ({
+                          name: file.name,
+                          bytes: new Uint8Array(await file.arrayBuffer()),
+                          ...(file.type === '' ? {} : { type: file.type })
+                        }))
+                      ).then((files) => {
+                        setBatchFiles(files);
+                        setBatchEnvelope(null);
+                        setBatchProgress({ completed: 0, total: files.length });
+                      });
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                </label>
+              )}
+              {client.fileMode === 'native' && (
+                <button
+                  type="button"
+                  className="secondary"
                   disabled={busy}
-                  onChange={(event) => {
-                    const selected = Array.from(event.target.files ?? []).slice(0, 100);
-                    void Promise.all(
-                      selected.map(async (file) => ({
-                        name: file.name,
-                        bytes: new Uint8Array(await file.arrayBuffer()),
-                        ...(file.type === '' ? {} : { type: file.type })
-                      }))
-                    ).then((files) => {
-                      setBatchFiles(files);
-                      setBatchEnvelope(null);
-                      setBatchProgress({ completed: 0, total: files.length });
-                    });
-                    event.currentTarget.value = '';
-                  }}
-                />
-              </label>
-            )}
-            {client.fileMode === 'native' && (
+                  onClick={() => openFileManager('batch')}
+                >
+                  {t('chooseFiles')}
+                </button>
+              )}
               <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => openFileManager('batch')}
+                className="secondary sidebar-run-button"
+                disabled={busy || batchFiles.length === 0}
+                onClick={() => void runBatch()}
               >
-                {t('chooseFiles')}
+                {t('runBatch')}
               </button>
-            )}
+            </div>
             <div className="segmented" role="group" aria-label={t('batchOperation')}>
               <button
                 type="button"
@@ -1434,13 +1445,6 @@ export function WorkspaceApp({
                 <small>{t('filesRead', batchProgress)}</small>
               </div>
             )}
-            <button
-              className="secondary sidebar-run-button"
-              disabled={busy || batchFiles.length === 0}
-              onClick={() => void runBatch()}
-            >
-              {t('runBatch')}
-            </button>
           </div>
           {fileName !== '' && (
             <div className="file-chip">

@@ -35,12 +35,23 @@ describe('WorkspaceApp QR image controls', () => {
     expect(markup).not.toContain('rules pulse-rules-v1');
   });
 
-  it('stretches the compare and batch run buttons to the sidebar width', () => {
+  it('places the compare and batch run buttons beside their file pickers', () => {
     const client = { fileMode: 'browser' } as WorkspaceClient;
     const markup = renderToStaticMarkup(createElement(WorkspaceApp, { client }));
 
-    expect(markup).toContain('class="secondary sidebar-run-button"');
-    expect(markup.match(/class="secondary sidebar-run-button"/g)).toHaveLength(2);
+    expect(markup.match(/class="file-select-row"/g)).toHaveLength(2);
+
+    const selectSecondIndex = markup.indexOf('Select a second file');
+    const runDiffIndex = markup.indexOf('Run diff');
+    expect(selectSecondIndex).toBeGreaterThan(-1);
+    expect(runDiffIndex).toBeGreaterThan(selectSecondIndex);
+    expect(markup.slice(selectSecondIndex, runDiffIndex)).not.toContain('</div>');
+
+    const chooseFilesIndex = markup.indexOf('Choose multiple files');
+    const runBatchIndex = markup.indexOf('Run batch');
+    expect(chooseFilesIndex).toBeGreaterThan(-1);
+    expect(runBatchIndex).toBeGreaterThan(chooseFilesIndex);
+    expect(markup.slice(chooseFilesIndex, runBatchIndex)).not.toContain('</div>');
   });
 
   it('keeps the local file manager out of the browser UI', () => {

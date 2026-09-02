@@ -1210,8 +1210,7 @@ textarea:focus-visible,
   background: var(--surface-accent);
 }
 .sidebar-run-button {
-  width: 100%;
-  margin-top: 10px;
+  flex-shrink: 0;
 }
 .danger-button,
 .cancel {
@@ -1295,6 +1294,23 @@ textarea:focus-visible,
   width: 100%;
   margin-top: 18px;
 }
+.file-select-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 11px;
+}
+.file-select-row .file-picker {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+.file-select-row > button:not(.sidebar-run-button) {
+  flex: 1;
+}
+.file-select-row > button {
+  height: 31px;
+}
 .file-picker {
   display: grid;
   gap: 7px;
@@ -1304,7 +1320,8 @@ textarea:focus-visible,
 }
 .file-picker input {
   width: 100%;
-  padding: 6px;
+  height: 31px;
+  padding: 0 6px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   color: var(--text-muted);
