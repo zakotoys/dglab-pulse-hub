@@ -50,12 +50,12 @@ describe('locale resources', () => {
     };
 
     expect(localizeDiagnostic(diagnostic, createTranslator('zh-CN'))).toEqual({
-      message: '解析器支持超过三个段落，但尚未验证与 App 的互操作性。',
-      suggestion: '分享前请在目标 App 中验证此文件。'
+      message: '解析器支持超过三个段落，但与 App 的互操作性尚未验证。',
+      suggestion: '分享前，请先在目标 App 中验证此文件。'
     });
     expect(localizeDiagnostic(diagnostic, createTranslator('ja-JP'))).toEqual({
-      message: '3 セクションを超える形式は解析できますが、App との相互運用性は未検証です。',
-      suggestion: '共有する前に対象 App でこのファイルを確認してください。'
+      message: '3 セクション超の解析には対応していますが、App との相互運用性は未検証です。',
+      suggestion: '共有前に対象 App でこのファイルを確認してください。'
     });
     const unknown = { ...diagnostic, code: 'PULSE_UNKNOWN' };
     expect(localizeDiagnostic(unknown, createTranslator('zh-CN'))).toEqual({
