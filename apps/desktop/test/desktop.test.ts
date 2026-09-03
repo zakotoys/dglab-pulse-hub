@@ -10,6 +10,7 @@ const WORKSPACE_ROOT = join(tmpdir(), 'pulse-hub-desktop-test-workspace', 'Pulse
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>();
+  const browserWindowOptions: unknown[] = [];
   const dialog = {
     showOpenDialog: vi.fn(),
     showSaveDialog: vi.fn(),
@@ -28,6 +29,10 @@ const mocks = vi.hoisted(() => {
     setApplicationMenu: vi.fn()
   };
   class MockBrowserWindow {
+    public constructor(options: unknown) {
+      browserWindowOptions.push(options);
+    }
+
     public readonly webContents = {
       setWindowOpenHandler: vi.fn(),
       loadFile: vi.fn(),
@@ -40,6 +45,7 @@ const mocks = vi.hoisted(() => {
   }
   return {
     handlers,
+    browserWindowOptions,
     dialog,
     historyReset,
     ipcMain,
@@ -109,6 +115,10 @@ describe('Electron IPC boundary', () => {
 
   it('uses the product name outside packaged builds', () => {
     expect(mocks.app.setName).toHaveBeenCalledWith('DGLab Pulse Hub');
+    expect(mocks.browserWindowOptions[0]).toMatchObject({
+      icon: expect.stringMatching(/dglab-pulse-hub-icon\.png$/),
+      title: 'DGLab Pulse Hub'
+    });
   });
 
   it('updates the native menu for supported application locales', async () => {

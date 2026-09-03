@@ -1,7 +1,12 @@
 import { extractFile, listPackage } from '@electron/asar';
+import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
+import * as PeLibrary from 'pe-library';
+import * as ResEdit from 'resedit';
 
 type DesktopPlatform = 'darwin' | 'win32';
 type DesktopArchitecture = 'arm64' | 'x64';
@@ -30,6 +35,7 @@ const MAC_RUNTIME_FILES = [
   'DGLab Pulse Hub.app/Contents/Info.plist',
   'DGLab Pulse Hub.app/Contents/MacOS/DGLab Pulse Hub',
   'DGLab Pulse Hub.app/Contents/Resources/app.asar',
+  'DGLab Pulse Hub.app/Contents/Resources/dglab-pulse-hub-icon.icns',
   'DGLab Pulse Hub.app/Contents/Frameworks/Electron Framework.framework/Versions/A/' +
     'Electron Framework',
   'DGLab Pulse Hub.app/Contents/Frameworks/DGLab Pulse Hub Helper (GPU).app/Contents/MacOS/' +
@@ -43,6 +49,7 @@ const ASAR_RUNTIME_FILES = [
   '/dist/main.js',
   '/dist/preload.cjs',
   '/dist/index.html',
+  '/dist/dglab-pulse-hub-icon.png',
   '/dist/renderer.js',
   '/dist/renderer.css'
 ] as const;
@@ -56,6 +63,69 @@ const MACH_CPU_TYPES: Readonly<Record<number, DesktopArchitecture>> = {
   0x01000007: 'x64',
   0x0100000c: 'arm64'
 };
+
+const execFileAsync = promisify(execFile);
+const OBSOLETE_MAC_METADATA_KEYS = [
+  'NSAppTransportSecurity',
+  'NSAudioCaptureUsageDescription',
+  'NSBluetoothAlwaysUsageDescription',
+  'NSBluetoothPeripheralUsageDescription',
+  'NSCameraUsageDescription',
+  'NSMicrophoneUsageDescription'
+] as const;
+
+export function macInfoErrors(info: Readonly<Record<string, unknown>>): string[] {
+  const expected = {
+    CFBundleDisplayName: 'DGLab Pulse Hub',
+    CFBundleExecutable: 'DGLab Pulse Hub',
+    CFBundleIconFile: 'dglab-pulse-hub-icon.icns',
+    CFBundleIdentifier: 'com.zakotoys.dglab-pulse-hub',
+    CFBundleName: 'DGLab Pulse Hub',
+    LSApplicationCategoryType: 'public.app-category.utilities',
+    NSHumanReadableCopyright: 'Copyright (c) ZakoToys'
+  } as const;
+  const errors: string[] = [];
+  for (const [key, value] of Object.entries(expected)) {
+    if (info[key] !== value) errors.push(`Invalid macOS metadata ${key}: ${String(info[key])}`);
+  }
+  for (const key of OBSOLETE_MAC_METADATA_KEYS) {
+    if (key in info) errors.push(`Obsolete macOS metadata is present: ${key}`);
+  }
+  return errors;
+}
+
+export function windowsInfoErrors(
+  info: Readonly<Record<string, unknown>>,
+  expectedVersion: string
+): string[] {
+  const expected = {
+    CompanyName: 'ZakoToys',
+    FileDescription: 'DGLab Pulse Hub',
+    FileVersion: expectedVersion,
+    InternalName: 'DGLab Pulse Hub',
+    LegalCopyright: 'Copyright (c) ZakoToys',
+    OriginalFilename: 'DGLab Pulse Hub.exe',
+    ProductName: 'DGLab Pulse Hub',
+    ProductVersion: expectedVersion
+  };
+  return Object.entries(expected)
+    .filter(([key, value]) => info[key] !== value)
+    .map(([key]) => `Invalid Windows metadata ${key}: ${String(info[key])}`);
+}
+
+function iconDigest(item: {
+  readonly bin?: ArrayBuffer;
+  generate?: () => ArrayBuffer;
+  isRaw: () => boolean;
+}): string {
+  const bytes = item.isRaw() ? item.bin : item.generate?.();
+  if (bytes === undefined) throw new Error('Invalid icon resource.');
+  return createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function binaryArchitecture(bytes: Buffer, platform: DesktopPlatform): DesktopArchitecture {
   if (platform === 'win32') {
@@ -97,7 +167,16 @@ export function packageFileErrors(
   relativeFiles: ReadonlySet<string>
 ): string[] {
   const required = platform === 'win32' ? WINDOWS_RUNTIME_FILES : MAC_RUNTIME_FILES;
-  return required.filter((file) => !relativeFiles.has(file)).map((file) => `Missing ${file}`);
+  const errors = required
+    .filter((file) => !relativeFiles.has(file))
+    .map((file) => `Missing ${file}`);
+  if (
+    platform === 'darwin' &&
+    relativeFiles.has('DGLab Pulse Hub.app/Contents/Resources/electron.icns')
+  ) {
+    errors.push('Obsolete Electron icon resource is present.');
+  }
+  return errors;
 }
 
 export function validateAsarEntries(entries: readonly string[]): string[] {
@@ -174,6 +253,48 @@ export async function auditDesktopPackage(
     errors.push(
       `Unable to inspect app.asar: ${error instanceof Error ? error.message : String(error)}`
     );
+  }
+
+  if (platform === 'darwin') {
+    const infoPath = join(packageDirectory, 'DGLab Pulse Hub.app', 'Contents', 'Info.plist');
+    try {
+      const { stdout } = await execFileAsync('plutil', ['-convert', 'json', '-o', '-', infoPath]);
+      errors.push(...macInfoErrors(JSON.parse(stdout) as Record<string, unknown>));
+    } catch (error) {
+      errors.push(`Unable to inspect macOS metadata: ${errorMessage(error)}`);
+    }
+  }
+
+  if (platform === 'win32') {
+    try {
+      const executable = PeLibrary.NtExecutable.from(
+        await readFile(join(packageDirectory, 'DGLab Pulse Hub.exe'))
+      );
+      const resources = PeLibrary.NtExecutableResource.from(executable);
+      const versionInfo = ResEdit.Resource.VersionInfo.fromEntries(resources.entries)[0];
+      const language = versionInfo?.getAllLanguagesForStringValues()[0];
+      if (versionInfo === undefined || language === undefined) {
+        errors.push('Windows version metadata is missing.');
+      } else {
+        errors.push(...windowsInfoErrors(versionInfo.getStringValues(language), expectedVersion));
+      }
+
+      const sourceIcon = ResEdit.Data.IconFile.from(
+        await readFile(resolve('apps/desktop/assets/dglab-pulse-hub-icon.ico'))
+      );
+      const iconGroup = ResEdit.Resource.IconGroupEntry.fromEntries(resources.entries)[0];
+      if (iconGroup === undefined) {
+        errors.push('Windows executable icon is missing.');
+      } else {
+        const expectedIcons = sourceIcon.icons.map(({ data }) => iconDigest(data));
+        const embeddedIcons = iconGroup.getIconItemsFromEntries(resources.entries).map(iconDigest);
+        if (JSON.stringify(embeddedIcons) !== JSON.stringify(expectedIcons)) {
+          errors.push('Windows executable icon does not match the project icon.');
+        }
+      }
+    } catch (error) {
+      errors.push(`Unable to inspect Windows branding: ${errorMessage(error)}`);
+    }
   }
 
   if (errors.length > 0) throw new Error(`Desktop package audit failed:\n- ${errors.join('\n- ')}`);

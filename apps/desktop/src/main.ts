@@ -27,6 +27,8 @@ function installApplicationMenu(locale: ApplicationLocale): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
+    title: 'DGLab Pulse Hub',
+    icon: join(currentDirectory, 'dglab-pulse-hub-icon.png'),
     width: 1280,
     height: 820,
     minWidth: 900,

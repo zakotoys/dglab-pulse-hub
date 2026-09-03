@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertDesktopBinaryArchitecture,
+  macInfoErrors,
   packageFileErrors,
-  validateAsarEntries
+  validateAsarEntries,
+  windowsInfoErrors
 } from '../scripts/audit-desktop-package.js';
 
 function pe(machine: number): Buffer {
@@ -42,6 +44,55 @@ describe('desktop package audit', () => {
     );
   });
 
+  it('requires the branded macOS icon resource', () => {
+    expect(packageFileErrors('darwin', new Set())).toContain(
+      'Missing DGLab Pulse Hub.app/Contents/Resources/dglab-pulse-hub-icon.icns'
+    );
+    expect(
+      packageFileErrors('darwin', new Set(['DGLab Pulse Hub.app/Contents/Resources/electron.icns']))
+    ).toContain('Obsolete Electron icon resource is present.');
+  });
+
+  it('accepts branded macOS metadata and rejects obsolete Electron defaults', () => {
+    const info = {
+      CFBundleDisplayName: 'DGLab Pulse Hub',
+      CFBundleExecutable: 'DGLab Pulse Hub',
+      CFBundleIconFile: 'dglab-pulse-hub-icon.icns',
+      CFBundleIdentifier: 'com.zakotoys.dglab-pulse-hub',
+      CFBundleName: 'DGLab Pulse Hub',
+      LSApplicationCategoryType: 'public.app-category.utilities',
+      NSHumanReadableCopyright: 'Copyright (c) ZakoToys'
+    };
+    expect(macInfoErrors(info)).toEqual([]);
+    expect(
+      macInfoErrors({
+        ...info,
+        NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
+        NSCameraUsageDescription: 'Electron default'
+      })
+    ).toEqual([
+      'Obsolete macOS metadata is present: NSAppTransportSecurity',
+      'Obsolete macOS metadata is present: NSCameraUsageDescription'
+    ]);
+  });
+
+  it('accepts branded Windows metadata and rejects Electron defaults', () => {
+    const info = {
+      CompanyName: 'ZakoToys',
+      FileDescription: 'DGLab Pulse Hub',
+      FileVersion: '0.0.8',
+      InternalName: 'DGLab Pulse Hub',
+      LegalCopyright: 'Copyright (c) ZakoToys',
+      OriginalFilename: 'DGLab Pulse Hub.exe',
+      ProductName: 'DGLab Pulse Hub',
+      ProductVersion: '0.0.8'
+    };
+    expect(windowsInfoErrors(info, '0.0.8')).toEqual([]);
+    expect(windowsInfoErrors({ ...info, ProductName: 'Electron' }, '0.0.8')).toContain(
+      'Invalid Windows metadata ProductName: Electron'
+    );
+  });
+
   it('requires built app entries and rejects source leakage in ASAR', () => {
     expect(
       validateAsarEntries([
@@ -49,6 +100,7 @@ describe('desktop package audit', () => {
         '/dist/main.js',
         '/dist/preload.cjs',
         '/dist/index.html',
+        '/dist/dglab-pulse-hub-icon.png',
         '/dist/renderer.js',
         '/dist/renderer.css',
         '/src/main.ts'
@@ -63,6 +115,7 @@ describe('desktop package audit', () => {
         '\\dist\\main.js',
         '\\dist\\preload.cjs',
         '\\dist\\index.html',
+        '\\dist\\dglab-pulse-hub-icon.png',
         '\\dist\\renderer.js',
         '\\dist\\renderer.css'
       ])
