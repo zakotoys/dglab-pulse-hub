@@ -1,6 +1,6 @@
 {
   "name": "@dglab-pulse-hub/web",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,9 +8,9 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@dglab-pulse-hub/core": "0.0.3",
-    "@dglab-pulse-hub/contracts": "0.0.3",
-    "@dglab-pulse-hub/workspace-ui": "0.0.3",
+    "@dglab-pulse-hub/core": "0.0.4",
+    "@dglab-pulse-hub/contracts": "0.0.4",
+    "@dglab-pulse-hub/workspace-ui": "0.0.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
