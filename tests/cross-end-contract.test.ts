@@ -17,6 +17,10 @@ const electronMock = vi.hoisted(() => {
     showSaveDialog: vi.fn(),
     showMessageBoxSync: vi.fn(() => 1)
   };
+  const Menu = {
+    buildFromTemplate: vi.fn((template: unknown) => template),
+    setApplicationMenu: vi.fn()
+  };
   class MockBrowserWindow {
     public static getAllWindows = vi.fn(() => []);
     public readonly webContents = {
@@ -39,10 +43,13 @@ const electronMock = vi.hoisted(() => {
       )
     },
     BrowserWindow: MockBrowserWindow,
+    Menu,
     app: {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
       quit: vi.fn(),
+      setName: vi.fn(),
+      getLocale: vi.fn(() => 'en-US'),
       getPath: vi.fn(() => join(tmpdir(), 'pulse-hub-cross-end-workspace'))
     },
     session: {
