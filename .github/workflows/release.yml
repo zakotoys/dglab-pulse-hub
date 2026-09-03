@@ -88,11 +88,6 @@ jobs:
       matrix:
         include:
           - platform: windows
-            architecture: x86
-            forge_platform: win32
-            forge_arch: ia32
-            runner: windows-latest
-          - platform: windows
             architecture: x64
             forge_platform: win32
             forge_arch: x64
@@ -284,8 +279,6 @@ jobs:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           expected_assets=(
-            "dglab-pulse-hub-windows-x86-v${RELEASE_VERSION}-setup.exe"
-            "dglab-pulse-hub-windows-x86-v${RELEASE_VERSION}.zip"
             "dglab-pulse-hub-windows-x64-v${RELEASE_VERSION}-setup.exe"
             "dglab-pulse-hub-windows-x64-v${RELEASE_VERSION}.zip"
             "dglab-pulse-hub-windows-arm64-v${RELEASE_VERSION}-setup.exe"
@@ -298,9 +291,9 @@ jobs:
           for asset in "${expected_assets[@]}"; do
             test -f "release-assets/$asset"
           done
-          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" = 3
+          test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" = 2
           test "$(find release-assets -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = 2
-          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 5
+          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 4
           find release-assets -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 |
             sort -z |
             xargs -0 sha256sum > release-assets/SHA256SUMS.txt

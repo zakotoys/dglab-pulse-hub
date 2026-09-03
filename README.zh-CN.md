@@ -10,7 +10,7 @@
 
 > [!IMPORTANT]
 >
-> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub Releases 下载的 Windows x86/x64/ARM64 和 macOS
+> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub Releases 下载的 Windows x64/ARM64 和 macOS
 > Intel（x86_64）/ARM64 未签名桌面安装包。每种架构同时提供规范命名的便携 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
 
 ## 功能
@@ -47,14 +47,13 @@ npm run desktop:make
 如需构建其他架构，可以显式传入 Electron 目标：
 
 ```sh
-npm run desktop:make -- --platform=win32 --arch=ia32   # Windows x86
 npm run desktop:make -- --platform=win32 --arch=x64    # Windows x64
 npm run desktop:make -- --platform=win32 --arch=arm64  # Windows ARM64
 npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
 ```
 
-产物位于 `apps/desktop/out/`。Windows 会为 x86、x64 和 ARM64 生成 Squirrel `.exe` 安装程序及便携
+产物位于 `apps/desktop/out/`。Windows 会为 x64 和 ARM64 生成 Squirrel `.exe` 安装程序及便携
 `.zip`，macOS 会为 Intel 和 Apple silicon 生成 `.dmg` 安装包及便携 `.zip`。macOS
 Intel 标签对应 Electron `x64`，不是 32 位 macOS。解压后的应用和可执行文件名称为
 `DGLab Pulse Hub`，macOS 应用包名称为

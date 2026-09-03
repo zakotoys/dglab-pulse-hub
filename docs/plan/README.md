@@ -37,7 +37,7 @@
 
 当前 Electron 发布入口使用 Electron Forge；主进程和 sandbox
 preload 在构建时分别 bundle，已在本机 macOS arm64 完成 package/make/启动检查。Release
-workflow 已配置 Windows x86/x64/ARM64 和 macOS Intel（Electron
+workflow 已配置 Windows x64/ARM64 和 macOS Intel（Electron
 x64）/ARM64 的独立安装包与便携 ZIP 任务；Windows/macOS hosted
 runner 的实际安装、启动、签名和升级验证仍属于 M5 发布门禁，不能由本机结果代替。
 

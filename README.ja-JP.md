@@ -11,7 +11,7 @@ DG-LAB `.pulse` 波形を検査、プレビュー、編集、エクスポート�
 > [!IMPORTANT]
 >
 > このリポジトリではソースコード、Docker Web デプロイ、GitHub
-> Releases からダウンロードできる Windows x86/x64/ARM64 と macOS Intel
+> Releases からダウンロードできる Windows x64/ARM64 と macOS Intel
 > (x86_64)/ARM64 向け未署名デスクトップインストーラーを提供します。各ターゲットには名前付きのポータブル ZIP も含まれます。コード署名と notarization はまだ設定していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
 
 ## 機能
@@ -49,14 +49,13 @@ npm run desktop:make
 別のアーキテクチャをビルドする場合は、Electron のターゲットを明示します。
 
 ```sh
-npm run desktop:make -- --platform=win32 --arch=ia32   # Windows x86
 npm run desktop:make -- --platform=win32 --arch=x64    # Windows x64
 npm run desktop:make -- --platform=win32 --arch=arm64  # Windows ARM64
 npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
 ```
 
-成果物は `apps/desktop/out/` に出力されます。Windows では x86、x64、ARM64 向けに Squirrel の `.exe`
+成果物は `apps/desktop/out/` に出力されます。Windows では x64、ARM64 向けに Squirrel の `.exe`
 インストーラーとポータブル `.zip`、macOS では Intel と Apple silicon 向けに `.dmg`
 インストーラーとポータブル `.zip` が生成されます。macOS Intel のラベルは Electron の `x64`
 に対応し、32 ビット macOS ではありません。展開後のアプリと実行ファイルの名前は `DGLab Pulse Hub`

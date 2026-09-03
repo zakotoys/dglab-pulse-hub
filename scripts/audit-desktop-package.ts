@@ -4,7 +4,7 @@ import { basename, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 type DesktopPlatform = 'darwin' | 'win32';
-type DesktopArchitecture = 'arm64' | 'ia32' | 'x64';
+type DesktopArchitecture = 'arm64' | 'x64';
 
 const WINDOWS_RUNTIME_FILES = [
   'DGLab Pulse Hub.exe',
@@ -48,7 +48,6 @@ const ASAR_RUNTIME_FILES = [
 ] as const;
 
 const PE_MACHINES: Readonly<Record<number, DesktopArchitecture>> = {
-  0x014c: 'ia32',
   0x8664: 'x64',
   0xaa64: 'arm64'
 };
@@ -102,11 +101,12 @@ export function packageFileErrors(
 }
 
 export function validateAsarEntries(entries: readonly string[]): string[] {
-  const entrySet = new Set(entries);
+  const normalizedEntries = entries.map((entry) => entry.replaceAll('\\', '/'));
+  const entrySet = new Set(normalizedEntries);
   const errors = ASAR_RUNTIME_FILES.filter((file) => !entrySet.has(file)).map(
     (file) => `Missing ASAR entry ${file}`
   );
-  for (const entry of entries) {
+  for (const entry of normalizedEntries) {
     if (/\.(?:d\.ts|map|ts)$/.test(entry) || /^\/(?:src|test)(?:\/|$)/.test(entry)) {
       errors.push(`Source file leaked into ASAR: ${entry}`);
     }
@@ -183,13 +183,10 @@ async function main(): Promise<void> {
   const [platform, architecture, packageDirectory] = process.argv.slice(2);
   if (
     (platform !== 'darwin' && platform !== 'win32') ||
-    (architecture !== 'arm64' && architecture !== 'ia32' && architecture !== 'x64') ||
+    (architecture !== 'arm64' && architecture !== 'x64') ||
     packageDirectory === undefined
   ) {
-    throw new Error('Usage: audit-desktop-package <darwin|win32> <arm64|ia32|x64> <directory>');
-  }
-  if (platform === 'darwin' && architecture === 'ia32') {
-    throw new Error('macOS ia32 packages are not supported.');
+    throw new Error('Usage: audit-desktop-package <darwin|win32> <arm64|x64> <directory>');
   }
   const rootManifest = JSON.parse(await readFile(resolve('package.json'), 'utf8')) as {
     version?: unknown;

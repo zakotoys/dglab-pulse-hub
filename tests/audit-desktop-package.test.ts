@@ -55,4 +55,17 @@ describe('desktop package audit', () => {
       ])
     ).toEqual(['Source file leaked into ASAR: /src/main.ts']);
   });
+
+  it('accepts ASAR entries returned with Windows path separators', () => {
+    expect(
+      validateAsarEntries([
+        '\\package.json',
+        '\\dist\\main.js',
+        '\\dist\\preload.cjs',
+        '\\dist\\index.html',
+        '\\dist\\renderer.js',
+        '\\dist\\renderer.css'
+      ])
+    ).toEqual([]);
+  });
 });

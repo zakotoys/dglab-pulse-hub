@@ -12,11 +12,11 @@ Before publishing, the workflow:
 2. Runs the full format, type, test, build, audit, and corpus gates.
 3. Builds and pushes the API and Web images to GitHub Container Registry for `linux/amd64` and
    `linux/arm64`.
-4. Builds five desktop targets in parallel: Windows x86, x64, and ARM64 on `windows-latest`, plus
-   macOS Intel and ARM64 on `macos-latest`.
+4. Builds four desktop targets in parallel: Windows x64 and ARM64 on `windows-latest`, plus macOS
+   Intel and ARM64 on `macos-latest`.
 5. Audits every packaged app's executable architecture, Electron runtime files, ASAR entry points,
    version, and source-file exclusions before upload.
-6. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, ten desktop
+6. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, eight desktop
    packages, and `SHA256SUMS.txt`.
 
 The workflow uses the repository `GITHUB_TOKEN`; the release job needs `contents: write`, and the
@@ -51,8 +51,6 @@ is published.
 Each release is named `DGLab Pulse Hub vX.Y.Z` and contains these desktop packages:
 
 ```text
-dglab-pulse-hub-windows-x86-vX.Y.Z-setup.exe
-dglab-pulse-hub-windows-x86-vX.Y.Z.zip
 dglab-pulse-hub-windows-x64-vX.Y.Z-setup.exe
 dglab-pulse-hub-windows-x64-vX.Y.Z.zip
 dglab-pulse-hub-windows-arm64-vX.Y.Z-setup.exe
