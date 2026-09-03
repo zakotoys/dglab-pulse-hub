@@ -160,12 +160,14 @@ export interface WorkspaceAppProps {
   readonly client: WorkspaceClient;
   readonly initialLocale?: Locale;
   readonly initialTheme?: Theme;
+  readonly onLocaleChange?: (locale: Locale) => void;
 }
 
 export function WorkspaceApp({
   client,
   initialLocale,
-  initialTheme
+  initialTheme,
+  onLocaleChange
 }: WorkspaceAppProps): ReactElement {
   const [locale, setLocale] = useState<Locale>(() => initialLocale ?? detectLocale());
   const [theme, setTheme] = useState<Theme>(() => initialTheme ?? detectTheme());
@@ -246,7 +248,8 @@ export function WorkspaceApp({
   useEffect(() => {
     document.documentElement.lang = locale;
     window.localStorage.setItem('pulse-hub-locale', locale);
-  }, [locale]);
+    onLocaleChange?.(locale);
+  }, [locale, onLocaleChange]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;

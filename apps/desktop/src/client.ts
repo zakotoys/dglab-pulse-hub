@@ -21,8 +21,10 @@ import {
   type WorkspaceFile,
   type WorkspaceOperation
 } from '@dglab-pulse-hub/workspace-ui';
+import type { Locale } from '@dglab-pulse-hub/workspace-ui';
 
 interface DesktopApi {
+  readonly setLocale: (locale: Locale) => Promise<void>;
   readonly listWorkspace: () => Promise<unknown>;
   readonly importLocalFiles: (multiple: boolean) => Promise<unknown>;
   readonly openWorkspaceFile: (relativePath: string) => Promise<unknown>;

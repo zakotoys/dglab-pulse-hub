@@ -20,6 +20,7 @@ import {
 } from '@dglab-pulse-hub/application';
 import { DIAGNOSTIC_CODES } from '@dglab-pulse-hub/core';
 import type { OperationEnvelopeDto } from '@dglab-pulse-hub/contracts';
+import { isApplicationLocale, type ApplicationLocale } from './application-menu.js';
 import {
   cancelledIpc,
   digestPayload,
@@ -41,15 +42,29 @@ export interface IpcContext {
   readonly documents: DocumentStore;
   readonly workspace: LocalPulseWorkspace;
   readonly confirmClose: () => boolean;
+  readonly updateApplicationMenu: (locale: ApplicationLocale) => void;
 }
 
 export function registerIpc({
   currentDirectory,
   documents,
   workspace,
-  confirmClose
+  confirmClose,
+  updateApplicationMenu
 }: IpcContext): void {
   let openSequence = 0;
+
+  ipcMain.handle('pulse:set-locale', async (event, payload: unknown) => {
+    if (!trustedSender(event, currentDirectory)) throw new Error('Untrusted IPC sender.');
+    if (
+      !plainObject(payload) ||
+      !onlyKeys(payload, ['locale']) ||
+      !isApplicationLocale(payload.locale)
+    ) {
+      throw new Error('A supported application locale is required.');
+    }
+    updateApplicationMenu(payload.locale);
+  });
 
   const openPulsePath = async (
     selectedPath: string,

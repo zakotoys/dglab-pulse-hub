@@ -23,6 +23,10 @@ const mocks = vi.hoisted(() => {
       }
     )
   };
+  const Menu = {
+    buildFromTemplate: vi.fn((template: unknown) => template),
+    setApplicationMenu: vi.fn()
+  };
   class MockBrowserWindow {
     public readonly webContents = {
       setWindowOpenHandler: vi.fn(),
@@ -39,10 +43,13 @@ const mocks = vi.hoisted(() => {
     dialog,
     historyReset,
     ipcMain,
+    Menu,
     BrowserWindow: MockBrowserWindow,
     app: {
       whenReady: vi.fn(() => Promise.resolve()),
       on: vi.fn(),
+      setName: vi.fn(),
+      getLocale: vi.fn(() => 'zh-CN'),
       getPath: vi.fn(() => join(tmpdir(), 'pulse-hub-desktop-test-workspace'))
     },
     session: {
@@ -58,6 +65,7 @@ vi.mock('electron', () => ({
   BrowserWindow: mocks.BrowserWindow,
   dialog: mocks.dialog,
   ipcMain: mocks.ipcMain,
+  Menu: mocks.Menu,
   session: mocks.session
 }));
 
@@ -97,6 +105,24 @@ describe('Electron IPC boundary', () => {
       if (directory !== undefined) await rm(directory, { recursive: true, force: true });
     }
     await rm(WORKSPACE_ROOT, { recursive: true, force: true });
+  });
+
+  it('uses the product name outside packaged builds', () => {
+    expect(mocks.app.setName).toHaveBeenCalledWith('DGLab Pulse Hub');
+  });
+
+  it('updates the native menu for supported application locales', async () => {
+    const handler = mocks.handlers.get('pulse:set-locale');
+    expect(handler).toBeDefined();
+    const previousUpdates = mocks.Menu.setApplicationMenu.mock.calls.length;
+
+    await handler?.(trustedEvent, { locale: 'ja-JP' });
+
+    expect(mocks.Menu.setApplicationMenu).toHaveBeenCalledTimes(previousUpdates + 1);
+    await expect(handler?.(trustedEvent, { locale: 'fr-FR' })).rejects.toThrow(
+      'A supported application locale is required.'
+    );
+    expect(mocks.Menu.setApplicationMenu).toHaveBeenCalledTimes(previousUpdates + 1);
   });
 
   it('lists managed pulse metadata and opens a selected workspace file', async () => {

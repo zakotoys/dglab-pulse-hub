@@ -1,10 +1,17 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, Menu, session } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  applicationMenuTemplate,
+  resolveApplicationLocale,
+  type ApplicationLocale
+} from './application-menu.js';
 import { confirmClose } from './ipc-support.js';
 import { DocumentStore } from './document-store.js';
 import { registerIpc } from './ipc.js';
 import { LocalPulseWorkspace } from './local-workspace.js';
+
+app.setName('DGLab Pulse Hub');
 
 const currentDirectory = fileURLToPath(new URL('.', import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -12,6 +19,11 @@ const documents = new DocumentStore();
 
 function canClose(): boolean {
   return confirmClose(mainWindow, () => documents.hasUnsavedChanges());
+}
+
+function installApplicationMenu(locale: ApplicationLocale): void {
+  const menuTemplate = applicationMenuTemplate(process.platform, locale);
+  Menu.setApplicationMenu(menuTemplate === null ? null : Menu.buildFromTemplate(menuTemplate));
 }
 
 function createWindow(): void {
@@ -50,6 +62,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  installApplicationMenu(resolveApplicationLocale(app.getLocale()));
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -63,7 +76,13 @@ app.whenReady().then(() => {
     });
   });
   const workspace = new LocalPulseWorkspace(join(app.getPath('documents'), 'Pulse Hub'));
-  registerIpc({ currentDirectory, documents, workspace, confirmClose: canClose });
+  registerIpc({
+    currentDirectory,
+    documents,
+    workspace,
+    confirmClose: canClose,
+    updateApplicationMenu: installApplicationMenu
+  });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

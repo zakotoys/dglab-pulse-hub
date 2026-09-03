@@ -4,6 +4,7 @@ import type {
   OperationEnvelopeDto,
   ReviewedAssistCommandDto
 } from '@dglab-pulse-hub/contracts';
+import type { Locale } from '@dglab-pulse-hub/workspace-ui';
 
 export interface DesktopExportRequest {
   readonly sourceDigest: string;
@@ -88,6 +89,8 @@ export interface DesktopWorkspaceImportResult {
 contextBridge.exposeInMainWorld(
   'pulseDesktop',
   Object.freeze({
+    setLocale: (locale: Locale): Promise<void> =>
+      ipcRenderer.invoke('pulse:set-locale', { locale }),
     listWorkspace: (): Promise<DesktopWorkspaceIndex> => ipcRenderer.invoke('pulse:workspace-list'),
     importLocalFiles: (multiple: boolean): Promise<DesktopWorkspaceImportResult> =>
       ipcRenderer.invoke('pulse:workspace-import', { multiple }),
