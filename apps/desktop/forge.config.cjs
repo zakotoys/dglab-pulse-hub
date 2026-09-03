@@ -1,9 +1,15 @@
+const path = require('node:path');
+
+const iconBasePath = path.join(__dirname, 'assets', 'dglab-pulse-hub-icon');
+
 module.exports = {
   packagerConfig: {
     asar: true,
     appBundleId: 'com.zakotoys.dglab-pulse-hub',
     executableName: 'DGLab Pulse Hub',
+    icon: iconBasePath,
     ignore: [
+      /^\/assets(?:\/|$)/,
       /^\/src(?:\/|$)/,
       /^\/test(?:\/|$)/,
       /^\/forge\.config\.cjs$/,
@@ -26,6 +32,7 @@ module.exports = {
         description: 'DG-LAB .pulse waveform workbench',
         exe: 'DGLab Pulse Hub.exe',
         setupExe: 'DGLab Pulse Hub Setup.exe',
+        setupIcon: `${iconBasePath}.ico`,
         noMsi: true
       }
     },

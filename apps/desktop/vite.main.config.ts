@@ -9,7 +9,7 @@ const nodeBuiltins = builtinModules.flatMap((moduleName) => [moduleName, 'node:'
 
 export default defineConfig({
   ssr: {
-    noExternal: ['zod', 'jpeg-js', 'pngjs']
+    noExternal: ['zod', 'jpeg-js', 'pngjs', 'qrcode']
   },
   build: {
     outDir: outputDirectory,
