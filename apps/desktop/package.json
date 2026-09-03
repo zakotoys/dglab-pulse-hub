@@ -1,17 +1,17 @@
 {
   "name": "@dglab-pulse-hub/desktop",
   "productName": "DGLab Pulse Hub",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "description": "DG-LAB .pulse waveform workbench",
   "author": "ZakoToys",
   "type": "module",
   "main": "./dist/main.js",
   "dependencies": {
-    "@dglab-pulse-hub/application": "0.0.6",
-    "@dglab-pulse-hub/contracts": "0.0.6",
-    "@dglab-pulse-hub/core": "0.0.6",
-    "@dglab-pulse-hub/workspace-ui": "0.0.6",
+    "@dglab-pulse-hub/application": "0.0.7",
+    "@dglab-pulse-hub/contracts": "0.0.7",
+    "@dglab-pulse-hub/core": "0.0.7",
+    "@dglab-pulse-hub/workspace-ui": "0.0.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
