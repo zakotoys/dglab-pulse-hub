@@ -137,6 +137,17 @@ jobs:
           npm run desktop:make -- --platform=${{ matrix.forge_platform }} --arch=${{
           matrix.forge_arch }}
 
+      - name: Audit packaged desktop runtime
+        shell: bash
+        env:
+          RELEASE_FORGE_PLATFORM: ${{ matrix.forge_platform }}
+          RELEASE_FORGE_ARCH: ${{ matrix.forge_arch }}
+        run: |
+          package_dir="apps/desktop/out/DGLab Pulse Hub-${RELEASE_FORGE_PLATFORM}-"
+          package_dir+="${RELEASE_FORGE_ARCH}"
+          npm run desktop:audit-package -- \
+            "$RELEASE_FORGE_PLATFORM" "$RELEASE_FORGE_ARCH" "$package_dir"
+
       - name: Collect desktop installers and archives
         shell: bash
         env:

@@ -49,6 +49,7 @@
     "desktop:dev": "npm run desktop:build && npm run desktop:start",
     "desktop:package": "npm run desktop:build && npm run desktop:clean && npm --workspace @dglab-pulse-hub/desktop run package",
     "desktop:make": "npm run desktop:build && npm run desktop:clean && npm --workspace @dglab-pulse-hub/desktop run make --",
+    "desktop:audit-package": "tsx scripts/audit-desktop-package.ts",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down --timeout 20",
@@ -58,6 +59,7 @@
     "corpus:verify": "tsx scripts/corpus-verify.ts"
   },
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "@types/jpeg-js": "^0.3.0",
     "@types/node": "^24.3.0",
     "@types/pngjs": "^6.0.5",

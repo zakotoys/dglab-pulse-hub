@@ -10,8 +10,7 @@ import { confirmClose } from './ipc-support.js';
 import { DocumentStore } from './document-store.js';
 import { registerIpc } from './ipc.js';
 import { LocalPulseWorkspace } from './local-workspace.js';
-
-app.setName('DGLab Pulse Hub');
+import { relaunchCurrentPortableWindowsApp } from './portable-relaunch.js';
 
 const currentDirectory = fileURLToPath(new URL('.', import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -61,34 +60,40 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
-  installApplicationMenu(resolveApplicationLocale(app.getLocale()));
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-            "img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; " +
-            "frame-ancestors 'none'"
-        ]
-      }
+function startApplication(): void {
+  app.setName('DGLab Pulse Hub');
+  app.whenReady().then(() => {
+    installApplicationMenu(resolveApplicationLocale(app.getLocale()));
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+              "img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; " +
+              "frame-ancestors 'none'"
+          ]
+        }
+      });
+    });
+    const workspace = new LocalPulseWorkspace(join(app.getPath('documents'), 'Pulse Hub'));
+    registerIpc({
+      currentDirectory,
+      documents,
+      workspace,
+      confirmClose: canClose,
+      updateApplicationMenu: installApplicationMenu
+    });
+    createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
-  const workspace = new LocalPulseWorkspace(join(app.getPath('documents'), 'Pulse Hub'));
-  registerIpc({
-    currentDirectory,
-    documents,
-    workspace,
-    confirmClose: canClose,
-    updateApplicationMenu: installApplicationMenu
-  });
-  createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}
+
+if (relaunchCurrentPortableWindowsApp(app, import.meta.url)) app.exit(0);
+else startApplication();

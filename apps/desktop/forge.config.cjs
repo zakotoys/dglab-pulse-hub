@@ -33,6 +33,7 @@ module.exports = {
         exe: 'DGLab Pulse Hub.exe',
         setupExe: 'DGLab Pulse Hub Setup.exe',
         setupIcon: `${iconBasePath}.ico`,
+        loadingGif: path.join(__dirname, 'assets', 'dglab-pulse-hub-install.gif'),
         noMsi: true
       }
     },

@@ -14,7 +14,9 @@ Before publishing, the workflow:
    `linux/arm64`.
 4. Builds five desktop targets in parallel: Windows x86, x64, and ARM64 on `windows-latest`, plus
    macOS Intel and ARM64 on `macos-latest`.
-5. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, ten desktop
+5. Audits every packaged app's executable architecture, Electron runtime files, ASAR entry points,
+   version, and source-file exclusions before upload.
+6. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, ten desktop
    packages, and `SHA256SUMS.txt`.
 
 The workflow uses the repository `GITHUB_TOKEN`; the release job needs `contents: write`, and the
@@ -67,6 +69,12 @@ archives; their packaged application and executable are named `DGLab Pulse Hub` 
 not a 32-bit macOS build. Windows SmartScreen and macOS Gatekeeper may warn until code-signing and
 notarization are configured. Squirrel update metadata and NuGet packages are used during the build
 but are not uploaded to the Release.
+
+On Parallels, launching the Windows portable archive from `C:\Mac\Home`, `\\Mac\Home`, or a
+`file://psf` shared path copies that exact build to `%LOCALAPPDATA%\DGLabPulseHub\portable` and
+relaunches it there. Chromium cannot safely run sandboxed child processes or SQLite caches directly
+from the Parallels shared filesystem. The local copy is keyed and verified by the packaged ASAR
+digest; ordinary local Windows launches do not use this path.
 
 The container images are:
 
