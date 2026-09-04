@@ -205,8 +205,8 @@ M4 以小增量逐项加入，每项都在 M2/M3 已工作的单文件产品上�
 7. 发布 runbook、运维检查表、已知限制、精确版本配对和拒绝不匹配 schema/rule 的兼容性矩阵。
 
 当前仓库已落地的发布自动化包括：`vX.Y.Z` tag 校验、完整质量门禁、GHCR API/Web 多架构镜像、Windows
-x86/x64/ARM64 Squirrel 安装程序、macOS Intel（Electron `x64`）/ARM64
-DMG、规范命名的便携 ZIP 和 GitHub Release 附件。代码签名、macOS
+x86/x64/ARM64 NSIS 安装程序、macOS Intel（Electron `x64`）/ARM64 DMG、规范命名的便携 ZIP 和 GitHub
+Release 附件。代码签名、macOS
 notarization、SBOM 和完整目标平台人工互操作仍需独立验证，不能由工作流配置本身替代。
 
 ### 退出标准

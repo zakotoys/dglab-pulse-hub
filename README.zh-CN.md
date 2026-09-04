@@ -53,8 +53,8 @@ npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
 ```
 
-产物位于 `apps/desktop/out/`。Windows 会为 x64 和 ARM64 生成 Squirrel `.exe` 安装程序及便携
-`.zip`，macOS 会为 Intel 和 Apple silicon 生成 `.dmg` 安装包及便携 `.zip`。macOS
+产物位于 `apps/desktop/out/`。Windows 会为 x64 和 ARM64 生成支持自选安装目录及快捷方式的 NSIS `.exe`
+安装程序及便携 `.zip`，macOS 会为 Intel 和 Apple silicon 生成 `.dmg` 安装包及便携 `.zip`。macOS
 Intel 标签对应 Electron `x64`，不是 32 位 macOS。解压后的应用和可执行文件名称为
 `DGLab Pulse Hub`，macOS 应用包名称为
 `DGLab Pulse Hub.app`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse`

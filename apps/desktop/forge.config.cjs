@@ -63,20 +63,6 @@ module.exports = {
   },
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
-      config: {
-        name: 'DGLabPulseHub',
-        title: 'DGLab Pulse Hub',
-        authors: 'ZakoToys',
-        description: 'DG-LAB .pulse waveform workbench',
-        exe: 'DGLab Pulse Hub.exe',
-        setupExe: 'DGLab Pulse Hub Setup.exe',
-        setupIcon: `${iconBasePath}.ico`,
-        loadingGif: path.join(__dirname, 'assets', 'dglab-pulse-hub-install.gif'),
-        noMsi: true
-      }
-    },
-    {
       name: '@electron-forge/maker-dmg',
       config: {
         title: 'DGLab Pulse Hub',

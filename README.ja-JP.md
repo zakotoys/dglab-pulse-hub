@@ -55,8 +55,9 @@ npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
 ```
 
-成果物は `apps/desktop/out/` に出力されます。Windows では x64、ARM64 向けに Squirrel の `.exe`
-インストーラーとポータブル `.zip`、macOS では Intel と Apple silicon 向けに `.dmg`
+成果物は `apps/desktop/out/`
+に出力されます。Windows では x64、ARM64 向けにインストール先とショートカットを選択できる NSIS の
+`.exe` インストーラーとポータブル `.zip`、macOS では Intel と Apple silicon 向けに `.dmg`
 インストーラーとポータブル `.zip` が生成されます。macOS Intel のラベルは Electron の `x64`
 に対応し、32 ビット macOS ではありません。展開後のアプリと実行ファイルの名前は `DGLab Pulse Hub`
 （macOS のアプリバンドルは

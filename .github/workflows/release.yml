@@ -155,8 +155,7 @@ jobs:
           release_prefix="dglab-pulse-hub-${RELEASE_PLATFORM}-${RELEASE_ARCHITECTURE}-"
           release_prefix+="v${RELEASE_VERSION}"
           if [ "$RELEASE_PLATFORM" = windows ]; then
-            installer="apps/desktop/out/make/squirrel.windows/${RELEASE_FORGE_ARCH}/"
-            installer+="DGLab Pulse Hub Setup.exe"
+            installer="apps/desktop/out/make/nsis/DGLab Pulse Hub Setup.exe"
             archive="$(
               find "apps/desktop/out/make/zip/win32/${RELEASE_FORGE_ARCH}" \
                 -maxdepth 1 \

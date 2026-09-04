@@ -60,13 +60,13 @@ npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
 ```
 
-`apps/desktop/out/` contains the local build outputs. Windows produces a Squirrel `.exe` installer
-and a portable `.zip` for x64 and ARM64. macOS produces a `.dmg` installer and a portable `.zip` for
-Intel and Apple silicon. The macOS Intel label maps to Electron `x64`; it is not a 32-bit macOS
-build. Packaged applications and executables are named `DGLab Pulse Hub` (the macOS application
-bundle is `DGLab Pulse Hub.app`). Your operating system may block unsigned builds. The desktop app
-keeps its managed `.pulse` files under `Documents/Pulse Hub`; files imported from outside that
-directory are copied there without overwriting an existing file.
+`apps/desktop/out/` contains the local build outputs. Windows produces an NSIS `.exe` installer with
+selectable install location and shortcuts and a portable `.zip` for x64 and ARM64. macOS produces a
+`.dmg` installer and a portable `.zip` for Intel and Apple silicon. The macOS Intel label maps to
+Electron `x64`; it is not a 32-bit macOS build. Packaged applications and executables are named
+`DGLab Pulse Hub` (the macOS application bundle is `DGLab Pulse Hub.app`). Your operating system may
+block unsigned builds. The desktop app keeps its managed `.pulse` files under `Documents/Pulse Hub`;
+files imported from outside that directory are copied there without overwriting an existing file.
 
 ### Download a release
 

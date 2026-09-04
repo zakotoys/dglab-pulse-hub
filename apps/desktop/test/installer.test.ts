@@ -1,17 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-
-interface ForgeMaker {
-  readonly name?: string;
-  readonly config?: {
-    icon?: string;
-    loadingGif?: string;
-    setupIcon?: string;
-    title?: string;
-  };
-}
 
 interface ForgeConfig {
   readonly packagerConfig?: {
@@ -24,7 +13,10 @@ interface ForgeConfig {
     readonly icon?: string;
     readonly win32metadata?: Record<string, unknown>;
   };
-  readonly makers?: ForgeMaker[];
+  readonly makers?: Array<{
+    readonly name?: string;
+    readonly config?: { readonly icon?: string; readonly title?: string };
+  }>;
 }
 
 const require = createRequire(import.meta.url);
@@ -52,16 +44,15 @@ describe('Desktop package branding', () => {
 });
 
 describe('Windows installer', () => {
-  it('uses branded icons and a compact custom loading animation', async () => {
-    const squirrel = forge.makers?.find((maker) => maker.name === '@electron-forge/maker-squirrel');
-    expect(squirrel?.config?.setupIcon).toMatch(/dglab-pulse-hub-icon\.ico$/);
-    expect(basename(squirrel?.config?.loadingGif ?? '')).toBe('dglab-pulse-hub-install.gif');
-
-    const bytes = await readFile(squirrel?.config?.loadingGif ?? '');
-    expect(bytes.toString('ascii', 0, 6)).toBe('GIF89a');
-    expect(bytes.readUInt16LE(6)).toBe(268);
-    expect(bytes.readUInt16LE(8)).toBe(167);
-    expect(bytes.byteLength).toBeLessThan(50_000);
+  it('uses NSIS with selectable install location and shortcuts', async () => {
+    const config = await readFile(new URL('../electron-builder.yml', import.meta.url), 'utf8');
+    expect(config).toContain('oneClick: false');
+    expect(config).toContain('allowToChangeInstallationDirectory: true');
+    expect(config).toContain('createDesktopShortcut: prompt');
+    expect(config).toContain('include: installer.nsh');
+    const script = await readFile(new URL('../installer.nsh', import.meta.url), 'utf8');
+    expect(script).toContain('!macro customWelcomePage');
+    expect(script).toContain('固定到任务栏');
   });
 });
 

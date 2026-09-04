@@ -65,8 +65,8 @@ The `.exe` and `.dmg` files are the primary unsigned installers. The ZIP files a
 archives; their packaged application and executable are named `DGLab Pulse Hub` (the macOS app is
 `DGLab Pulse Hub.app`). The macOS `x86` label means Intel 64-bit and maps to Electron `x64`; it is
 not a 32-bit macOS build. Windows SmartScreen and macOS Gatekeeper may warn until code-signing and
-notarization are configured. Squirrel update metadata and NuGet packages are used during the build
-but are not uploaded to the Release.
+notarization are configured. The Windows NSIS installer supports choosing the installation directory
+and optional shortcuts. but are not uploaded to the Release.
 
 On Parallels, launching the Windows portable archive from `C:\Mac\Home`, `\\Mac\Home`, or a
 `file://psf` shared path copies that exact build to `%LOCALAPPDATA%\DGLabPulseHub\portable` and
