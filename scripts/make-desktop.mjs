@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const platform = args.find((arg) => arg.startsWith('--platform='))?.split('=')[1];
+const architecture = args.find((arg) => arg.startsWith('--arch='))?.split('=')[1];
 const cwd = new URL('../apps/desktop/', import.meta.url);
 const spawnOptions = { cwd, stdio: 'inherit', shell: process.platform === 'win32' };
 const run = (command, commandArgs) =>
@@ -14,7 +15,8 @@ const forgeArgs = args;
 const buildArgs = [
   '--config',
   'electron-builder.yml',
-  ...args.filter((arg) => !arg.startsWith('--platform='))
+  ...args.filter((arg) => !arg.startsWith('--platform=') && !arg.startsWith('--arch=')),
+  ...(architecture ? [`--${architecture}`] : [])
 ];
 const exitCode =
   platform === 'win32'
