@@ -52,7 +52,13 @@ import {
   type AssistProposalFingerprintInput,
   type QrImageAction
 } from './workflow.js';
-import { createTranslator, detectLocale, localizeDiagnostic, type Locale } from './i18n.js';
+import {
+  createTranslator,
+  detectLocale,
+  localizeDiagnostic,
+  localizeOrigin,
+  type Locale
+} from './i18n.js';
 import {
   animateDiagnostics,
   animateDropOverlay,
@@ -1898,7 +1904,7 @@ export function WorkspaceApp({
                         {t('pointOrigin', {
                           section: hoveredPoint.source.sectionIndex + 1,
                           repetition: hoveredPoint.source.repetitionIndex + 1,
-                          origin: hoveredPoint.source.origin
+                          origin: localizeOrigin(hoveredPoint.source.origin, t)
                         })}
                       </small>
                     </div>
@@ -2104,7 +2110,7 @@ export function WorkspaceApp({
                         </div>
                         <div>
                           <dt>{t('origin')}</dt>
-                          <dd>{point.source.origin}</dd>
+                          <dd>{localizeOrigin(point.source.origin, t)}</dd>
                         </div>
                       </dl>
                       <div className="edit-stack">

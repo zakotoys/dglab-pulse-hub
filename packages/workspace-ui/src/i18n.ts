@@ -1,7 +1,7 @@
 import en from './locales/en-US.json' with { type: 'json' };
 import ja from './locales/ja-JP.json' with { type: 'json' };
 import zh from './locales/zh-CN.json' with { type: 'json' };
-import type { Diagnostic } from '@dglab-pulse-hub/core';
+import type { Diagnostic, StreamPointOrigin } from '@dglab-pulse-hub/core';
 
 export const supportedLocales = ['en-US', 'zh-CN', 'ja-JP'] as const;
 export type Locale = (typeof supportedLocales)[number];
@@ -57,6 +57,17 @@ export function createTranslator(locale: Locale): Translator {
       (message, [name, value]) => message.replaceAll(`{${name}}`, String(value)),
       messages[locale][key]
     );
+}
+
+const originMessageKeys: Readonly<Record<StreamPointOrigin, MessageKey>> = Object.freeze({
+  'source-anchor': 'originSourceAnchor',
+  'source-point': 'originSourcePoint',
+  'quadratic-interpolation': 'originQuadraticInterpolation',
+  'boundary-interpolation': 'originBoundaryInterpolation'
+});
+
+export function localizeOrigin(origin: StreamPointOrigin, translate: Translator): string {
+  return translate(originMessageKeys[origin]);
 }
 
 export function localizeDiagnostic(
