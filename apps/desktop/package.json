@@ -19,7 +19,7 @@
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-dmg": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
-    "electron": "^44.1.1"
+    "electron": "44.1.1"
   },
   "scripts": {
     "build": "tsc -b && node ../../scripts/copy-desktop-assets.mjs && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.config.ts",
