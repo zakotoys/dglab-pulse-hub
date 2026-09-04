@@ -21,7 +21,7 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  createDesktopShortcut: prompt
+  createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: DGLab Pulse Hub
   include: installer.nsh

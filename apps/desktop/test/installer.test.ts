@@ -48,7 +48,7 @@ describe('Windows installer', () => {
     const config = await readFile(new URL('../electron-builder.yml', import.meta.url), 'utf8');
     expect(config).toContain('oneClick: false');
     expect(config).toContain('allowToChangeInstallationDirectory: true');
-    expect(config).toContain('createDesktopShortcut: prompt');
+    expect(config).toContain('createDesktopShortcut: true');
     expect(config).toContain('include: installer.nsh');
     const script = await readFile(new URL('../installer.nsh', import.meta.url), 'utf8');
     expect(script).toContain('!macro customWelcomePage');
