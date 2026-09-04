@@ -26,9 +26,7 @@ Function TaskbarPinPageLeave
   ${EndIf}
 FunctionEnd
 
-!macro customWelcomePage
-  Page custom TaskbarPinPageCreate TaskbarPinPageLeave
-!macroend
+Page custom TaskbarPinPageCreate TaskbarPinPageLeave
 
 !macro customInstall
   ${If} $TaskbarPinCheckbox == 1

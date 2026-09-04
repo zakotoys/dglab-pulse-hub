@@ -51,7 +51,7 @@ describe('Windows installer', () => {
     expect(config).toContain('createDesktopShortcut: true');
     expect(config).toContain('include: installer.nsh');
     const script = await readFile(new URL('../installer.nsh', import.meta.url), 'utf8');
-    expect(script).toContain('!macro customWelcomePage');
+    expect(script).toContain('Page custom TaskbarPinPageCreate TaskbarPinPageLeave');
     expect(script).toContain('固定到任务栏');
   });
 });
