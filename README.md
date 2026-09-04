@@ -12,9 +12,10 @@ waveforms.
 > [!IMPORTANT]
 >
 > This repository provides source code, a Docker Web deployment, and downloadable unsigned desktop
-> installers through GitHub Releases for Windows x64/ARM64 and macOS Intel (x86_64)/ARM64. Each
-> target also includes a named portable ZIP archive. Code signing and notarization are not
-> configured yet. This is an independent community project, not an official DG-LAB application.
+> installers through GitHub Releases for Windows x64/ARM64, macOS Intel (x86_64)/ARM64, and Linux
+> x64/ARM64. Linux releases include DEB, RPM, AppImage, and portable ZIP packages. Code signing and
+> notarization are not configured yet. This is an independent community project, not an official
+> DG-LAB application.
 
 ## Features
 
@@ -58,22 +59,27 @@ npm run desktop:make -- --platform=win32 --arch=x64    # Windows x64
 npm run desktop:make -- --platform=win32 --arch=arm64  # Windows ARM64
 npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
+npm run desktop:make -- --platform=linux --arch=x64    # Linux x64
+npm run desktop:make -- --platform=linux --arch=arm64  # Linux ARM64
 ```
 
 `apps/desktop/out/` contains the local build outputs. Windows produces an NSIS `.exe` installer with
 selectable install location and shortcuts and a portable `.zip` for x64 and ARM64. macOS produces a
 `.dmg` installer and a portable `.zip` for Intel and Apple silicon. The macOS Intel label maps to
-Electron `x64`; it is not a 32-bit macOS build. Packaged applications and executables are named
-`DGLab Pulse Hub` (the macOS application bundle is `DGLab Pulse Hub.app`). Your operating system may
+Electron `x64`; it is not a 32-bit macOS build. Linux produces `.deb` packages for Debian/Ubuntu,
+`.rpm` packages for Fedora/RHEL/openSUSE, portable `.AppImage` files for other mainstream desktop
+distributions, and `.zip` archives. Build Linux packages on Linux so the RPM toolchain is available.
+Packaged applications are named `DGLab Pulse Hub` (the macOS application bundle is
+`DGLab Pulse Hub.app`; installed Linux packages expose `dglab-pulse-hub`). Your operating system may
 block unsigned builds. The desktop app keeps its managed `.pulse` files under `Documents/Pulse Hub`;
 files imported from outside that directory are copied there without overwriting an existing file.
 
 ### Download a release
 
 Push a `vX.Y.Z` tag to run the release pipeline. It creates a `DGLab Pulse Hub vX.Y.Z` release with
-ten Windows/macOS installer and portable ZIP packages covering all supported architectures, API and
-Web container images, generated release notes, and `SHA256SUMS.txt`. See
-[`docs/release.md`](docs/release.md) for the versioning and rollback procedure.
+16 Windows, macOS, and Linux packages covering all supported architectures, API and Web container
+images, generated release notes, and `SHA256SUMS.txt`. See [`docs/release.md`](docs/release.md) for
+the versioning and rollback procedure.
 
 ### Local Web development
 

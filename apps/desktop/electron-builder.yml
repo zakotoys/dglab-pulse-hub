@@ -1,14 +1,16 @@
 appId: com.zakotoys.dglab-pulse-hub
 productName: DGLab Pulse Hub
-artifactName: DGLab Pulse Hub Setup.exe
 directories:
-  app: .
-  output: out/make/nsis
+  output: out/make/builder
 files:
   - dist/**
   - package.json
-  - assets/**
+  - '!dist/**/*.d.ts'
+  - '!dist/**/*.map'
+  - '!dist/tsconfig.tsbuildinfo'
+  - '!node_modules/**'
 asar: true
+npmRebuild: false
 win:
   target:
     - target: nsis
@@ -17,6 +19,29 @@ win:
         - arm64
   icon: assets/dglab-pulse-hub-icon.ico
   executableName: DGLab Pulse Hub
+  artifactName: DGLab Pulse Hub Setup.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  icon: assets/dglab-pulse-hub-icon.png
+  executableName: dglab-pulse-hub
+  artifactName: DGLab Pulse Hub-${version}-${arch}.${ext}
+  category: Utility
+  synopsis: Inspect, edit, and export DG-LAB pulse waveforms
+  maintainer: ZakoToys
+  desktop:
+    entry:
+      Name: DGLab Pulse Hub
+      Comment: Inspect, edit, and export DG-LAB pulse waveforms
+      Categories: Utility;
+deb:
+  packageName: dglab-pulse-hub
+  packageCategory: utils
+rpm:
+  packageName: dglab-pulse-hub
+  packageCategory: Utility
 nsis:
   oneClick: false
   perMachine: false

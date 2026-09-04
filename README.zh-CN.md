@@ -10,8 +10,9 @@
 
 > [!IMPORTANT]
 >
-> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub Releases 下载的 Windows x64/ARM64 和 macOS
-> Intel（x86_64）/ARM64 未签名桌面安装包。每种架构同时提供规范命名的便携 ZIP 归档。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
+> 当前仓库提供源码、Docker Web 部署，以及通过 GitHub Releases 下载的 Windows x64/ARM64、macOS
+> Intel（x86_64）/ARM64 和 Linux
+> x64/ARM64 未签名桌面软件包。Linux 提供 DEB、RPM、AppImage 和便携 ZIP。暂未配置代码签名和 notarization。本项目是独立的社区项目，并非 DG-LAB 官方应用。
 
 ## 功能
 
@@ -51,19 +52,24 @@ npm run desktop:make -- --platform=win32 --arch=x64    # Windows x64
 npm run desktop:make -- --platform=win32 --arch=arm64  # Windows ARM64
 npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
+npm run desktop:make -- --platform=linux --arch=x64    # Linux x64
+npm run desktop:make -- --platform=linux --arch=arm64  # Linux ARM64
 ```
 
 产物位于 `apps/desktop/out/`。Windows 会为 x64 和 ARM64 生成支持自选安装目录及快捷方式的 NSIS `.exe`
-安装程序及便携 `.zip`，macOS 会为 Intel 和 Apple silicon 生成 `.dmg` 安装包及便携 `.zip`。macOS
-Intel 标签对应 Electron `x64`，不是 32 位 macOS。解压后的应用和可执行文件名称为
-`DGLab Pulse Hub`，macOS 应用包名称为
-`DGLab Pulse Hub.app`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse`
-文件保存在 `Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
+安装程序及便携 `.zip`，macOS 会为 Intel 和 Apple silicon 生成 `.dmg` 安装包及便携
+`.zip`。Linux 会生成适用于 Debian/Ubuntu 的 `.deb`、适用于 Fedora/RHEL/openSUSE 的
+`.rpm`、适用于其他主流桌面发行版的便携 `.AppImage`，以及 `.zip`
+归档。Linux 软件包应在 Linux 上构建，以确保 RPM 工具链可用。macOS Intel 标签对应 Electron
+`x64`，不是 32 位 macOS。应用名称为 `DGLab Pulse Hub`，macOS 应用包名称为
+`DGLab Pulse Hub.app`，安装后的 Linux 命令为
+`dglab-pulse-hub`。未签名构建可能被操作系统的安全机制拦截。桌面端会将受管理的 `.pulse` 文件保存在
+`Documents/Pulse Hub`；从目录外导入时会复制文件，并避免覆盖同名文件。
 
 ### 下载发布版本
 
 推送 `vX.Y.Z` tag 后会运行发布流水线，自动创建名为 `DGLab Pulse Hub vX.Y.Z`
-的 Release，生成覆盖全部支持架构的 10 个 Windows/macOS 安装包和便携 ZIP、API/Web 容器镜像、Release 说明以及
+的 Release，生成覆盖全部支持架构的 16 个 Windows、macOS 和 Linux 软件包、API/Web 容器镜像、Release 说明以及
 `SHA256SUMS.txt`。版本同步和回滚流程见 [`docs/release.md`](docs/release.md)。
 
 ### 本地 Web 开发

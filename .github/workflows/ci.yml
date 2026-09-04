@@ -83,9 +83,38 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline
 
+      - name: Install Linux packaging tools
+        if: matrix.forge_platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends rpm
+
       - name: Build desktop installers and archives
         run: >-
           npm run desktop:make -- --platform=${{ matrix.forge_platform }} --arch=x64
+
+      - name: Audit packaged desktop runtime
+        shell: bash
+        env:
+          CI_FORGE_PLATFORM: ${{ matrix.forge_platform }}
+        run: |
+          package_dir="apps/desktop/out/DGLab Pulse Hub-${CI_FORGE_PLATFORM}-x64"
+          npm run desktop:audit-package -- "$CI_FORGE_PLATFORM" x64 "$package_dir"
+          if [ "$CI_FORGE_PLATFORM" = linux ]; then
+            builder_dir="apps/desktop/out/make/builder/linux-unpacked"
+            npm run desktop:audit-package -- "$CI_FORGE_PLATFORM" x64 "$builder_dir"
+            package_dir="apps/desktop/out/make/builder"
+            appimage="$(find "$package_dir" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+            deb="$(find "$package_dir" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+            rpm="$(find "$package_dir" -maxdepth 1 -type f -name '*.rpm' -print -quit)"
+            test "$(stat --format=%s "$appimage")" -gt 1000000
+            test "$(stat --format=%s "$deb")" -gt 1000000
+            test "$(stat --format=%s "$rpm")" -gt 1000000
+            test "$(dpkg-deb --field "$deb" Package)" = dglab-pulse-hub
+            test "$(dpkg-deb --field "$deb" Architecture)" = amd64
+            test "$(rpm --query --package --queryformat '%{NAME}' "$rpm")" = dglab-pulse-hub
+            test "$(rpm --query --package --queryformat '%{ARCH}' "$rpm")" = x86_64
+          fi
 
       - name: Upload desktop packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

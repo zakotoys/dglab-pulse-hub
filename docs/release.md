@@ -12,11 +12,11 @@ Before publishing, the workflow:
 2. Runs the full format, type, test, build, audit, and corpus gates.
 3. Builds and pushes the API and Web images to GitHub Container Registry for `linux/amd64` and
    `linux/arm64`.
-4. Builds four desktop targets in parallel: Windows x64 and ARM64 on `windows-latest`, plus macOS
-   Intel and ARM64 on `macos-latest`.
+4. Builds six desktop targets in parallel: Windows x64 and ARM64 on `windows-latest`, macOS Intel
+   and ARM64 on `macos-latest`, plus Linux x64 and ARM64 on `ubuntu-latest`.
 5. Audits every packaged app's executable architecture, Electron runtime files, ASAR entry points,
    version, and source-file exclusions before upload.
-6. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, eight desktop
+6. Creates a published `DGLab Pulse Hub vX.Y.Z` GitHub Release with generated notes, 16 desktop
    packages, and `SHA256SUMS.txt`.
 
 The workflow uses the repository `GITHUB_TOKEN`; the release job needs `contents: write`, and the
@@ -59,14 +59,29 @@ dglab-pulse-hub-macos-x86-vX.Y.Z.dmg
 dglab-pulse-hub-macos-x86-vX.Y.Z.zip
 dglab-pulse-hub-macos-arm64-vX.Y.Z.dmg
 dglab-pulse-hub-macos-arm64-vX.Y.Z.zip
+dglab-pulse-hub-linux-x64-vX.Y.Z.AppImage
+dglab-pulse-hub-linux-x64-vX.Y.Z.deb
+dglab-pulse-hub-linux-x64-vX.Y.Z.rpm
+dglab-pulse-hub-linux-x64-vX.Y.Z.zip
+dglab-pulse-hub-linux-arm64-vX.Y.Z.AppImage
+dglab-pulse-hub-linux-arm64-vX.Y.Z.deb
+dglab-pulse-hub-linux-arm64-vX.Y.Z.rpm
+dglab-pulse-hub-linux-arm64-vX.Y.Z.zip
 ```
 
-The `.exe` and `.dmg` files are the primary unsigned installers. The ZIP files are portable
-archives; their packaged application and executable are named `DGLab Pulse Hub` (the macOS app is
-`DGLab Pulse Hub.app`). The macOS `x86` label means Intel 64-bit and maps to Electron `x64`; it is
-not a 32-bit macOS build. Windows SmartScreen and macOS Gatekeeper may warn until code-signing and
-notarization are configured. The Windows NSIS installer supports choosing the installation directory
-and optional shortcuts. but are not uploaded to the Release.
+The `.exe` and `.dmg` files are the primary unsigned Windows and macOS installers. On Linux, use
+`.deb` for Debian/Ubuntu, `.rpm` for Fedora/RHEL/openSUSE, or the portable `.AppImage` on other
+mainstream desktop distributions. ZIP files are also provided as portable archives. The packaged
+application is named `DGLab Pulse Hub`; installed Linux packages expose `dglab-pulse-hub`, and the
+macOS app is `DGLab Pulse Hub.app`. The macOS `x86` label means Intel 64-bit and maps to Electron
+`x64`; it is not a 32-bit macOS build. Windows SmartScreen and macOS Gatekeeper may warn until code
+signing and notarization are configured. The Windows NSIS installer supports choosing the
+installation directory and optional shortcuts.
+
+The workflow audits both Linux package staging trees, verifies DEB/RPM package names and
+architectures, and rejects Linux artifacts smaller than 1 MB before upload. AppImage improves
+portability but cannot guarantee compatibility with every libc, graphics stack, or desktop
+environment; test the package on the target distribution before deployment.
 
 On Parallels, launching the Windows portable archive from `C:\Mac\Home`, `\\Mac\Home`, or a
 `file://psf` shared path copies that exact build to `%LOCALAPPDATA%\DGLabPulseHub\portable` and

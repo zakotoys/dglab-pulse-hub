@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import * as PeLibrary from 'pe-library';
 import * as ResEdit from 'resedit';
 
-type DesktopPlatform = 'darwin' | 'win32';
+type DesktopPlatform = 'darwin' | 'linux' | 'win32';
 type DesktopArchitecture = 'arm64' | 'x64';
 
 const WINDOWS_RUNTIME_FILES = [
@@ -44,6 +44,24 @@ const MAC_RUNTIME_FILES = [
     'MacOS/DGLab Pulse Hub Helper (Renderer)'
 ] as const;
 
+const LINUX_RUNTIME_FILES = [
+  'chrome-sandbox',
+  'chrome_100_percent.pak',
+  'chrome_200_percent.pak',
+  'chrome_crashpad_handler',
+  'icudtl.dat',
+  'libffmpeg.so',
+  'libvk_swiftshader.so',
+  'libvulkan.so.1',
+  'locales/en-US.pak',
+  'locales/zh-CN.pak',
+  'resources.pak',
+  'resources/app.asar',
+  'snapshot_blob.bin',
+  'v8_context_snapshot.bin',
+  'vk_swiftshader_icd.json'
+] as const;
+
 const ASAR_RUNTIME_FILES = [
   '/package.json',
   '/dist/main.js',
@@ -62,6 +80,11 @@ const PE_MACHINES: Readonly<Record<number, DesktopArchitecture>> = {
 const MACH_CPU_TYPES: Readonly<Record<number, DesktopArchitecture>> = {
   0x01000007: 'x64',
   0x0100000c: 'arm64'
+};
+
+const ELF_MACHINES: Readonly<Record<number, DesktopArchitecture>> = {
+  0x3e: 'x64',
+  0xb7: 'arm64'
 };
 
 const execFileAsync = promisify(execFile);
@@ -144,6 +167,20 @@ function binaryArchitecture(bytes: Buffer, platform: DesktopPlatform): DesktopAr
     return architecture;
   }
 
+  if (platform === 'linux') {
+    if (
+      bytes.length < 20 ||
+      !bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) ||
+      bytes[4] !== 2 ||
+      bytes[5] !== 1
+    ) {
+      throw new Error('Invalid 64-bit little-endian Linux ELF binary.');
+    }
+    const architecture = ELF_MACHINES[bytes.readUInt16LE(18)];
+    if (architecture === undefined) throw new Error('Unsupported Linux ELF architecture.');
+    return architecture;
+  }
+
   if (bytes.length < 8 || bytes.readUInt32LE(0) !== 0xfeedfacf) {
     throw new Error('Invalid 64-bit macOS Mach-O binary.');
   }
@@ -166,10 +203,22 @@ export function packageFileErrors(
   platform: DesktopPlatform,
   relativeFiles: ReadonlySet<string>
 ): string[] {
-  const required = platform === 'win32' ? WINDOWS_RUNTIME_FILES : MAC_RUNTIME_FILES;
+  const required =
+    platform === 'win32'
+      ? WINDOWS_RUNTIME_FILES
+      : platform === 'darwin'
+        ? MAC_RUNTIME_FILES
+        : LINUX_RUNTIME_FILES;
   const errors = required
     .filter((file) => !relativeFiles.has(file))
     .map((file) => `Missing ${file}`);
+  if (
+    platform === 'linux' &&
+    !relativeFiles.has('DGLab Pulse Hub') &&
+    !relativeFiles.has('dglab-pulse-hub')
+  ) {
+    errors.push('Missing Linux application executable');
+  }
   if (
     platform === 'darwin' &&
     relativeFiles.has('DGLab Pulse Hub.app/Contents/Resources/electron.icns')
@@ -208,6 +257,17 @@ function binaryPaths(platform: DesktopPlatform, files: readonly string[]): strin
   if (platform === 'win32') {
     return files.filter((file) => !file.includes('/') && /\.(?:dll|exe)$/.test(file));
   }
+  if (platform === 'linux') {
+    return files.filter(
+      (file) =>
+        !file.includes('/') &&
+        (file === 'DGLab Pulse Hub' ||
+          file === 'dglab-pulse-hub' ||
+          file === 'chrome-sandbox' ||
+          file === 'chrome_crashpad_handler' ||
+          /\.so(?:\.\d+)*$/.test(file))
+    );
+  }
   return MAC_RUNTIME_FILES.filter(
     (file) => file.includes('/MacOS/') || file.endsWith('/Electron Framework')
   );
@@ -236,7 +296,7 @@ export async function auditDesktopPackage(
 
   const asarPath = join(
     packageDirectory,
-    platform === 'win32' ? 'resources/app.asar' : 'DGLab Pulse Hub.app/Contents/Resources/app.asar'
+    platform === 'darwin' ? 'DGLab Pulse Hub.app/Contents/Resources/app.asar' : 'resources/app.asar'
   );
   try {
     errors.push(...validateAsarEntries(listPackage(asarPath)));
@@ -303,11 +363,11 @@ export async function auditDesktopPackage(
 async function main(): Promise<void> {
   const [platform, architecture, packageDirectory] = process.argv.slice(2);
   if (
-    (platform !== 'darwin' && platform !== 'win32') ||
+    (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') ||
     (architecture !== 'arm64' && architecture !== 'x64') ||
     packageDirectory === undefined
   ) {
-    throw new Error('Usage: audit-desktop-package <darwin|win32> <arm64|x64> <directory>');
+    throw new Error('Usage: audit-desktop-package <darwin|linux|win32> <arm64|x64> <directory>');
   }
   const rootManifest = JSON.parse(await readFile(resolve('package.json'), 'utf8')) as {
     version?: unknown;

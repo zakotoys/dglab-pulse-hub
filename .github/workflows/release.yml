@@ -104,6 +104,16 @@ jobs:
             forge_platform: darwin
             forge_arch: arm64
             runner: macos-latest
+          - platform: linux
+            architecture: x64
+            forge_platform: linux
+            forge_arch: x64
+            runner: ubuntu-latest
+          - platform: linux
+            architecture: arm64
+            forge_platform: linux
+            forge_arch: arm64
+            runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
@@ -124,6 +134,12 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline
 
+      - name: Install Linux packaging tools
+        if: matrix.forge_platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends rpm
+
       - name: Make desktop installers and archives
         run: >-
           npm run desktop:make -- --platform=${{ matrix.forge_platform }} --arch=${{
@@ -139,6 +155,15 @@ jobs:
           package_dir+="${RELEASE_FORGE_ARCH}"
           npm run desktop:audit-package -- \
             "$RELEASE_FORGE_PLATFORM" "$RELEASE_FORGE_ARCH" "$package_dir"
+          if [ "$RELEASE_FORGE_PLATFORM" = linux ]; then
+            builder_arch_suffix=""
+            if [ "$RELEASE_FORGE_ARCH" != x64 ]; then
+              builder_arch_suffix="-${RELEASE_FORGE_ARCH}"
+            fi
+            builder_dir="apps/desktop/out/make/builder/linux${builder_arch_suffix}-unpacked"
+            npm run desktop:audit-package -- \
+              "$RELEASE_FORGE_PLATFORM" "$RELEASE_FORGE_ARCH" "$builder_dir"
+          fi
 
       - name: Collect desktop installers and archives
         shell: bash
@@ -152,7 +177,7 @@ jobs:
           release_prefix="dglab-pulse-hub-${RELEASE_PLATFORM}-${RELEASE_ARCHITECTURE}-"
           release_prefix+="v${RELEASE_VERSION}"
           if [ "$RELEASE_PLATFORM" = windows ]; then
-            installer="apps/desktop/out/make/nsis/DGLab Pulse Hub Setup.exe"
+            installer="apps/desktop/out/make/builder/DGLab Pulse Hub Setup.exe"
             archive="$(
               find "apps/desktop/out/make/zip/win32/${RELEASE_FORGE_ARCH}" \
                 -maxdepth 1 \
@@ -162,7 +187,7 @@ jobs:
             test -f "$archive"
             cp "$installer" "release-assets/${release_prefix}-setup.exe"
             cp "$archive" "release-assets/${release_prefix}.zip"
-          else
+          elif [ "$RELEASE_PLATFORM" = macos ]; then
             installer="apps/desktop/out/make/DGLab Pulse Hub-${RELEASE_VERSION}-"
             installer+="${RELEASE_FORGE_ARCH}.dmg"
             archive="$(
@@ -173,6 +198,45 @@ jobs:
             test -f "$installer"
             test -f "$archive"
             cp "$installer" "release-assets/${release_prefix}.dmg"
+            cp "$archive" "release-assets/${release_prefix}.zip"
+          else
+            package_dir="apps/desktop/out/make/builder"
+            appimage="$(
+              find "$package_dir" -maxdepth 1 -type f \
+                -name "DGLab Pulse Hub-${RELEASE_VERSION}-*.AppImage" -print -quit
+            )"
+            deb="$(
+              find "$package_dir" -maxdepth 1 -type f \
+                -name "DGLab Pulse Hub-${RELEASE_VERSION}-*.deb" -print -quit
+            )"
+            rpm="$(
+              find "$package_dir" -maxdepth 1 -type f \
+                -name "DGLab Pulse Hub-${RELEASE_VERSION}-*.rpm" -print -quit
+            )"
+            archive="$(
+              find "apps/desktop/out/make/zip/linux/${RELEASE_FORGE_ARCH}" \
+                -maxdepth 1 \
+                -type f -name "DGLab Pulse Hub-*-${RELEASE_VERSION}.zip" -print -quit
+            )"
+            test -f "$appimage"
+            test -f "$deb"
+            test -f "$rpm"
+            test -f "$archive"
+            test "$(stat --format=%s "$appimage")" -gt 1000000
+            test "$(stat --format=%s "$deb")" -gt 1000000
+            test "$(stat --format=%s "$rpm")" -gt 1000000
+            test "$(dpkg-deb --field "$deb" Package)" = dglab-pulse-hub
+            test "$(rpm --query --package --queryformat '%{NAME}' "$rpm")" = dglab-pulse-hub
+            if [ "$RELEASE_FORGE_ARCH" = x64 ]; then
+              test "$(dpkg-deb --field "$deb" Architecture)" = amd64
+              test "$(rpm --query --package --queryformat '%{ARCH}' "$rpm")" = x86_64
+            else
+              test "$(dpkg-deb --field "$deb" Architecture)" = arm64
+              test "$(rpm --query --package --queryformat '%{ARCH}' "$rpm")" = aarch64
+            fi
+            cp "$appimage" "release-assets/${release_prefix}.AppImage"
+            cp "$deb" "release-assets/${release_prefix}.deb"
+            cp "$rpm" "release-assets/${release_prefix}.rpm"
             cp "$archive" "release-assets/${release_prefix}.zip"
           fi
 
@@ -283,13 +347,27 @@ jobs:
             "dglab-pulse-hub-macos-x86-v${RELEASE_VERSION}.zip"
             "dglab-pulse-hub-macos-arm64-v${RELEASE_VERSION}.dmg"
             "dglab-pulse-hub-macos-arm64-v${RELEASE_VERSION}.zip"
+            "dglab-pulse-hub-linux-x64-v${RELEASE_VERSION}.AppImage"
+            "dglab-pulse-hub-linux-x64-v${RELEASE_VERSION}.deb"
+            "dglab-pulse-hub-linux-x64-v${RELEASE_VERSION}.rpm"
+            "dglab-pulse-hub-linux-x64-v${RELEASE_VERSION}.zip"
+            "dglab-pulse-hub-linux-arm64-v${RELEASE_VERSION}.AppImage"
+            "dglab-pulse-hub-linux-arm64-v${RELEASE_VERSION}.deb"
+            "dglab-pulse-hub-linux-arm64-v${RELEASE_VERSION}.rpm"
+            "dglab-pulse-hub-linux-arm64-v${RELEASE_VERSION}.zip"
           )
           for asset in "${expected_assets[@]}"; do
             test -f "release-assets/$asset"
           done
+          appimage_count="$(
+            find release-assets -maxdepth 1 -type f -name '*.AppImage' | wc -l | tr -d ' '
+          )"
           test "$(find release-assets -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d ' ')" = 2
           test "$(find release-assets -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')" = 2
-          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 4
+          test "$appimage_count" = 2
+          test "$(find release-assets -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')" = 2
+          test "$(find release-assets -maxdepth 1 -type f -name '*.rpm' | wc -l | tr -d ' ')" = 2
+          test "$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')" = 6
           find release-assets -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 |
             sort -z |
             xargs -0 sha256sum > release-assets/SHA256SUMS.txt

@@ -23,6 +23,15 @@ function macho(cpuType: number): Buffer {
   return bytes;
 }
 
+function elf(machine: number): Buffer {
+  const bytes = Buffer.alloc(64);
+  bytes.set([0x7f, 0x45, 0x4c, 0x46]);
+  bytes[4] = 2;
+  bytes[5] = 1;
+  bytes.writeUInt16LE(machine, 18);
+  return bytes;
+}
+
 describe('desktop package audit', () => {
   it('accepts matching Windows PE architectures and rejects a mixed binary', () => {
     expect(() => assertDesktopBinaryArchitecture(pe(0xaa64), 'win32', 'arm64')).not.toThrow();
@@ -38,6 +47,14 @@ describe('desktop package audit', () => {
     expect(() => assertDesktopBinaryArchitecture(macho(0x01000007), 'darwin', 'x64')).not.toThrow();
   });
 
+  it('accepts matching Linux ELF architectures and rejects a mixed binary', () => {
+    expect(() => assertDesktopBinaryArchitecture(elf(0xb7), 'linux', 'arm64')).not.toThrow();
+    expect(() => assertDesktopBinaryArchitecture(elf(0x3e), 'linux', 'x64')).not.toThrow();
+    expect(() => assertDesktopBinaryArchitecture(elf(0x3e), 'linux', 'arm64')).toThrow(
+      /expected arm64, found x64/
+    );
+  });
+
   it('reports missing platform runtime files', () => {
     expect(packageFileErrors('win32', new Set(['DGLab Pulse Hub.exe']))).toContain(
       'Missing resources/app.asar'
@@ -51,6 +68,21 @@ describe('desktop package audit', () => {
     expect(
       packageFileErrors('darwin', new Set(['DGLab Pulse Hub.app/Contents/Resources/electron.icns']))
     ).toContain('Obsolete Electron icon resource is present.');
+  });
+
+  it('reports missing Linux runtime files', () => {
+    expect(packageFileErrors('linux', new Set(['DGLab Pulse Hub']))).toContain(
+      'Missing resources/app.asar'
+    );
+    expect(packageFileErrors('linux', new Set(['resources/app.asar']))).toContain(
+      'Missing Linux application executable'
+    );
+    expect(packageFileErrors('linux', new Set(['DGLab Pulse Hub']))).not.toContain(
+      'Missing Linux application executable'
+    );
+    expect(packageFileErrors('linux', new Set(['dglab-pulse-hub']))).not.toContain(
+      'Missing Linux application executable'
+    );
   });
 
   it('accepts branded macOS metadata and rejects obsolete Electron defaults', () => {

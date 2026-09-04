@@ -11,8 +11,8 @@ DG-LAB `.pulse` 波形を検査、プレビュー、編集、エクスポート�
 > [!IMPORTANT]
 >
 > このリポジトリではソースコード、Docker Web デプロイ、GitHub
-> Releases からダウンロードできる Windows x64/ARM64 と macOS Intel
-> (x86_64)/ARM64 向け未署名デスクトップインストーラーを提供します。各ターゲットには名前付きのポータブル ZIP も含まれます。コード署名と notarization はまだ設定していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
+> Releases からダウンロードできる Windows x64/ARM64、macOS Intel (x86_64)/ARM64、Linux
+> x64/ARM64 向け未署名デスクトップパッケージを提供します。Linux では DEB、RPM、AppImage、ポータブル ZIP を提供します。コード署名と notarization はまだ設定していません。本プロジェクトは独立したコミュニティプロジェクトであり、DG-LAB 公式アプリではありません。
 
 ## 機能
 
@@ -53,22 +53,28 @@ npm run desktop:make -- --platform=win32 --arch=x64    # Windows x64
 npm run desktop:make -- --platform=win32 --arch=arm64  # Windows ARM64
 npm run desktop:make -- --platform=darwin --arch=x64   # macOS Intel
 npm run desktop:make -- --platform=darwin --arch=arm64 # macOS Apple silicon
+npm run desktop:make -- --platform=linux --arch=x64    # Linux x64
+npm run desktop:make -- --platform=linux --arch=arm64  # Linux ARM64
 ```
 
 成果物は `apps/desktop/out/`
 に出力されます。Windows では x64、ARM64 向けにインストール先とショートカットを選択できる NSIS の
 `.exe` インストーラーとポータブル `.zip`、macOS では Intel と Apple silicon 向けに `.dmg`
-インストーラーとポータブル `.zip` が生成されます。macOS Intel のラベルは Electron の `x64`
-に対応し、32 ビット macOS ではありません。展開後のアプリと実行ファイルの名前は `DGLab Pulse Hub`
-（macOS のアプリバンドルは
-`DGLab Pulse Hub.app`）です。未署名のビルドは OS によってブロックされる場合があります。デスクトップ版が管理する
-`.pulse` ファイルは `Documents/Pulse Hub`
+インストーラーとポータブル `.zip` が生成されます。Linux では Debian/Ubuntu 向け
+`.deb`、Fedora/RHEL/openSUSE 向け
+`.rpm`、その他の主要なデスクトップディストリビューション向けポータブル `.AppImage`、および `.zip`
+が生成されます。RPM ツールチェーンを利用できるよう、Linux パッケージは Linux 上でビルドしてください。macOS
+Intel のラベルは Electron の `x64` に対応し、32 ビット macOS ではありません。アプリ名は
+`DGLab Pulse Hub`、macOS のアプリバンドルは `DGLab Pulse Hub.app`、インストール後の Linux コマンドは
+`dglab-pulse-hub`
+です。未署名のビルドは OS によってブロックされる場合があります。デスクトップ版が管理する `.pulse`
+ファイルは `Documents/Pulse Hub`
 に保存されます。外部から取り込む場合は既存ファイルを上書きせずにコピーします。
 
 ### リリースのダウンロード
 
 `vX.Y.Z` tag を push するとリリースパイプラインが実行され、`DGLab Pulse Hub vX.Y.Z`
-という Release、対応する全アーキテクチャの Windows/macOS インストーラーとポータブル ZIP（合計 10 個）、API/Web コンテナイメージ、生成されたリリースノート、`SHA256SUMS.txt`
+という Release、対応する全アーキテクチャの Windows、macOS、Linux パッケージ（合計 16 個）、API/Web コンテナイメージ、生成されたリリースノート、`SHA256SUMS.txt`
 が公開されます。バージョン更新とロールバックは [`docs/release.md`](docs/release.md)
 を参照してください。
 

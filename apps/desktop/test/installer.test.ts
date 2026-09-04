@@ -56,6 +56,18 @@ describe('Windows installer', () => {
   });
 });
 
+describe('Linux packages', () => {
+  it('builds distribution packages and a portable AppImage', async () => {
+    const config = await readFile(new URL('../electron-builder.yml', import.meta.url), 'utf8');
+    expect(config).toContain('linux:');
+    expect(config).toContain('- AppImage');
+    expect(config).toContain('- deb');
+    expect(config).toContain('- rpm');
+    expect(config).toContain('category: Utility');
+    expect(config).toContain('executableName: dglab-pulse-hub');
+  });
+});
+
 describe('macOS disk image', () => {
   it('uses the product name and branded volume icon', () => {
     const dmg = forge.makers?.find((maker) => maker.name === '@electron-forge/maker-dmg');
