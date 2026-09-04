@@ -13,10 +13,7 @@ asar: true
 npmRebuild: false
 win:
   target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
+    - nsis
   icon: assets/dglab-pulse-hub-icon.ico
   executableName: DGLab Pulse Hub
   artifactName: DGLab Pulse Hub Setup.${ext}

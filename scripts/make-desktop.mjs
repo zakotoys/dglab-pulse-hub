@@ -16,6 +16,8 @@ const forgeArgs = args;
 const buildArgs = [
   '--config',
   'electron-builder.yml',
+  '--publish',
+  'never',
   ...(targetPlatform === 'win32' ? ['--win'] : ['--linux']),
   ...args.filter((arg) => !arg.startsWith('--platform=') && !arg.startsWith('--arch=')),
   ...(architecture ? [`--${architecture}`] : [])

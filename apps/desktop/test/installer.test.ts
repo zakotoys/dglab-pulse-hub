@@ -46,6 +46,7 @@ describe('Desktop package branding', () => {
 describe('Windows installer', () => {
   it('uses NSIS with selectable install location and shortcuts', async () => {
     const config = await readFile(new URL('../electron-builder.yml', import.meta.url), 'utf8');
+    expect(config).not.toContain('arch:');
     expect(config).toContain('oneClick: false');
     expect(config).toContain('allowToChangeInstallationDirectory: true');
     expect(config).toContain('createDesktopShortcut: true');
@@ -53,6 +54,16 @@ describe('Windows installer', () => {
     const script = await readFile(new URL('../installer.nsh', import.meta.url), 'utf8');
     expect(script).toContain('Page custom TaskbarPinPageCreate TaskbarPinPageLeave');
     expect(script).toContain('固定到任务栏');
+  });
+});
+
+describe('Desktop package build', () => {
+  it('never publishes artifacts while assembling CI packages', async () => {
+    const script = await readFile(
+      new URL('../../../scripts/make-desktop.mjs', import.meta.url),
+      'utf8'
+    );
+    expect(script).toContain("'--publish',\n  'never'");
   });
 });
 
