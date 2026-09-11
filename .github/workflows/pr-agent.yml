@@ -14,13 +14,13 @@ permissions:
 jobs:
   review:
     if: >-
-      github.event.sender.type != 'Bot' &&
-      (
+      github.event.sender.type != 'Bot' && (
         github.event_name == 'pull_request_target' ||
         github.event.issue.pull_request != null
       )
     concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      group:
+        ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
